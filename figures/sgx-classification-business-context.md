@@ -1,0 +1,41 @@
+# SGX 自动分类业务关系图
+
+展示老人、家庭贡献者、圈管理员、产品、算法、Memory、科研环境和未来客户端之间的业务关系与权利边界。
+
+```mermaid
+flowchart LR
+    subgraph USERS["用户与关系圈"]
+        ELDER["老人 / 内容主体<br/>决定个人记忆、隐私与可见范围"]
+        CONTRIBUTOR["家庭或受邀贡献者<br/>上传自己的素材并补充说明"]
+        ADMIN["圈管理员<br/>只管理成员与群组秩序"]
+    end
+
+    subgraph PRODUCT["SGX 产品边界"]
+        WEB["本轮：Web/PWA 产品原型"]
+        BACKEND["产品后端<br/>身份、权限、任务、删除与审计"]
+        CLASSIFY["自动分类算法<br/>只生成可追溯候选"]
+        MEMORY["Life Memory<br/>只接收经授权确认的事实候选"]
+    end
+
+    RESEARCH["独立科研环境<br/>额外同意、去标识化、冻结版本"]
+    FUTURE["未来客户端<br/>小程序 / Native Android / 数字相框"]
+
+    ELDER -->|"上传、讲述、确认、修改、撤回"| WEB
+    CONTRIBUTOR -->|"上传自己的原声或素材"| WEB
+    ADMIN -.->|"无权公开他人敏感内容"| WEB
+    WEB -->|"已授权输入与用户操作"| BACKEND
+    BACKEND -->|"最小化 Evidence 与 Job"| CLASSIFY
+    CLASSIFY -->|"ClassificationAssertion 候选"| BACKEND
+    BACKEND -->|"展示待确认结果"| WEB
+    BACKEND -->|"确认后的 MemoryClaim"| MEMORY
+    MEMORY -->|"当前主体和用途允许的检索结果"| BACKEND
+    BACKEND -.->|"独立研究同意后受控导出"| RESEARCH
+    FUTURE -.->|"后续复用同一产品 API"| BACKEND
+
+    classDef user fill:#F7F2E8,stroke:#8B6B3F,color:#2D2418;
+    classDef product fill:#EAF2F8,stroke:#326B8C,color:#17364A;
+    classDef isolated fill:#F5EAF2,stroke:#8A4F72,color:#47263A;
+    class ELDER,CONTRIBUTOR,ADMIN user;
+    class WEB,BACKEND,CLASSIFY,MEMORY product;
+    class RESEARCH,FUTURE isolated;
+```

@@ -1,0 +1,26 @@
+sequenceDiagram
+    autonumber
+    participant Founder as 创始人 / 发布决策
+    participant Product as 产品负责人
+    participant Algorithm as 算法负责人
+    participant Fullstack as 全栈负责人
+    participant QA as QA / 标注与体验
+    participant Hardware as 硬件接口人
+
+    Founder->>Product: 确认产品主线、范围与发布时间
+    Product->>Algorithm: 给出用户场景、入口、权限和验收目标
+    Algorithm->>Fullstack: 交付 Schema、正反样例、状态与错误契约
+    Algorithm->>Fullstack: 交付 Fake Provider
+    par 算法侧
+        Algorithm->>Algorithm: Baseline、Real Provider、离线评测
+        QA->>Algorithm: Golden Set、错误类型与复核反馈
+    and 产品集成侧
+        Fullstack->>Fullstack: 上传、Job、结果、确认、修改、删除
+        Fullstack->>QA: Web/PWA Fake Provider E2E
+    end
+    Algorithm->>QA: 提交达到离线 Gate 的 Real Provider
+    Fullstack->>QA: 同一 API 切换 Real Provider，执行浏览器 E2E
+    QA->>Product: 汇总算法效果、用户负担、安全和失败分母
+    Product->>Founder: 提交是否进入老人 pilot / 正式发布的建议
+    Founder-->>Product: 最终发布决定
+    Note over Hardware: 本轮不接真实相框；未来设备阶段再评审并验收
