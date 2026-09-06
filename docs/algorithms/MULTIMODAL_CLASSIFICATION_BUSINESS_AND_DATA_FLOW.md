@@ -1,6 +1,6 @@
 # 多模态自动分类：业务关系、数据流程与协作边界
 
-> 文档状态：approved_for_task_1_contract_design
+> 文档状态：ready_for_owner_review
 > 版本：0.1.0
 > 日期：2026-09-06
 > 适用范围：自动分类 P0、Web/PWA 内部产品原型及未来多端兼容
@@ -117,7 +117,7 @@ Schema 会把边界固化成字段，Fake Provider 会把边界固化成行为�
 
 | 状态 | 含义 | 当前情况 |
 |---|---|---|
-| design_ready | 业务、数据和责任边界已冻结，可进入契约实现 | 本文件完成并通过一致性检查后成立 |
+| design_ready | 业务、数据和责任边界已冻结，可进入契约实现 | 文档和图示已完成技术检查，待负责人最终确认 |
 | algorithm_ready | Real Provider 在冻结评测集达到预设 Gate | 尚未成立 |
 | integration_ready | Web/PWA 用统一 API 跑通上传、任务、结果、确认、修改、删除和失败恢复 | 尚未成立 |
 | pilot_ready | 权限、删除、体验、真实数据和停止规则通过 | 尚未成立 |
