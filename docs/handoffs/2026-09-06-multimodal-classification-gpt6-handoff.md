@@ -1,8 +1,8 @@
 # SGX 多模态自动分类：GPT-6 新任务交接包
 
 > 文档状态：current_handoff
-> 版本：1.0.0
-> 日期：2026-09-06
+> 版本：1.1.0
+> 最后更新：2026-09-07
 > 目标模型：gpt-6-astra
 > 工作目录：/Users/wenqingzhong/Documents/SGX
 > 当前分支：codex/multimodal-classification-p0
@@ -332,10 +332,32 @@ Fake Provider 不是前端写死数据，不是真实分类算法，也不能支
 - 无真实家庭数据、密钥或外部模型调用。
 - 未跟踪原型与 PRD 文件保持不变。
 
-## 16. 推荐的新窗口首条指令
+## 16. 模型与子智能体协作规范
+
+本协作方式参考 OpenAI 官方的 [GPT-6 Astra 模型说明](https://developers.openai.com/api/docs/models/gpt-6-astra)、[GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model) 和 [Codex Subagents 文档](https://learn.chatgpt.com/docs/agent-configuration/subagents)：
+
+- 主任务：gpt-6-astra，reasoning 使用 xhigh。负责需求解释、架构/Schema 语义、隐私权限边界、高难判断、跨模块整合、最终验证和提交。
+- Terra 子智能体：gpt-5.6-terra，默认 medium；用于代码库探索、接口映射、测试缺口、开源/license 初筛，以及边界清楚的支撑性实现。
+- Luna 子智能体：gpt-5.6-luna，默认 low；用于明确、重复、可机械检查的任务，例如 fixtures 完整性清单、Schema/TypeScript 枚举一致性、测试日志归类和文件存在性检查。
+- 同一阶段最多并行两个子智能体。只有任务彼此独立、确实能节省时间或改善质量时才委派。
+- 读密集任务优先并行；写密集任务先由主任务冻结接口和文件所有权，再分配不重叠文件。多个智能体不得同时修改同一 Schema、状态机或契约文件。
+- 子智能体返回证据摘要和文件引用，不把大段日志灌入主任务。
+- 主任务必须核验所有子智能体结果；子智能体的“完成”不能直接成为最终完成状态。
+- 子智能体不得自行扩大范围、调用外部/付费模型、使用真实家庭数据、push、发布、删除用户文件或改变产品共识。
+
+任务一首轮建议并行：
+
+1. Terra Explorer（只读）：核验现有 API、MemoryCandidate、测试、package scripts 和可复用模式，返回受影响文件与集成风险。
+2. Luna Contract Checker（只读）：把 P0 SPEC 转换成 positive/negative fixtures 覆盖矩阵，检查状态、必填字段和失败场景是否完整。
+3. Astra 主任务同时审阅 anchor documents，并在收到两个结果后冻结最小实施计划、Schema 语义和文件所有权。
+4. 进入写入阶段后，由 Astra 负责核心契约；只有文件完全不重叠时，才把 fixtures 或聚焦测试分配给 Terra。Luna 保持验证角色。
+
+这种分工的目标是保护主任务上下文和决策一致性，同时降低机械执行成本。官方文档也提醒子智能体会增加 token 消耗，且并行写入容易产生冲突，因此不追求持续满并发。
+
+## 17. 推荐的新窗口首条指令
 
 ```text
-你现在接手 /Users/wenqingzhong/Documents/SGX 的多模态自动分类 P0 开发，请使用 gpt-6-astra。
+你现在接手 /Users/wenqingzhong/Documents/SGX 的多模态自动分类 P0 开发。你是 gpt-6-astra 主任务，使用 xhigh reasoning，负责规划、高难判断、契约语义、集成、验证和最终 Git 提交。
 
 先完整阅读：
 1. docs/handoffs/2026-09-06-multimodal-classification-gpt6-handoff.md
@@ -345,11 +367,17 @@ Fake Provider 不是前端写死数据，不是真实分类算法，也不能支
 
 然后核验当前 Git 分支、状态、相关代码和测试。不要重新讨论已经冻结的产品边界，也不要把设计、Fake Provider 或绿测称为真实算法完成。
 
+用户明确授权本任务在确有并行价值时使用子智能体。首轮最多并行两个只读子任务：
+1. 使用 gpt-5.6-terra、medium reasoning 探索现有 API、MemoryCandidate、测试、package scripts 和可复用模式，输出受影响文件与风险。
+2. 使用 gpt-5.6-luna、low reasoning 从 P0 SPEC 整理 positive/negative fixtures 覆盖矩阵，检查状态、必填字段与失败场景。
+
+主任务在等待并核验两份结果后冻结最小计划。写入阶段先分配互不重叠的文件所有权；核心 Schema、状态机、权限和跨模块整合由主任务负责。子智能体不得自行提交、扩大范围、调用外部/付费模型或接触真实家庭数据。
+
 本轮执行任务一的第一阶段：实现 v1 Schema、positive/negative fixtures、contract tests 和可切换 success/needs_review/conflicted/timeout/failed/invalid_output 的 Fake Provider。先给出精确到文件的最小计划，然后持续实现、验证并小提交。不得添加真实家庭数据、调用外部/付费模型、修改未跟踪的 ai-frame-main/ 或银发AI相框-PRD:MVP.md。
 
 完成后报告：实际文件、测试证据、commit、仍未实现内容，以及 algorithm_ready / integration_ready 的真实状态。
 ```
 
-## 17. 交接完成判定
+## 18. 交接完成判定
 
 本交接包完成的只是上下文迁移准备。新窗口读完 anchor documents、核验 checkout，并能准确复述“当前范围、责任边界、禁止事项、下一小阶段与完成条件”后，才算成功接手；之后立即进入任务一，不需要重新进行整轮需求访谈。
