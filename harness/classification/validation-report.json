@@ -1,0 +1,49 @@
+{
+  "date": "2026-09-07",
+  "baseCommit": "cc8f545",
+  "workflow_status": "task_one_first_batch_verified",
+  "evidence_status": "synthetic_contract_only",
+  "runtime": "Node v22.22.1; TypeScript 5.9.3; existing local dependency tree reused read-only",
+  "checks": [
+    { "command": "npm run test:classification", "status": "passed", "tests": 26, "failed": 0, "skipped": 0 },
+    { "command": "npm run typecheck", "status": "passed" },
+    { "command": "npm run test:classification:secret", "status": "passed" },
+    { "command": "npm run test:voice:secret", "status": "passed" },
+    { "command": "npm ls ajv --all --offline", "status": "passed", "detail": "Ajv 6.14.0 deduplicated with existing ESLint tree; no dependency installation or download" },
+    { "command": "git diff --check", "status": "passed" }
+  ],
+  "coverage": {
+    "schemaEntryPointsResolved": 10,
+    "schemaDefinitions": 33,
+    "structuralNegativeMutations": 21,
+    "runtimeNonJsonNegative": "NaN",
+    "requiredFakeScenarios": ["success", "needs_review", "conflicted", "timeout", "failed", "invalid_output"],
+    "additionalFakeScenario": "partial_failure",
+    "typeAndEnumGeneration": "exact regeneration comparison against canonical JSON Schema",
+    "regressionsReproducedBeforeFix": [
+      "Late failure or cancellation could be accepted after deadline",
+      "Fake assertion IDs could collide across jobs/runs",
+      "An enabled anonymous cluster could reference an invented F1 region"
+    ],
+    "regressionsAfterFix": "all three rejected or corrected by passing runtime tests"
+  },
+  "cliSmoke": [
+    { "scenario": "success", "status": "succeeded", "assertions": 4 },
+    { "scenario": "timeout", "status": "failed_retryable", "code": "TIMEOUT", "assertions": 0 },
+    { "scenario": "invalid_output", "status": "failed_terminal", "code": "INVALID_OUTPUT", "assertions": 0 }
+  ],
+  "notExecuted": [
+    "Next production build (whole-project typecheck performed instead)",
+    "Browser E2E or real-device acceptance (no UI/device changes)",
+    "Concurrent persistent job deduplication and deletion propagation",
+    "Product review authorization service and Memory adapter integration",
+    "Python/Android runtime conformance",
+    "Real classification, model calls, accuracy evaluation, pilot or deployment"
+  ],
+  "readiness": {
+    "algorithm_ready": false,
+    "integration_ready": false,
+    "pilot_ready": false,
+    "production_ready": false
+  }
+}

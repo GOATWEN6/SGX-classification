@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "scope": "task_one_first_batch_synthetic_contract",
+  "decisionSource": "2026-09-07 current user task; handoff section 15; P0 SPEC sections 2.4 and 15",
+  "prdSource": "银发AI相框-PRD:MVP.md (read-only, untracked, not included in this worktree)",
+  "prdSha256": "23090b42ad3eac585413c067b90a65752de3d0bceac627fd3e16b42ef5a85e07",
+  "releaseOverride": "Classification research/prototype priority only; no change to MVP release scope or gallery capacity",
+  "features": [
+    {
+      "id": "evidence_contract",
+      "prd": ["B1.1", "B1.4", "B1.5"],
+      "behavior": "Future backend validates upload then creates evidence tied to subject, household, owner, contributor and consent",
+      "acceptance": "Three allowed modalities; MIME, dimensions, size, final ASR and closed fields validated; inactive/cross-scope input refused",
+      "tests": ["schema.test.mjs", "provider.test.mjs"],
+      "gap": "Upload API, actual checksum verification, object store, ACL service and physical deletion are not implemented"
+    },
+    {
+      "id": "classification_candidates",
+      "prd": ["C1.3", "Owner research/prototype override"],
+      "behavior": "Future UI can show multi-facet candidates, source references, conflicts and review states",
+      "acceptance": "Fake success/review/conflict/partial failure preserve candidate states and every requested facet outcome; no automatic identity confirmation",
+      "tests": ["schema.test.mjs", "provider.test.mjs"],
+      "gap": "No real extraction, accuracy result, gallery classification UI or released product feature"
+    },
+    {
+      "id": "asr_and_failure_isolation",
+      "prd": ["D1.2", "D1.7", "B1.5"],
+      "behavior": "Future backend can classify final ASR asynchronously and show stable failure/retry states",
+      "acceptance": "Partial ASR and raw audio rejected; timeout/cancel/errors return stable codes; late results rejected",
+      "tests": ["schema.test.mjs", "provider.test.mjs"],
+      "gap": "Existing realtime voice chain is unchanged; no ASR integration or job persistence implemented"
+    },
+    {
+      "id": "confirmation_boundary",
+      "prd": ["D1.7", "Module E", "Privacy and safety baseline"],
+      "behavior": "Future subject or authorized proxy can confirm/edit/reject/withdraw candidates using revision and authority references",
+      "acceptance": "Review request schema supports four actions; provider cannot return confirmed/edited/rejected/withdrawn as human decisions",
+      "tests": ["schema.test.mjs", "provider.test.mjs"],
+      "gap": "Review service, authorization/revision concurrency checks and Memory adapter remain unimplemented; no Canonical Memory write"
+    },
+    {
+      "id": "privacy_and_observability",
+      "prd": ["B1.4", "Module I", "Privacy and safety baseline"],
+      "behavior": "Backend receives stable error codes without provider diagnostic text or permission-changing output",
+      "acceptance": "Unknown output fields, cross-scope refs, invalid versions and stale evidence are rejected; secret scan is clean",
+      "tests": ["provider.test.mjs", "npm run test:classification:secret"],
+      "gap": "No product event pipeline, full IDOR E2E, research export or deletion propagation verification"
+    }
+  ],
+  "readiness": {
+    "algorithm_ready": false,
+    "integration_ready": false,
+    "pilot_ready": false,
+    "production_ready": false
+  }
+}
