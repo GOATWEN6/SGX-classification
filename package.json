@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "test:voice:realtime": "node scripts/voice-realtime-smoke.mjs",
-    "test:voice:secret": "node scripts/voice-secret-scan.mjs AGENTS.md docs harness scripts src"
+    "test:voice:secret": "node scripts/voice-secret-scan.mjs AGENTS.md docs harness scripts src",
+    "classification:types": "node scripts/classification-types.mjs",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.30",

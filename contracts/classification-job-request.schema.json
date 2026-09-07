@@ -1,0 +1,5 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-job-request:v1",
+  "$ref": "urn:sgx:classification:v1#/definitions/ClassificationJobRequest"
+}

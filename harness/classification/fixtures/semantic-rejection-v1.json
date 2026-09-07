@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "fixtureVersion": "1.0",
+    "synthetic": true,
+    "description": "Each object is JSON-Schema valid by design. It requires authorization, lifecycle, correlation, or late-result semantic rejection outside JSON Schema. Do not report these as Schema failures."
+  },
+  "cases": [
+    {
+      "id": "cross-household-evidence",
+      "kind": "authorization",
+      "description": "A bundle and its evidence carry different household IDs; the API authorization layer must reject it.",
+      "mutation": { "base": "evidenceRecords.image", "op": "set", "path": "/householdId", "value": "household_other_demo" }
+    },
+    {
+      "id": "cross-subject-evidence",
+      "kind": "authorization",
+      "description": "A bundle has an evidence record for a different subject; a structural parser cannot infer the approved subject context.",
+      "mutation": { "base": "evidenceRecords.text", "op": "set", "path": "/subjectId", "value": "subject_other_demo" }
+    },
+    {
+      "id": "deleted-evidence-submitted-to-provider",
+      "kind": "lifecycle",
+      "description": "The tombstone is structurally valid, but a lifecycle guard must prevent its ID from entering a new provider request.",
+      "evidenceId": "evidence_deleted_demo"
+    },
+    {
+      "id": "late-result-after-cancel",
+      "kind": "correlation",
+      "description": "A structurally valid provider result with runId run_succeeded_demo must be dropped when the current job run has already been cancelled or superseded.",
+      "resultRunId": "run_succeeded_demo",
+      "currentRunId": "run_cancelled_demo"
+    },
+    {
+      "id": "review-authority-stale",
+      "kind": "authorization",
+      "description": "A structurally valid review request may still be rejected when authorityRef is no longer valid or expectedRevision is stale.",
+      "expectedRevision": 1,
+      "currentRevision": 2
+    },
+    {
+      "id": "provider-result-mismatched-input-hash",
+      "kind": "correlation",
+      "description": "A structurally valid result must be rejected if its inputHash differs from the persisted job run inputHash.",
+      "resultInputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "persistedInputHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ]
+}

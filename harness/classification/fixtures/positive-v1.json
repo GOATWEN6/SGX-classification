@@ -1,0 +1,203 @@
+{
+  "meta": {
+    "fixtureVersion": "1.0",
+    "synthetic": true,
+    "subjectId": "subject_demo",
+    "householdId": "household_demo",
+    "description": "Synthetic contract examples only. They contain no real people, media, identities, credentials, or production taxonomy labels."
+  },
+  "evidenceRecords": {
+    "image": {
+      "evidenceId": "evidence_image_demo",
+      "subjectId": "subject_demo",
+      "householdId": "household_demo",
+      "schemaVersion": "1.0",
+      "ownerId": "owner_demo",
+      "contributorId": "contributor_demo",
+      "consentRef": "consent_demo",
+      "visibility": "private",
+      "ingestedAt": "2026-09-07T00:00:00.000Z",
+      "lifecycleState": "active",
+      "sourceRef": { "kind": "object", "id": "object_image_demo" },
+      "sourceHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "byteLength": 2048,
+      "modality": "image",
+      "mimeType": "image/jpeg",
+      "dimensions": { "width": 640, "height": 480 }
+    },
+    "text": {
+      "evidenceId": "evidence_text_demo",
+      "subjectId": "subject_demo",
+      "householdId": "household_demo",
+      "schemaVersion": "1.0",
+      "ownerId": "owner_demo",
+      "contributorId": "contributor_demo",
+      "consentRef": "consent_demo",
+      "visibility": "private",
+      "ingestedAt": "2026-09-07T00:00:01.000Z",
+      "lifecycleState": "active",
+      "sourceRef": { "kind": "message", "id": "message_text_demo" },
+      "sourceHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "revision": 1,
+      "byteLength": 128,
+      "modality": "text",
+      "mimeType": "text/plain"
+    },
+    "transcript": {
+      "evidenceId": "evidence_transcript_demo",
+      "subjectId": "subject_demo",
+      "householdId": "household_demo",
+      "schemaVersion": "1.0",
+      "ownerId": "owner_demo",
+      "contributorId": "contributor_demo",
+      "consentRef": "consent_demo",
+      "visibility": "circle",
+      "circleId": "circle_demo",
+      "visibilityAuthorityRef": "visibility_authority_demo",
+      "ingestedAt": "2026-09-07T00:00:02.000Z",
+      "capturedAt": "2026-09-06T23:00:00.000Z",
+      "lifecycleState": "active",
+      "sourceRef": { "kind": "object", "id": "object_transcript_demo" },
+      "sourceHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "revision": 1,
+      "byteLength": 256,
+      "modality": "transcript",
+      "mimeType": "text/plain",
+      "asr": { "final": true, "producerVersion": "fixture-asr.1", "confidence": 0.91 }
+    },
+    "deletedTombstone": {
+      "evidenceId": "evidence_deleted_demo",
+      "subjectId": "subject_demo",
+      "householdId": "household_demo",
+      "schemaVersion": "1.0",
+      "revision": 2,
+      "lifecycleState": "deleted",
+      "deletedAt": "2026-09-07T00:00:03.000Z"
+    }
+  },
+  "contentBundle": {
+    "schemaVersion": "1.0",
+    "bundleId": "bundle_demo",
+    "actorId": "actor_demo",
+    "subjectId": "subject_demo",
+    "householdId": "household_demo",
+    "evidence": [],
+    "giftScenario": "anniversary"
+  },
+  "jobRequest": {
+    "schemaVersion": "1.0",
+    "bundleId": "bundle_demo",
+    "jobId": "job_demo",
+    "subjectId": "subject_demo",
+    "householdId": "household_demo",
+    "evidenceIds": ["evidence_image_demo", "evidence_text_demo", "evidence_transcript_demo"],
+    "requestedFacets": ["time", "place", "person", "event", "scene", "theme", "content_type", "quality", "duplicate"],
+    "versions": {
+      "schemaVersion": "1.0",
+      "algorithmVersion": "fixture-algorithm.1",
+      "providerVersion": "fixture-provider.1",
+      "modelVersion": "fixture-model.1",
+      "promptVersion": "fixture-prompt.1",
+      "taxonomyVersion": "fixture-taxonomy.1"
+    },
+    "config": {
+      "anonymousClustersEnabled": true,
+      "biometricConsentRef": "biometric_consent_demo",
+      "relevantConfigHash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "idempotencyKey": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "jobsByStatus": {
+    "pending": { "runId": "run_pending_demo", "status": "pending", "attemptCount": 0 },
+    "processing": { "runId": "run_processing_demo", "status": "processing", "attemptCount": 1, "startedAt": "2026-09-07T00:01:00.000Z" },
+    "succeeded": { "runId": "run_succeeded_demo", "status": "succeeded", "attemptCount": 1, "startedAt": "2026-09-07T00:01:00.000Z", "finishedAt": "2026-09-07T00:01:02.000Z" },
+    "needs_review": { "runId": "run_review_demo", "status": "needs_review", "attemptCount": 1, "startedAt": "2026-09-07T00:01:00.000Z", "finishedAt": "2026-09-07T00:01:02.000Z" },
+    "failed_retryable": { "runId": "run_retry_demo", "status": "failed_retryable", "attemptCount": 1, "finishedAt": "2026-09-07T00:01:02.000Z", "errorCode": "TIMEOUT" },
+    "failed_terminal": { "runId": "run_failed_demo", "status": "failed_terminal", "attemptCount": 1, "finishedAt": "2026-09-07T00:01:02.000Z", "errorCode": "UNSUPPORTED_INPUT" },
+    "cancelled": { "runId": "run_cancelled_demo", "status": "cancelled", "attemptCount": 1, "finishedAt": "2026-09-07T00:01:02.000Z", "errorCode": "CANCELLED" }
+  },
+  "providerRequest": {
+    "schemaVersion": "1.0",
+    "runId": "run_succeeded_demo",
+    "jobId": "job_demo",
+    "bundleId": "bundle_demo",
+    "subjectId": "subject_demo",
+    "householdId": "household_demo",
+    "idempotencyKey": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "versions": {
+      "schemaVersion": "1.0",
+      "algorithmVersion": "fixture-algorithm.1",
+      "providerVersion": "fixture-provider.1",
+      "modelVersion": "fixture-model.1",
+      "promptVersion": "fixture-prompt.1",
+      "taxonomyVersion": "fixture-taxonomy.1"
+    },
+    "evidence": [],
+    "requestedFacets": ["time", "place", "person", "event", "scene", "theme", "content_type", "quality", "duplicate"],
+    "config": {
+      "anonymousClustersEnabled": true,
+      "biometricConsentRef": "biometric_consent_demo",
+      "relevantConfigHash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "deadlineAt": "2026-09-07T00:05:00.000Z"
+  },
+  "assertions": {
+    "label": {
+      "schemaVersion": "1.0",
+      "assertionId": "assertion_label_demo",
+      "jobId": "job_demo",
+      "subjectId": "subject_demo",
+      "householdId": "household_demo",
+      "evidenceRefs": ["evidence_image_demo", "evidence_text_demo"],
+      "rawValue": "synthetic indoor celebration",
+      "confidence": 0.82,
+      "supports": [{ "evidenceId": "evidence_image_demo", "sourceType": "visual", "producerVersion": "fixture-provider.1", "region": { "x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5 }, "weight": 0.8 }],
+      "state": "proposed",
+      "sensitivity": "standard",
+      "versions": {
+        "schemaVersion": "1.0", "algorithmVersion": "fixture-algorithm.1", "providerVersion": "fixture-provider.1", "modelVersion": "fixture-model.1", "promptVersion": "fixture-prompt.1", "taxonomyVersion": "fixture-taxonomy.1"
+      },
+      "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "revision": 1,
+      "createdAt": "2026-09-07T00:01:02.000Z",
+      "updatedAt": "2026-09-07T00:01:02.000Z",
+      "facet": "scene",
+      "normalizedValue": { "namespace": "fixture-taxonomy.1", "value": "synthetic_scene" }
+    },
+    "personTextMention": {
+      "schemaVersion": "1.0", "assertionId": "assertion_person_text_demo", "jobId": "job_demo", "subjectId": "subject_demo", "householdId": "household_demo", "evidenceRefs": ["evidence_text_demo"], "rawValue": "synthetic person mention", "confidence": 0.63,
+      "supports": [{ "evidenceId": "evidence_text_demo", "sourceType": "user_text", "producerVersion": "fixture-provider.1", "span": { "start": 0, "end": 9 }, "weight": 0.6 }], "state": "proposed", "sensitivity": "sensitive",
+      "versions": { "schemaVersion": "1.0", "algorithmVersion": "fixture-algorithm.1", "providerVersion": "fixture-provider.1", "modelVersion": "fixture-model.1", "promptVersion": "fixture-prompt.1", "taxonomyVersion": "fixture-taxonomy.1" }, "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "revision": 1, "createdAt": "2026-09-07T00:01:02.000Z", "updatedAt": "2026-09-07T00:01:02.000Z", "facet": "person", "normalizedValue": { "kind": "text_mention", "mention": "synthetic mention" }
+    },
+    "personFaceRegion": {
+      "schemaVersion": "1.0", "assertionId": "assertion_person_region_demo", "jobId": "job_demo", "subjectId": "subject_demo", "householdId": "household_demo", "evidenceRefs": ["evidence_image_demo"], "rawValue": "synthetic anonymous face region", "confidence": 0.58,
+      "supports": [{ "evidenceId": "evidence_image_demo", "sourceType": "visual", "producerVersion": "fixture-provider.1", "region": { "x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2 } }], "state": "proposed", "sensitivity": "sensitive",
+      "versions": { "schemaVersion": "1.0", "algorithmVersion": "fixture-algorithm.1", "providerVersion": "fixture-provider.1", "modelVersion": "fixture-model.1", "promptVersion": "fixture-prompt.1", "taxonomyVersion": "fixture-taxonomy.1" }, "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "revision": 1, "createdAt": "2026-09-07T00:01:02.000Z", "updatedAt": "2026-09-07T00:01:02.000Z", "facet": "person", "normalizedValue": { "kind": "face_region", "faceRegionId": "face_region_demo", "evidenceId": "evidence_image_demo", "region": { "x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2 } }
+    },
+    "personCluster": {
+      "schemaVersion": "1.0", "assertionId": "assertion_person_cluster_demo", "jobId": "job_demo", "subjectId": "subject_demo", "householdId": "household_demo", "evidenceRefs": ["evidence_image_demo"], "rawValue": "synthetic anonymous cluster", "confidence": 0.51,
+      "supports": [{ "evidenceId": "evidence_image_demo", "sourceType": "visual", "producerVersion": "fixture-provider.1" }], "state": "proposed", "sensitivity": "sensitive",
+      "versions": { "schemaVersion": "1.0", "algorithmVersion": "fixture-algorithm.1", "providerVersion": "fixture-provider.1", "modelVersion": "fixture-model.1", "promptVersion": "fixture-prompt.1", "taxonomyVersion": "fixture-taxonomy.1" }, "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "revision": 1, "createdAt": "2026-09-07T00:01:02.000Z", "updatedAt": "2026-09-07T00:01:02.000Z", "facet": "person", "normalizedValue": { "kind": "person_cluster", "personClusterId": "person_cluster_demo", "faceRegionIds": ["face_region_demo"] }
+    },
+    "duplicate": {
+      "schemaVersion": "1.0", "assertionId": "assertion_duplicate_demo", "jobId": "job_demo", "subjectId": "subject_demo", "householdId": "household_demo", "evidenceRefs": ["evidence_image_demo"], "rawValue": "synthetic near duplicate", "confidence": 0.77,
+      "supports": [{ "evidenceId": "evidence_image_demo", "sourceType": "visual", "producerVersion": "fixture-provider.1" }], "state": "proposed", "sensitivity": "standard",
+      "versions": { "schemaVersion": "1.0", "algorithmVersion": "fixture-algorithm.1", "providerVersion": "fixture-provider.1", "modelVersion": "fixture-model.1", "promptVersion": "fixture-prompt.1", "taxonomyVersion": "fixture-taxonomy.1" }, "inputHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "revision": 1, "createdAt": "2026-09-07T00:01:02.000Z", "updatedAt": "2026-09-07T00:01:02.000Z", "facet": "duplicate", "normalizedValue": { "relation": "near", "targetEvidenceId": "evidence_prior_demo" }
+    }
+  },
+  "providerResults": {
+    "succeeded": { "status": "succeeded", "assertionKeys": ["label", "personTextMention", "duplicate"], "facetErrors": [], "abstentions": [] },
+    "needsReviewPartial": { "status": "needs_review", "assertionKeys": ["personFaceRegion"], "facetErrors": [{ "facet": "time", "code": "UNSUPPORTED_INPUT" }], "abstentions": [{ "facet": "place", "reason": "insufficient_evidence" }] },
+    "failedRetryable": { "status": "failed_retryable", "assertionKeys": [], "facetErrors": [], "abstentions": [], "error": { "code": "TIMEOUT" } },
+    "failedTerminal": { "status": "failed_terminal", "assertionKeys": [], "facetErrors": [], "abstentions": [], "error": { "code": "UNSUPPORTED_INPUT" } },
+    "cancelled": { "status": "cancelled", "assertionKeys": [], "facetErrors": [], "abstentions": [], "error": { "code": "CANCELLED" } }
+  },
+  "reviewRequests": {
+    "confirm": { "schemaVersion": "1.0", "assertionId": "assertion_label_demo", "expectedRevision": 1, "actorId": "actor_demo", "subjectId": "subject_demo", "householdId": "household_demo", "authorityType": "self", "authorityRef": "authority_demo", "action": "confirm" },
+    "reject": { "schemaVersion": "1.0", "assertionId": "assertion_label_demo", "expectedRevision": 1, "actorId": "actor_demo", "subjectId": "subject_demo", "householdId": "household_demo", "authorityType": "explicit_delegate", "authorityRef": "authority_demo", "action": "reject" },
+    "withdraw": { "schemaVersion": "1.0", "assertionId": "assertion_label_demo", "expectedRevision": 1, "actorId": "actor_demo", "subjectId": "subject_demo", "householdId": "household_demo", "authorityType": "legal_representative", "authorityRef": "authority_demo", "action": "withdraw" },
+    "edit": { "schemaVersion": "1.0", "assertionId": "assertion_label_demo", "expectedRevision": 1, "actorId": "actor_demo", "subjectId": "subject_demo", "householdId": "household_demo", "authorityType": "self", "authorityRef": "authority_demo", "action": "edit", "normalizedValue": { "namespace": "fixture-taxonomy.1", "value": "edited_synthetic_label" } }
+  }
+}

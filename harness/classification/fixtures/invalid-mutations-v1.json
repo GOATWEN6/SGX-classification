@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "fixtureVersion": "1.0",
+    "synthetic": true,
+    "description": "Apply each explicit mutation to the named positive-v1 base object. Every case must be rejected as INVALID_CONTRACT."
+  },
+  "cases": [
+    { "id": "evidence-missing-subject", "definition": "EvidenceRecord", "base": "evidenceRecords.image", "op": "delete", "path": "/subjectId" },
+    { "id": "evidence-invalid-mime", "definition": "EvidenceRecord", "base": "evidenceRecords.image", "op": "set", "path": "/mimeType", "value": "image/gif" },
+    { "id": "image-missing-dimensions", "definition": "EvidenceRecord", "base": "evidenceRecords.image", "op": "delete", "path": "/dimensions" },
+    { "id": "text-with-image-field", "definition": "EvidenceRecord", "base": "evidenceRecords.text", "op": "set", "path": "/dimensions", "value": { "width": 1, "height": 1 } },
+    { "id": "transcript-not-final", "definition": "EvidenceRecord", "base": "evidenceRecords.transcript", "op": "set", "path": "/asr/final", "value": false },
+    { "id": "source-url-rejected", "definition": "EvidenceRecord", "base": "evidenceRecords.image", "op": "set", "path": "/sourceRef/id", "value": "https://synthetic.invalid/object" },
+    { "id": "evidence-unknown-field", "definition": "EvidenceRecord", "base": "evidenceRecords.image", "op": "set", "path": "/unexpected", "value": "synthetic" },
+    { "id": "bundle-empty-evidence", "definition": "ContentBundle", "base": "contentBundle", "op": "set", "path": "/evidence", "value": [] },
+    { "id": "bundle-unknown-field", "definition": "ContentBundle", "base": "contentBundle", "op": "set", "path": "/debugUrl", "value": "https://synthetic.invalid" },
+    { "id": "job-empty-facets", "definition": "ClassificationJobRequest", "base": "jobRequest", "op": "set", "path": "/requestedFacets", "value": [] },
+    { "id": "job-duplicate-evidence-id", "definition": "ClassificationJobRequest", "base": "jobRequest", "op": "set", "path": "/evidenceIds", "value": ["evidence_image_demo", "evidence_image_demo"] },
+    { "id": "provider-empty-evidence", "definition": "ClassificationProviderRequest", "base": "providerRequest", "op": "set", "path": "/evidence", "value": [] },
+    { "id": "provider-unknown-field", "definition": "ClassificationProviderRequest", "base": "providerRequest", "op": "set", "path": "/ownerId", "value": "owner_demo" },
+    { "id": "assertion-empty-evidence-refs", "definition": "ClassificationAssertion", "base": "assertions.label", "op": "set", "path": "/evidenceRefs", "value": [] },
+    { "id": "assertion-empty-supports", "definition": "ClassificationAssertion", "base": "assertions.label", "op": "set", "path": "/supports", "value": [] },
+    { "id": "assertion-confidence-string", "definition": "ClassificationAssertion", "base": "assertions.label", "op": "set", "path": "/confidence", "value": "high" },
+    { "id": "automatic-identity-field", "definition": "ClassificationAssertion", "base": "assertions.personFaceRegion", "op": "set", "path": "/normalizedValue/identityId", "value": "person_real_identity" },
+    { "id": "person-value-wrong-shape", "definition": "ClassificationAssertion", "base": "assertions.personTextMention", "op": "set", "path": "/normalizedValue", "value": { "kind": "identity", "identityId": "forbidden" } },
+    { "id": "provider-result-missing-usage", "definition": "ClassificationProviderResult", "base": "providerResults.succeeded", "op": "delete", "path": "/usage" },
+    { "id": "review-edit-missing-value", "definition": "AssertionReviewRequest", "base": "reviewRequests.edit", "op": "delete", "path": "/normalizedValue" },
+    { "id": "review-confirm-extra-value", "definition": "AssertionReviewRequest", "base": "reviewRequests.confirm", "op": "set", "path": "/normalizedValue", "value": { "namespace": "fixture-taxonomy.1", "value": "should_not_be_here" } }
+  ]
+}

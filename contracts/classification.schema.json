@@ -1,0 +1,1761 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification:v1",
+  "title": "SGX classification v1 — integration contract only",
+  "definitions": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "format": "date-time"
+    },
+    "SchemaVersion": {
+      "const": "1.0"
+    },
+    "ClassificationFacet": {
+      "type": "string",
+      "enum": [
+        "time",
+        "place",
+        "person",
+        "event",
+        "scene",
+        "theme",
+        "content_type",
+        "quality",
+        "duplicate"
+      ]
+    },
+    "JobStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "succeeded",
+        "needs_review",
+        "failed_retryable",
+        "failed_terminal",
+        "cancelled"
+      ]
+    },
+    "ProviderStatus": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "needs_review",
+        "failed_retryable",
+        "failed_terminal",
+        "cancelled"
+      ]
+    },
+    "AssertionState": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "confirmed",
+        "edited",
+        "rejected",
+        "conflicted",
+        "withdrawn"
+      ]
+    },
+    "LifecycleState": {
+      "type": "string",
+      "enum": [
+        "active",
+        "trashed",
+        "deletion_pending",
+        "deleted"
+      ]
+    },
+    "ProviderErrorCode": {
+      "type": "string",
+      "enum": [
+        "TIMEOUT",
+        "PROVIDER_UNAVAILABLE",
+        "INVALID_OUTPUT",
+        "CANCELLED",
+        "UNSUPPORTED_INPUT",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "SourceType": {
+      "type": "string",
+      "enum": [
+        "visual",
+        "exif",
+        "ocr",
+        "user_text",
+        "final_asr"
+      ]
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "object",
+            "message"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "VersionStamp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "algorithmVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "modelVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "promptVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "taxonomyVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "algorithmVersion",
+        "providerVersion",
+        "modelVersion",
+        "promptVersion",
+        "taxonomyVersion"
+      ]
+    },
+    "AsrMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "final": {
+          "const": true
+        },
+        "producerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "final",
+        "producerVersion"
+      ]
+    },
+    "Dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ]
+    },
+    "MinimalAuthorizedEvidenceRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "image"
+            },
+            "mimeType": {
+              "type": "string",
+              "enum": [
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+              ]
+            },
+            "dimensions": {
+              "$ref": "#/definitions/Dimensions"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType",
+            "dimensions"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "text"
+            },
+            "mimeType": {
+              "const": "text/plain"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "transcript"
+            },
+            "mimeType": {
+              "const": "text/plain"
+            },
+            "asr": {
+              "$ref": "#/definitions/AsrMetadata"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType",
+            "asr"
+          ]
+        }
+      ]
+    },
+    "EvidenceRecord": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "ownerId": {
+              "$ref": "#/definitions/Id"
+            },
+            "contributorId": {
+              "$ref": "#/definitions/Id"
+            },
+            "circleId": {
+              "$ref": "#/definitions/Id"
+            },
+            "consentRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "visibility": {
+              "type": "string",
+              "enum": [
+                "private",
+                "household",
+                "circle"
+              ]
+            },
+            "visibilityAuthorityRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "ingestedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "capturedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "lifecycleState": {
+              "type": "string",
+              "enum": [
+                "active",
+                "trashed",
+                "deletion_pending"
+              ]
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "image"
+            },
+            "mimeType": {
+              "type": "string",
+              "enum": [
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+              ]
+            },
+            "dimensions": {
+              "$ref": "#/definitions/Dimensions"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "subjectId",
+            "householdId",
+            "schemaVersion",
+            "ownerId",
+            "contributorId",
+            "consentRef",
+            "visibility",
+            "ingestedAt",
+            "lifecycleState",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType",
+            "dimensions"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "ownerId": {
+              "$ref": "#/definitions/Id"
+            },
+            "contributorId": {
+              "$ref": "#/definitions/Id"
+            },
+            "circleId": {
+              "$ref": "#/definitions/Id"
+            },
+            "consentRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "visibility": {
+              "type": "string",
+              "enum": [
+                "private",
+                "household",
+                "circle"
+              ]
+            },
+            "visibilityAuthorityRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "ingestedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "capturedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "lifecycleState": {
+              "type": "string",
+              "enum": [
+                "active",
+                "trashed",
+                "deletion_pending"
+              ]
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "text"
+            },
+            "mimeType": {
+              "const": "text/plain"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "subjectId",
+            "householdId",
+            "schemaVersion",
+            "ownerId",
+            "contributorId",
+            "consentRef",
+            "visibility",
+            "ingestedAt",
+            "lifecycleState",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "ownerId": {
+              "$ref": "#/definitions/Id"
+            },
+            "contributorId": {
+              "$ref": "#/definitions/Id"
+            },
+            "circleId": {
+              "$ref": "#/definitions/Id"
+            },
+            "consentRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "visibility": {
+              "type": "string",
+              "enum": [
+                "private",
+                "household",
+                "circle"
+              ]
+            },
+            "visibilityAuthorityRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "ingestedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "capturedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "lifecycleState": {
+              "type": "string",
+              "enum": [
+                "active",
+                "trashed",
+                "deletion_pending"
+              ]
+            },
+            "sourceRef": {
+              "$ref": "#/definitions/SourceRef"
+            },
+            "sourceHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520
+            },
+            "modality": {
+              "const": "transcript"
+            },
+            "mimeType": {
+              "const": "text/plain"
+            },
+            "asr": {
+              "$ref": "#/definitions/AsrMetadata"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "subjectId",
+            "householdId",
+            "schemaVersion",
+            "ownerId",
+            "contributorId",
+            "consentRef",
+            "visibility",
+            "ingestedAt",
+            "lifecycleState",
+            "sourceRef",
+            "sourceHash",
+            "revision",
+            "byteLength",
+            "modality",
+            "mimeType",
+            "asr"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "lifecycleState": {
+              "const": "deleted"
+            },
+            "deletedAt": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "required": [
+            "evidenceId",
+            "subjectId",
+            "householdId",
+            "schemaVersion",
+            "revision",
+            "lifecycleState",
+            "deletedAt"
+          ]
+        }
+      ]
+    },
+    "ContentBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "bundleId": {
+          "$ref": "#/definitions/Id"
+        },
+        "actorId": {
+          "$ref": "#/definitions/Id"
+        },
+        "subjectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "householdId": {
+          "$ref": "#/definitions/Id"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRecord"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "giftScenario": {
+          "type": "string",
+          "enum": [
+            "retirement",
+            "anniversary",
+            "move_in",
+            "birthday",
+            "alumni"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "bundleId",
+        "actorId",
+        "subjectId",
+        "householdId",
+        "evidence"
+      ]
+    },
+    "ProviderConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "anonymousClustersEnabled": {
+          "type": "boolean"
+        },
+        "biometricConsentRef": {
+          "$ref": "#/definitions/Id"
+        },
+        "relevantConfigHash": {
+          "$ref": "#/definitions/Hash"
+        }
+      },
+      "required": [
+        "anonymousClustersEnabled",
+        "relevantConfigHash"
+      ]
+    },
+    "ClassificationJobRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "bundleId": {
+          "$ref": "#/definitions/Id"
+        },
+        "jobId": {
+          "$ref": "#/definitions/Id"
+        },
+        "subjectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "householdId": {
+          "$ref": "#/definitions/Id"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "requestedFacets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClassificationFacet"
+          },
+          "minItems": 1,
+          "maxItems": 9,
+          "uniqueItems": true
+        },
+        "versions": {
+          "$ref": "#/definitions/VersionStamp"
+        },
+        "config": {
+          "$ref": "#/definitions/ProviderConfig"
+        },
+        "idempotencyKey": {
+          "$ref": "#/definitions/Hash"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "bundleId",
+        "jobId",
+        "subjectId",
+        "householdId",
+        "evidenceIds",
+        "requestedFacets",
+        "versions",
+        "config",
+        "idempotencyKey"
+      ]
+    },
+    "ClassificationJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "bundleId": {
+          "$ref": "#/definitions/Id"
+        },
+        "jobId": {
+          "$ref": "#/definitions/Id"
+        },
+        "subjectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "householdId": {
+          "$ref": "#/definitions/Id"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "requestedFacets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClassificationFacet"
+          },
+          "minItems": 1,
+          "maxItems": 9,
+          "uniqueItems": true
+        },
+        "versions": {
+          "$ref": "#/definitions/VersionStamp"
+        },
+        "config": {
+          "$ref": "#/definitions/ProviderConfig"
+        },
+        "idempotencyKey": {
+          "$ref": "#/definitions/Hash"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "startedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "finishedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "errorCode": {
+          "$ref": "#/definitions/ProviderErrorCode"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "bundleId",
+        "jobId",
+        "subjectId",
+        "householdId",
+        "evidenceIds",
+        "requestedFacets",
+        "versions",
+        "config",
+        "idempotencyKey",
+        "runId",
+        "status",
+        "attemptCount",
+        "createdAt"
+      ]
+    },
+    "ClassificationProviderRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "jobId": {
+          "$ref": "#/definitions/Id"
+        },
+        "bundleId": {
+          "$ref": "#/definitions/Id"
+        },
+        "subjectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "householdId": {
+          "$ref": "#/definitions/Id"
+        },
+        "idempotencyKey": {
+          "$ref": "#/definitions/Hash"
+        },
+        "inputHash": {
+          "$ref": "#/definitions/Hash"
+        },
+        "versions": {
+          "$ref": "#/definitions/VersionStamp"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MinimalAuthorizedEvidenceRef"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "requestedFacets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClassificationFacet"
+          },
+          "minItems": 1,
+          "maxItems": 9,
+          "uniqueItems": true
+        },
+        "config": {
+          "$ref": "#/definitions/ProviderConfig"
+        },
+        "deadlineAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "jobId",
+        "bundleId",
+        "subjectId",
+        "householdId",
+        "idempotencyKey",
+        "inputHash",
+        "versions",
+        "evidence",
+        "requestedFacets",
+        "config",
+        "deadlineAt"
+      ]
+    },
+    "Region": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1e-06,
+          "maximum": 1
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1e-06,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ]
+    },
+    "Support": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceType": {
+          "$ref": "#/definitions/SourceType"
+        },
+        "producerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ]
+        },
+        "region": {
+          "$ref": "#/definitions/Region"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "evidenceId",
+        "sourceType",
+        "producerVersion"
+      ]
+    },
+    "LabelValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "namespace",
+        "value"
+      ]
+    },
+    "PersonValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "text_mention"
+            },
+            "mention": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "kind",
+            "mention"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "face_region"
+            },
+            "faceRegionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "evidenceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            }
+          },
+          "required": [
+            "kind",
+            "faceRegionId",
+            "evidenceId",
+            "region"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "person_cluster"
+            },
+            "personClusterId": {
+              "$ref": "#/definitions/Id"
+            },
+            "faceRegionIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "kind",
+            "personClusterId",
+            "faceRegionIds"
+          ]
+        }
+      ]
+    },
+    "DuplicateValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relation": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "near"
+          ]
+        },
+        "targetEvidenceId": {
+          "$ref": "#/definitions/Id"
+        }
+      },
+      "required": [
+        "relation",
+        "targetEvidenceId"
+      ]
+    },
+    "ClassificationAssertion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "assertionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "jobId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "evidenceRefs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "rawValue": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "supports": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Support"
+              },
+              "minItems": 1,
+              "maxItems": 40
+            },
+            "state": {
+              "$ref": "#/definitions/AssertionState"
+            },
+            "sensitivity": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "sensitive"
+              ]
+            },
+            "versions": {
+              "$ref": "#/definitions/VersionStamp"
+            },
+            "inputHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "createdAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "updatedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "conflictGroupId": {
+              "$ref": "#/definitions/Id"
+            },
+            "facet": {
+              "type": "string",
+              "enum": [
+                "time",
+                "place",
+                "event",
+                "scene",
+                "theme",
+                "content_type",
+                "quality"
+              ]
+            },
+            "normalizedValue": {
+              "$ref": "#/definitions/LabelValue"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "assertionId",
+            "jobId",
+            "subjectId",
+            "householdId",
+            "evidenceRefs",
+            "rawValue",
+            "confidence",
+            "supports",
+            "state",
+            "sensitivity",
+            "versions",
+            "inputHash",
+            "revision",
+            "createdAt",
+            "updatedAt",
+            "facet",
+            "normalizedValue"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "assertionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "jobId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "evidenceRefs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "rawValue": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "supports": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Support"
+              },
+              "minItems": 1,
+              "maxItems": 40
+            },
+            "state": {
+              "$ref": "#/definitions/AssertionState"
+            },
+            "sensitivity": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "sensitive"
+              ]
+            },
+            "versions": {
+              "$ref": "#/definitions/VersionStamp"
+            },
+            "inputHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "createdAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "updatedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "conflictGroupId": {
+              "$ref": "#/definitions/Id"
+            },
+            "facet": {
+              "const": "person"
+            },
+            "normalizedValue": {
+              "$ref": "#/definitions/PersonValue"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "assertionId",
+            "jobId",
+            "subjectId",
+            "householdId",
+            "evidenceRefs",
+            "rawValue",
+            "confidence",
+            "supports",
+            "state",
+            "sensitivity",
+            "versions",
+            "inputHash",
+            "revision",
+            "createdAt",
+            "updatedAt",
+            "facet",
+            "normalizedValue"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "assertionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "jobId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "evidenceRefs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "rawValue": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "supports": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Support"
+              },
+              "minItems": 1,
+              "maxItems": 40
+            },
+            "state": {
+              "$ref": "#/definitions/AssertionState"
+            },
+            "sensitivity": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "sensitive"
+              ]
+            },
+            "versions": {
+              "$ref": "#/definitions/VersionStamp"
+            },
+            "inputHash": {
+              "$ref": "#/definitions/Hash"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "createdAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "updatedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "conflictGroupId": {
+              "$ref": "#/definitions/Id"
+            },
+            "facet": {
+              "const": "duplicate"
+            },
+            "normalizedValue": {
+              "$ref": "#/definitions/DuplicateValue"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "assertionId",
+            "jobId",
+            "subjectId",
+            "householdId",
+            "evidenceRefs",
+            "rawValue",
+            "confidence",
+            "supports",
+            "state",
+            "sensitivity",
+            "versions",
+            "inputHash",
+            "revision",
+            "createdAt",
+            "updatedAt",
+            "facet",
+            "normalizedValue"
+          ]
+        }
+      ]
+    },
+    "ProviderError": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/ProviderErrorCode"
+        }
+      },
+      "required": [
+        "code"
+      ]
+    },
+    "FacetError": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "facet": {
+          "$ref": "#/definitions/ClassificationFacet"
+        },
+        "code": {
+          "$ref": "#/definitions/ProviderErrorCode"
+        }
+      },
+      "required": [
+        "facet",
+        "code"
+      ]
+    },
+    "Abstention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "facet": {
+          "$ref": "#/definitions/ClassificationFacet"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "no_assertion",
+            "insufficient_evidence",
+            "low_confidence",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "facet",
+        "reason"
+      ]
+    },
+    "ClassificationProviderResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/definitions/SchemaVersion"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "jobId": {
+          "$ref": "#/definitions/Id"
+        },
+        "subjectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "householdId": {
+          "$ref": "#/definitions/Id"
+        },
+        "inputHash": {
+          "$ref": "#/definitions/Hash"
+        },
+        "versions": {
+          "$ref": "#/definitions/VersionStamp"
+        },
+        "status": {
+          "$ref": "#/definitions/ProviderStatus"
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClassificationAssertion"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "facetErrors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FacetError"
+          },
+          "minItems": 0,
+          "maxItems": 9
+        },
+        "abstentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Abstention"
+          },
+          "minItems": 0,
+          "maxItems": 9
+        },
+        "error": {
+          "$ref": "#/definitions/ProviderError"
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "latencyMs": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3600000
+            },
+            "inputUnits": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "outputUnits": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "required": [
+            "latencyMs",
+            "inputUnits",
+            "outputUnits"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "jobId",
+        "subjectId",
+        "householdId",
+        "inputHash",
+        "versions",
+        "status",
+        "assertions",
+        "facetErrors",
+        "abstentions",
+        "usage"
+      ]
+    },
+    "AssertionReviewRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "assertionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "actorId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "authorityType": {
+              "type": "string",
+              "enum": [
+                "self",
+                "explicit_delegate",
+                "legal_representative"
+              ]
+            },
+            "authorityRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "confirm",
+                "reject",
+                "withdraw"
+              ]
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "assertionId",
+            "expectedRevision",
+            "actorId",
+            "subjectId",
+            "householdId",
+            "authorityType",
+            "authorityRef",
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "$ref": "#/definitions/SchemaVersion"
+            },
+            "assertionId": {
+              "$ref": "#/definitions/Id"
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "actorId": {
+              "$ref": "#/definitions/Id"
+            },
+            "subjectId": {
+              "$ref": "#/definitions/Id"
+            },
+            "householdId": {
+              "$ref": "#/definitions/Id"
+            },
+            "authorityType": {
+              "type": "string",
+              "enum": [
+                "self",
+                "explicit_delegate",
+                "legal_representative"
+              ]
+            },
+            "authorityRef": {
+              "$ref": "#/definitions/Id"
+            },
+            "action": {
+              "const": "edit"
+            },
+            "normalizedValue": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/LabelValue"
+                },
+                {
+                  "$ref": "#/definitions/PersonValue"
+                },
+                {
+                  "$ref": "#/definitions/DuplicateValue"
+                }
+              ]
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "assertionId",
+            "expectedRevision",
+            "actorId",
+            "subjectId",
+            "householdId",
+            "authorityType",
+            "authorityRef",
+            "action",
+            "normalizedValue"
+          ]
+        }
+      ]
+    }
+  },
+  "$ref": "#/definitions/ClassificationProviderRequest"
+}
