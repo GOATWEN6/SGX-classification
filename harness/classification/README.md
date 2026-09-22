@@ -1,3 +1,5 @@
+> 2026-09-14：本页以下描述 v1 契约/Fake。新增五维、人物/事件聚合与增量 HTTP 请读 [阶段 A 交接](../../docs/algorithms/CLASSIFICATION_STAGE_A_HANDOFF.md)，真实实验入口请读 [D4 方案](../../docs/algorithms/CLASSIFICATION_D4_PROPOSAL.md)。v1 与新版的实现/未实现状态不可混用。
+
 # 多模态分类契约 harness
 
 本目录全部为合成元数据与确定性 Fake 输出，不包含媒体原件、真实家庭信息或真实模型结果。它是全栈接入的第一批基础，不能报告分类准确率，也不代表上传/确认 UI 已打通。
@@ -11,9 +13,12 @@ npm run test:classification:secret
 npm run classification:demo -- success
 npm run classification:demo -- conflicted
 npm run classification:demo -- timeout
+npm run classification:fake-http
 ```
 
-测试脚本使用现有 TypeScript 编译器，将分类模块和 Schema 编译到临时目录，然后运行 Node 原生测试并清理临时产物。无需启动 Next.js、配置凭据或联网。其他演示参数：`needs_review`、`failed`、`invalid_output`、`partial_failure`。`failed` 默认可重试；构造 Fake 时可用 `failureCode: 'UNSUPPORTED_INPUT'` 演示终止失败。
+测试脚本使用现有 TypeScript 编译器，将分类模块和 Schema 编译到临时目录，然后运行 Node 原生测试并清理临时产物。无需启动 Next.js、配置凭据或联网。其他演示参数：`needs_review`、`failed`、`invalid_output`、`partial_failure`。`failed` 默认可重试；构造 Fake 时可用 `failureCode: 'UNSUPPORTED_INPUT'` 演示终止失败。`classification:fake-http` 会在 `127.0.0.1:8787` 启动仅用于联调的 HTTP 服务，按 Ctrl-C 停止；它不读取媒体、不持久化 Job、不调用模型。
+
+HTTP 草案和运行方式见 [Fake HTTP 联调与验收](HTTP_HANDOFF.md)。该服务仅接受服务端预置的合成 scope / Evidence，严格校验请求，使用进程内状态模拟授权版本、撤回和结果拒收。`authorizationState: "active"` 不能覆盖服务端撤回状态；没有生产身份认证。完整相同请求（忽略 JSON 对象属性顺序）可共享执行或重放；同 key 改 runId、requestId、scenario 等字段仍返回 `IDEMPOTENCY_CONFLICT`。这只是当前 Fake 草案的严格重放语义，真实重试、请求追踪和双方最终 HTTP 契约仍待评审。
 
 本工作树验证时通过本地 `node_modules` 软链接只读复用主目录已有依赖，没有安装或下载软件；该链接不进入 Git。新 checkout 仍按仓库锁文件准备依赖后运行上述命令。
 
