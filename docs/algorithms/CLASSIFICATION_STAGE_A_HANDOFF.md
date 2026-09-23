@@ -52,6 +52,33 @@ flowchart TD
 
 详细字段、错误码和停止条件见 [可信输入适配 Spec](../superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md)。
 
+## 统一内容库与故事归纳
+
+2026-09-23 起，产品语义从“照片分类”扩展为“统一内容分类与故事归纳”。运行时契约在 `src/lib/algorithms/classification/content-organization.ts`：
+
+- `ContentItem`：图片、用户文字、final ASR 是一级内容；原文保留在 `originalText`，不被 AI 摘要替换。
+- `ContentObservation`：每个内容独立产生人物、时间、地点、事件、主题等候选，所有候选都有 Evidence support。
+- `StoryUnit`：事件/故事卡片，提供列表页标题和摘要，以及详情页成员内容、原文和来源引用。
+- `AssociationCandidate`：用户明确关系或 AI 关联。用户关系是硬约束；AI 关系记录 score、confidenceBand、method、evidenceRefs 和状态。
+
+Fake 组织入口是 `organizeContent(input)`。它使用版本化的 `association-rules.1` 规则：`score >= 0.80` 标记 `ai_auto` 并自动进入故事成员，`0.55–<0.80` 标记 `needs_review` 并显示“可能相关”，低于 `0.55` 标记 `not_selected` 但保留审计记录。冲突会强制进入待确认。这里的 score 是工程评分，不是已经校准的概率。
+
+最小输入示例：
+
+```ts
+const result = organizeContent({
+  scope: { householdId: 'house_a', subjectId: 'elder_a' },
+  contents: [photoItem, textItem, asrItem],
+  observations: [photoObservations, textObservations, asrObservations].flat(),
+  explicitAssociations: [],
+  createdAt: new Date().toISOString()
+});
+```
+
+列表页读取 `result.stories` 的 `titleCandidate`、`summaryCandidate` 和 `memberContentIds`；详情页根据成员 `ContentItem` 读取图片、录音转写和 `originalText`。前端必须区分 `ai_auto` 和 `user_confirmed` 的展示状态，不能把 AI 自动关联显示成用户已经确认。
+
+本轮真正实现的是三类内容的纯内存 Fake/规则链。数据库、对象存储、音频播放、文件解析、作品解析和 Memory 持久化仍由后续全栈模块负责。
+
 已有 v1 JSON Schema、Fake Provider、`POST /v1/classify` 保留兼容。新能力独立使用 `classification-stage-a.1` + `POST /v2/classification/run`，不是 v1 原地扩字段。目前尚未提供新的 OpenAPI/JSON Schema 导出；全栈可直接读取 Zod 契约。未增加依赖。
 
 ## 新版 HTTP 怎么运行

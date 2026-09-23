@@ -50,7 +50,7 @@
 
 受影响文件：
 
-- `src/lib/algorithms/classification/content-organizer.ts`
+- `src/lib/algorithms/classification/content-organization.ts`
 - `harness/classification/content-organization.test.mjs`
 
 行为：

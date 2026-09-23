@@ -6,6 +6,8 @@
 
 新增 `harness/classification/stage-a-adapter.test.mjs` 7 项回归：独立来源保留、精确引用、Mock Provider 链路、跨 scope、缺失/哈希错误、未绑定/重复绑定、删除墓碑与 partial ASR。适配器实现和来源契约的提交为 `e8baece`，Spec 提交为 `8f23d43`。后续完整分类回归应包含这些用例；仍需把本轮文档更新和最终回归结果记录在下面的最新检查表中。
 
+本轮同时新增统一内容组织契约和 Fake 规则链：`src/lib/algorithms/classification/content-organization.ts` 与 `harness/classification/content-organization.test.mjs`。新增 7 项回归覆盖图片、文字、final ASR 合并成故事卡片、原文保留、用户关系优先、AI 高中低分带、冲突待确认、跨主体/撤回拒绝和 Evidence 引用回退。Fake 只验证契约、关联状态和可追溯性，不能替代真实模型效果。
+
 日期：2026-09-14。工作树 `/Users/wenqingzhong/.codex/worktrees/f899/SGX`，分支 `codex/classification-contract-v1`，基线 HEAD `d33a5c5`。新增与之前 Fake HTTP 的改动仍在工作树，未 commit/push/PR/merge/部署；未修改业务前端、业务数据库、依赖锁文件或其他 checkout。
 
 状态更新：2026-09-22 已完成工程复审，并把核心实现与测试保存为本地提交 `505c274`；仍未 push、创建 PR、merge 或部署。
