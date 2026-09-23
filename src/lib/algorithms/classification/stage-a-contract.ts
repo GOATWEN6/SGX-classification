@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
 export const PROMPT_VERSION = 'sgx-five-facets.1';
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const ScopeSchema = z.object({ householdId:id, subjectId:id }).strict();
-const support = z.object({ photoId:id, source:z.enum(['visual','caption','exif','ocr']), quote:z.string().min(1).max(1000) }).strict();
+const support = z.object({ photoId:id, source:z.enum(['visual','caption','exif','ocr','user_text','final_asr']), evidenceId:id.optional(), quote:z.string().min(1).max(1000) }).strict();
 const supports = z.array(support).min(1).max(12);
 export const BoxSchema = z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),width:z.number().positive().max(1),height:z.number().positive().max(1)}).strict()
   .refine(b=>b.x+b.width<=1&&b.y+b.height<=1,'INVALID_REGION');
 export const PhotoSchema = z.object({ photoId:id, scope:ScopeSchema, revision:z.number().int().positive(),
   sourceRef:id, sourceHash:hash, mimeType:z.enum(['image/jpeg','image/png','image/webp']),
-  caption:z.string().max(16000).default(''), exif:z.object({capturedAt:z.string().datetime({offset:true}).optional(), originalCapture:z.boolean()}).strict().optional(),
+  caption:z.string().max(16000).default(''), textEvidence:z.array(z.object({evidenceId:id,revision:z.number().int().positive(),sourceHash:hash,source:z.enum(['user_text','final_asr']),text:z.string().min(1).max(65536)}).strict()).max(24).optional(), exif:z.object({capturedAt:z.string().datetime({offset:true}).optional(), originalCapture:z.boolean()}).strict().optional(),
   active:z.boolean() }).strict();
 export const FacetSchema = z.enum(['person','time','place','event','scene']);
 export const ObservationSchema = z.object({ photoId:id,
@@ -65,6 +65,12 @@ export function validateSupports(items:Support[], photos:Photo[]) {
   for(const s of items){const p=photos.find(p=>p.photoId===s.photoId);if(!p)throw new StageError('FOREIGN_SOURCE');
     if(s.source==='caption'&&!p.caption.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
     if(s.source==='exif'&&(!p.exif||!stable(p.exif).includes(s.quote)))throw new StageError('UNSUPPORTED_EXIF');
+    if(s.source==='user_text'||s.source==='final_asr'){
+      if(!s.evidenceId)throw new StageError('TEXT_SUPPORT_REQUIRES_EVIDENCE');
+      const evidence=(p.textEvidence??[]).find(e=>e.evidenceId===s.evidenceId&&e.source===s.source);
+      if(!evidence)throw new StageError('FOREIGN_SOURCE');
+      if(!evidence.text.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
+    }
   }
 }
 export function validateObservation(raw:unknown, photo:Photo):Observation {
@@ -74,7 +80,7 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
   const all=[...o.people,...o.mentions,...o.times,...o.places,...o.events,...o.scenes];
   all.forEach(x=>validateSupports(x.supports,[photo]));
   if(o.people.some(p=>!p.supports.some(s=>s.source==='visual')))throw new StageError('FACE_WITHOUT_VISUAL');
-  if(o.mentions.some(m=>!m.supports.every(s=>s.source==='caption')))throw new StageError('MENTION_WITHOUT_TEXT');
+  if(o.mentions.some(m=>!m.supports.every(s=>s.source==='caption'||s.source==='user_text'||s.source==='final_asr')))throw new StageError('MENTION_WITHOUT_TEXT');
   for(const time of o.times){
     if(time.supports.every(s=>s.source==='visual'))throw new StageError('UNSUPPORTED_TIME');
     if(time.precision==='year'&&!/^\d{4}$/.test(time.value))throw new StageError('INVALID_TIME');
