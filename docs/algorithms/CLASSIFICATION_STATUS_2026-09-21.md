@@ -2,6 +2,14 @@
 
 日期：2026-09-21
 
+## 2026-09-23 工程推进更新
+
+本轮没有等待新版 PRD，也没有调用真实 API；先冻结并实现了 Stage A 的可信输入适配边界。新增 Spec：`docs/superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md`；新增实现：`src/lib/algorithms/classification/stage-a-adapter.ts`；新增 7 项适配器回归。当前提交为：`8f23d43`（Spec）和 `e8baece`（适配器与来源契约）。
+
+这解决了一个真实接入缺口：`ContentBundle/EvidenceRecord` 本身只有元数据和受保护引用，不能直接成为模型输入；现在后端必须先解析完整授权目录、读取并校验正文、显式绑定图片与文字/最终 ASR，再生成内部 Stage A 请求。用户文字和最终 ASR 不再被合并为一个 caption；候选结果仍不是用户确认事实，也不会自动写入 Memory。
+
+本轮完成的是可回退的工程契约和 Fake/Mock 联调边界，不是数据库、ORM、Redis、队列或生产 API 的实现。真实模型、新版 160 张材料、独立真值和产品接入仍按原门禁等待，D4 不因本轮代码绿测而自动启动。
+
 更新：2026-09-22
 审计范围：
 

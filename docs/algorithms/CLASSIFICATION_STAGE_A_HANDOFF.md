@@ -1,6 +1,6 @@
 # 自动分类阶段 A：算法与全栈交接
 
-日期：2026-09-14。当前范围是 D1–D3：五维分类、人物候选、同次事件聚合、纠错及增量更新。新 PRD 到位后核对产品接入层；当前实现不等于真实模型效果通过。验证记录见 [本地验收](CLASSIFICATION_STAGE_A_VERIFICATION.md)，真实实验方案见 [D4](CLASSIFICATION_D4_PROPOSAL.md)。
+日期：2026-09-14；2026-09-23 更新可信 Evidence 适配边界。当前范围是 D1–D3：五维分类、人物候选、同次事件聚合、纠错及增量更新。新 PRD 到位后核对产品接入层；当前实现不等于真实模型效果通过。验证记录见 [本地验收](CLASSIFICATION_STAGE_A_VERIFICATION.md)，真实实验方案见 [D4](CLASSIFICATION_D4_PROPOSAL.md)。
 
 ## 先用一个例子说明
 
@@ -39,6 +39,19 @@ flowchart TD
 |`harness/classification/stage-a-demo.mjs`|Mock transport 经过上述真实编排，演示 HTTP 链路|
 |`harness/classification/stage-a-evaluation.mjs` / `stage-a-eval.mjs`|离线预检、授权校验、真实批次执行入口和固定分母计分|
 
+2026-09-23 新增 `src/lib/algorithms/classification/stage-a-adapter.ts`。这是后端内部的确定性适配器，入口为 `adaptTrustedStageACatalog(catalog, {runId, trigger, budget})`，只接受已经完成鉴权、完整目录解析、正文读取和哈希校验的 `TrustedStageACatalog`。`catalog.evidence` 是当前 scope 的完整 Evidence 目录；`catalog.photos` 明确表达图片与文字/最终 ASR 的绑定。适配器返回 `request`、同版本的 `authorization`、只读当前授权图片的 `resolveImage` 和可审计的身份/来源映射。
+
+接入时必须遵守以下边界：
+
+- `actorId` 只表示当前操作人；`subjectId` 进入 Stage A scope；`ownerId` 和 `contributorId` 只保留在 audit，不互相替代。
+- 图片、用户文字、最终 ASR 保持独立 `evidenceId`、哈希和修订号；不能把正文拼成一个 caption。
+- 只有 `asr.final=true` 的转写可进入；原始音频和 partial ASR 会被拒绝。
+- 每条文字/ASR 必须绑定到一张图片；未绑定、重复绑定、跨家庭/主体、未授权 consent、正文缺失、字节长度或 SHA-256 不匹配都会在模型调用前拒绝。
+- 删除墓碑必须带同 ID 的上一版 `Photo`，适配为 `active=false`；没有上一版快照就拒绝，避免旧结果继续使用。
+- 适配器不查询数据库、不下载对象、不写业务状态；这些责任属于全栈后端。客户端不能直接提交 `TrustedStageACatalog` 或 Stage A 内部 `Request`。
+
+详细字段、错误码和停止条件见 [可信输入适配 Spec](../superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md)。
+
 已有 v1 JSON Schema、Fake Provider、`POST /v1/classify` 保留兼容。新能力独立使用 `classification-stage-a.1` + `POST /v2/classification/run`，不是 v1 原地扩字段。目前尚未提供新的 OpenAPI/JSON Schema 导出；全栈可直接读取 Zod 契约。未增加依赖。
 
 ## 新版 HTTP 怎么运行
@@ -74,7 +87,7 @@ Demo 只认识两张内置素材；真实图像来自 1 像素 PNG，响应由�
 |`budget`|整个业务任务的请求、图片相关 Token、输出 Token、估算费用与 deadline；最多 60 秒/请求，0 自动重试|
 |可信 `AuthorizationSnapshot`|由服务端回调提供，含素材版本、用途开关、contextRevision 和 `reviewContextHash=digest([references,corrections])`；不能从浏览器请求照抄|
 
-photos 是内部规范化输入。原始 Evidence 的 actorId/ownerId/contributorId、独立文字/ASR 授权和来源保存仍由既有业务输入层负责；新接口没有将它们自动映射成 ContentBundle，更不直接消费音频。最终 ASR 转写如要用于说明，需全栈先验证来源授权并保留独立 Evidence；不能把合并后的 caption 当作完整证据库。
+photos 是适配器生成的内部规范化输入。全栈应先通过 `adaptTrustedStageACatalog` 形成可信 Evidence 快照，再把返回的 `request` 和 `authorization` 交给 Stage A；不要自己拼 `Photo`、`photoHash` 或 `reviewContextHash`。原始 Evidence 的 actorId/ownerId/contributorId、独立文字/ASR 授权和来源由适配器 audit 保留；新接口不直接消费音频，也不会把多个来源合并成 caption。
 
 |输出|语义|
 |---|---|
@@ -110,6 +123,8 @@ photos 是内部规范化输入。原始 Evidence 的 actorId/ownerId/contributo
 SnapshotStore 当前只有进程内内存实现；全栈需提供持久化、原子版本比较、鉴权、业务触发、对象存储读取和删除通知。算法版本2是内部服务草案，不应直接暴露公网。业务数据库、ORM、Redis、队列的选型与运维属于全栈；本轮未搭建，也不要求算法负责人自己部署。
 
 真实 Provider 由后端注入 `ApiVisionProvider` 和图片 resolver，不能给 Demo 配个 API key 就算切换。实际调用必须具备准确目标模型、照片清单、有效授权、实时撤回检查、服务端凭据及预算。D4 CLI 是离线批次实验入口，不是产品服务。
+
+本轮新增适配器回归覆盖独立用户文字/最终 ASR、精确引用、actor/subject/owner/contributor 分离、跨 scope、缺失/错误哈希、绑定冲突、删除快照和 partial ASR；测试使用 Mock Provider，不能替代真实视觉效果验证。
 
 全栈联调时逐项验收：上传后展示状态；同次生日多场景可聚合；不同年份不误并；指认后候选不冒充确认；拆分/改名后查看不恢复旧关联；删除后筛选不可返回旧图；超时/撤回/并发更新可恢复；Memory 不会因候选产生而自动落库。当前只完成算法侧本地验证，以上产品验收待全栈环境。
 

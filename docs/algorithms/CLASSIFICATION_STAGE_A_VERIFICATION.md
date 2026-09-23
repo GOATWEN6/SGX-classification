@@ -1,5 +1,11 @@
 # 自动分类阶段 A：本地验证记录
 
+## 2026-09-23 可信输入适配更新
+
+本轮在当前隔离分支新增可信 Evidence 到 Stage A 的后端适配器，并冻结 [集成 Spec](../superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md)。适配器把完整 Evidence 目录、图片正文、独立用户文字和最终 ASR 转换为内部 `Request`，同时返回授权快照、受限图片 resolver 和 audit 映射；它不访问数据库、不启动队列、不调用真实模型。
+
+新增 `harness/classification/stage-a-adapter.test.mjs` 7 项回归：独立来源保留、精确引用、Mock Provider 链路、跨 scope、缺失/哈希错误、未绑定/重复绑定、删除墓碑与 partial ASR。适配器实现和来源契约的提交为 `e8baece`，Spec 提交为 `8f23d43`。后续完整分类回归应包含这些用例；仍需把本轮文档更新和最终回归结果记录在下面的最新检查表中。
+
 日期：2026-09-14。工作树 `/Users/wenqingzhong/.codex/worktrees/f899/SGX`，分支 `codex/classification-contract-v1`，基线 HEAD `d33a5c5`。新增与之前 Fake HTTP 的改动仍在工作树，未 commit/push/PR/merge/部署；未修改业务前端、业务数据库、依赖锁文件或其他 checkout。
 
 状态更新：2026-09-22 已完成工程复审，并把核心实现与测试保存为本地提交 `505c274`；仍未 push、创建 PR、merge 或部署。
