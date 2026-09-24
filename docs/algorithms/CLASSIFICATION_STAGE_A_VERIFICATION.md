@@ -8,6 +8,8 @@
 
 本轮同时新增统一内容组织契约和 Fake 规则链：`src/lib/algorithms/classification/content-organization.ts` 与 `harness/classification/content-organization.test.mjs`。新增 7 项回归覆盖图片、文字、final ASR 合并成故事卡片、原文保留、用户关系优先、AI 高中低分带、冲突待确认、跨主体/撤回拒绝和 Evidence 引用回退。Fake 只验证契约、关联状态和可追溯性，不能替代真实模型效果。
 
+2026-09-24 为真实 API 探索补充按任务选择评测维度的门禁：没有独立人物框/身份真值时，person、person-pair 和 identity 指标可显式关闭，并在报告中显示“未评估”。新增 synthetic-v2 批次生成器，固定 10 张合成图、图片哈希、两组同事件来源和 ¥5 上限。完整分类回归为 115/115；离线 preflight 核对 10 张图和预计 50 次冷启动请求，唯一 blocker 为待人工复核的 `MANIFEST_DRAFT`，没有读取凭据或发请求。
+
 日期：2026-09-14。工作树 `/Users/wenqingzhong/.codex/worktrees/f899/SGX`，分支 `codex/classification-contract-v1`，基线 HEAD `d33a5c5`。新增与之前 Fake HTTP 的改动仍在工作树，未 commit/push/PR/merge/部署；未修改业务前端、业务数据库、依赖锁文件或其他 checkout。
 
 状态更新：2026-09-22 已完成工程复审，并把核心实现与测试保存为本地提交 `505c274`；仍未 push、创建 PR、merge 或部署。
