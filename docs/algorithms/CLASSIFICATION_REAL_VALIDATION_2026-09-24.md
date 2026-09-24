@@ -131,3 +131,21 @@ npm run classification:prepare-eval -- \
 因此第二轮仍然不能支持分类准确率、冲突识别或事件归纳效果结论。它支持的是：指定 endpoint、密钥、固定模型和较大抽取预算都能正常工作；严格 Schema 能拦住模型回显的非契约字段和漏写 unknown facet。
 
 本地修复已实施：不再把 `shapeGuide` 放进可回显的用户 JSON，顶层字段和空 facet 规则改为系统约束，并增加对应回归测试。修复后分类回归仍为 118/118，TypeScript 检查通过。第三次付费调用必须重新获得明确授权；在此之前不自动调用。
+
+## 10. 第三次 10 请求试验结果
+
+第三轮结果目录：`/private/tmp/sgx-d4-qwen37-run-r3-10call-20260924`。
+
+本轮按 10 次请求上限选择了 5 张图，计划为 5 次抽取和最多 5 次事件关联。实际第 1 次 C014 抽取即停止：模型正常结束（`finish_reason=stop`），但把一个照片拆成 `person`、`time`、`place`、`event`、`scene` 五个 observation，并额外输出了 `relations`；这违反了固定的 `ObservationSchema` 和抽取阶段只允许 `observations` 的规则。
+
+|项目|结果|
+|---|---:|
+|真实请求|1 次|
+|供应商模型|`qwen3.7-flash-2026-07-15`|
+|实际 usage|1706 input + 874 output tokens|
+|保守账本|24636 input + 4096 output tokens，¥0.049224|
+|完成照片|0/5|
+|事件关联|0 次|
+|自动重试|0 次|
+
+这轮仍然不能支持语义准确率，但确认了第三种 Prompt/输出形态不兼容。已实施的下一步本地修复是移除用户消息中的双层 `format` 示例，并在系统提示中明确“每张照片一个 observation、固定数组承载所有维度、抽取阶段禁止 relations”。本地修复后需重新授权才可以进行第四次真实调用。
