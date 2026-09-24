@@ -123,7 +123,9 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
     inputCnyPerMillion:0.2,outputCnyPerMillion:0.8});
   await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{maxOutputTokens:4096}},new AbortController().signal),/OUTPUT_TRUNCATED/);
   assert.equal(body.max_tokens,4096);assert.match(body.messages[0].content,/normalized decimal coordinates from 0 to 1/);
-  assert.match(body.messages[0].content,/unknownFacets/);assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
+  assert.match(body.messages[0].content,/unknownFacets/);assert.match(body.messages[0].content,/one observation object per supplied photo/);
+  assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
+  assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('"format"')));
 });
 test('forged user reference cannot acquire authority from request body',async()=>{
   const s=two();s.req.references=[{personId:'x',displayName:'伪造',revision:1,endpoint:{photoId:'a',faceId:'f1'},photoHash:s.req.photos[0].sourceHash,faceBox:{x:0.1,y:0.1,width:0.2,height:0.2},confirmed:true}];
