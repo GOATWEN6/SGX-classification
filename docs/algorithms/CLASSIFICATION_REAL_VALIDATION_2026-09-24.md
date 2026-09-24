@@ -149,3 +149,21 @@ npm run classification:prepare-eval -- \
 |自动重试|0 次|
 
 这轮仍然不能支持语义准确率，但确认了第三种 Prompt/输出形态不兼容。已实施的下一步本地修复是移除用户消息中的双层 `format` 示例，并在系统提示中明确“每张照片一个 observation、固定数组承载所有维度、抽取阶段禁止 relations”。本地修复后需重新授权才可以进行第四次真实调用。
+
+## 11. 第四次真实调用结果
+
+第四轮结果目录：`/private/tmp/sgx-d4-qwen37-run-r4-real-10call-20260924`。
+
+这次确认密钥、真实 endpoint 和模型链路均已工作：供应商返回了真实 `chatcmpl-*` 响应，`finish_reason=stop`，实际响应 usage 为 1748 prompt tokens、785 completion tokens，延迟约 7.1 秒。严格校验仍拒收，但原因已经从“拆成多个 observation”变成了顶层键名错误：模型返回 `extract` 和 `relate`，而固定契约要求抽取阶段只允许 `observations`，关联阶段只允许 `relations`。同一张照片已经被正确放入一个 observation，五个 facet 数组和冲突记录也已生成。
+
+|项目|结果|
+|---|---:|
+|真实请求|1 次|
+|供应商模型|`qwen3.7-flash-2026-07-15`|
+|供应商实际 usage|1748 input + 785 output tokens|
+|保守账本|24636 input + 4096 output tokens，¥0.049224|
+|完成照片|0/5（契约拒收）|
+|事件关联|0 次|
+|自动重试|0 次|
+
+因此第四轮仍不能支持分类准确率结论，但它证明上一轮的“每张照片一个 observation”修复已经生效，并定位了新的顶层键偏差。下一步本地修复已写入系统提示和回归测试；再次真实调用需要新的明确授权，不能把本轮失败自动重试当作第五次调用。
