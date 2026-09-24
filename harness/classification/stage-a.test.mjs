@@ -124,6 +124,7 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{maxOutputTokens:4096}},new AbortController().signal),/OUTPUT_TRUNCATED/);
   assert.equal(body.max_tokens,4096);assert.match(body.messages[0].content,/normalized decimal coordinates from 0 to 1/);
   assert.match(body.messages[0].content,/unknownFacets/);assert.match(body.messages[0].content,/one observation object per supplied photo/);
+  assert.match(body.messages[0].content,/literal, case-sensitive keys/);assert.match(body.messages[0].content,/never use "extract"/);
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('"format"')));
 });
