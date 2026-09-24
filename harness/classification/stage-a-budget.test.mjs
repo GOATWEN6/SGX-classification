@@ -42,3 +42,12 @@ test('failure without usage keeps conservative reservation accounting',async()=>
   const r=b.records[0];assert.equal(r.accounting,'conservative_reservation');assert.equal(b.inputTokens,24580);assert.equal(b.outputTokens,2048);
   assert.equal(r.costCny,(24580*1.2+2048*12)/1e6);assert.equal(b.costCny,r.costCny);
 });
+test('stage-specific output limits reserve extraction and relation calls independently',async()=>{
+  const staged={...limits(),stageOutputTokens:{extract:4096,relate:1024}};
+  const b=new TaskBudget(staged),p=provider({inputTokens:100,outputTokens:100});
+  await b.run(p,call);
+  await b.run(p,{stage:'relate',photos:[photo('a'),photo('b')],context:{}});
+  assert.equal(b.records[0].reservation.outputTokens,4096);
+  assert.equal(b.records[1].reservation.outputTokens,1024);
+  assert.equal(b.records[0].status,'succeeded');assert.equal(b.records[1].status,'succeeded');
+});

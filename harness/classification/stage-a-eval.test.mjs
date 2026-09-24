@@ -25,7 +25,13 @@ async function fixture(t){
 }
 test('offline preflight checks hashed materials and truth without invoking mock or network',async t=>{
   const f=await fixture(t);const b=await preflight(f.manifestPath);assert.equal(b.ready,true);assert.equal(b.summary.externalCalls,0);assert.equal(f.s.calls.length,0);assert.equal(b.summary.coldCacheRequestEstimate,3);
+  assert.equal(b.summary.coldCacheOutputTokenReservation,6144);assert.equal(b.summary.capMayStopBeforeCompletion,false);
   f.manifest.status='draft';await f.save();assert.deepEqual((await preflight(f.manifestPath)).blockers,['MANIFEST_DRAFT']);
+});
+test('preflight accounts for stage-specific output reservations against the batch cap',async t=>{
+  const f=await fixture(t);f.manifest.tasks[0].request.budget.stageOutputTokens={extract:4096,relate:1024};
+  f.manifest.caps.maxOutputTokens=9000;f.manifest.tasks[0].request.budget.maxOutputTokens=9000;await f.save();
+  const b=await preflight(f.manifestPath);assert.equal(b.summary.coldCacheOutputTokenReservation,9216);assert.equal(b.summary.capMayStopBeforeCompletion,true);
 });
 test('preflight rejects split leakage, material modification and missing independent truth',async t=>{
   const f=await fixture(t);f.manifest.photos[1].split='holdout';await f.save();await assert.rejects(preflight(f.manifestPath),/SPLIT_LEAKAGE/);

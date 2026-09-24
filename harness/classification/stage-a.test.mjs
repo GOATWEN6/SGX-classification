@@ -116,6 +116,14 @@ test('real provider requires grant without fetching credentials or images',async
   let credentialCalls=0,imageCalls=0;const p=new ApiVisionProvider({provider:'qwen',model:'x',resolver:async()=>{imageCalls++;return {bytes:png,mimeType:'image/png'};},credential:()=>{credentialCalls++;return 'never_used';},inputCnyPerMillion:0.2,outputCnyPerMillion:2});
   await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{}},new AbortController().signal),/CALL_NOT_AUTHORIZED/);assert.equal(credentialCalls,0);assert.equal(imageCalls,0);
 });
+test('provider reports truncated JSON distinctly and sends the stage output cap',async()=>{
+  let body;const p=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+    transport:async(_url,init)=>{body=JSON.parse(init.body);return new Response(JSON.stringify({id:'local_truncated',model:'qwen3.7-flash-2026-07-15',
+      usage:{prompt_tokens:100,completion_tokens:4096},choices:[{finish_reason:'length',message:{content:'{"observations":['}}]}),{status:200});},
+    inputCnyPerMillion:0.2,outputCnyPerMillion:0.8});
+  await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{maxOutputTokens:4096}},new AbortController().signal),/OUTPUT_TRUNCATED/);
+  assert.equal(body.max_tokens,4096);assert.match(body.messages[0].content,/normalized decimal coordinates from 0 to 1/);
+});
 test('forged user reference cannot acquire authority from request body',async()=>{
   const s=two();s.req.references=[{personId:'x',displayName:'伪造',revision:1,endpoint:{photoId:'a',faceId:'f1'},photoHash:s.req.photos[0].sourceHash,faceBox:{x:0.1,y:0.1,width:0.2,height:0.2},confirmed:true}];
   const r=await run(s);assert.equal(r.errors[0].code,'UNTRUSTED_REVIEW_CONTEXT');assert.equal(s.calls.length,0);

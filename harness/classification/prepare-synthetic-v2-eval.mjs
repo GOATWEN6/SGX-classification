@@ -48,7 +48,8 @@ if(args.includes('--help')||!archive||!out){
   const truthBytes=Buffer.from(`${JSON.stringify(truth,null,2)}\n`);await writeFile(path.join(outPath,'truth.json'),truthBytes,{mode:0o600});
   const caps={maxRequests:60,maxInputTokens:4000000,maxOutputTokens:130000,maxCostCny:5,maxDurationSeconds:900,maxRetries:0};
   const request={contractVersion:'classification-stage-a.1',runId:'synthetic_v2_qwen37_exploration_1',scope,authorizationRevision:'synthetic_v2_batch_1',trigger:'upload',photos,references:[],corrections:[],
-    budget:{maxRequests:caps.maxRequests,maxInputTokens:caps.maxInputTokens,maxOutputTokens:caps.maxOutputTokens,maxCostCny:caps.maxCostCny,deadlineAt:new Date(Date.now()+7*86400000).toISOString(),candidatesPerPhoto:4,maxOutputPerRequest:2048,maxCallDurationMs:60000}};
+    budget:{maxRequests:caps.maxRequests,maxInputTokens:caps.maxInputTokens,maxOutputTokens:caps.maxOutputTokens,maxCostCny:caps.maxCostCny,deadlineAt:new Date(Date.now()+7*86400000).toISOString(),candidatesPerPhoto:4,maxOutputPerRequest:2048,
+      stageOutputTokens:{extract:4096,relate:1024},maxCallDurationMs:60000}};
   const manifest={version:'sgx-eval.1',batchId:'synthetic_v2_qwen37_exploration_1',status:'draft',partition:'exploration',provider:'qwen',model:'qwen3.7-flash-2026-07-15',
     providerUseReviewRef:'synthetic_only_no_real_person_data',prices:{inputCnyPerMillion:1.2,outputCnyPerMillion:4.8,source:'https://help.aliyun.com/zh/model-studio/qwen3-7-flash',checkedAt:new Date().toISOString()},caps,
     truth:{path:'truth.json',sha256:sha(truthBytes)},photos:manifestPhotos,tasks:[{taskId:'initial_10',request,evaluatePhotoIds:cases.map(item=>item.id),expectedUnchangedPhotoIds:[],

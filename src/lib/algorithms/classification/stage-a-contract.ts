@@ -37,7 +37,9 @@ export const CorrectionSchema = z.object({ correctionId:id, revision:z.number().
   .refine(c=>c.kind!=='person'||Boolean(c.leftFaceBox&&c.rightFaceBox),'PERSON_CORRECTION_REQUIRES_REGIONS');
 export const BudgetSchema = z.object({ maxRequests:z.number().int().min(0).max(1000), maxInputTokens:z.number().int().positive(),
   maxOutputTokens:z.number().int().positive(), maxCostCny:z.number().nonnegative(), deadlineAt:z.string().datetime({offset:true}),
-  candidatesPerPhoto:z.number().int().min(1).max(12), maxOutputPerRequest:z.number().int().min(256).max(8192),maxCallDurationMs:z.number().int().min(1).max(60000).default(60000) }).strict();
+  candidatesPerPhoto:z.number().int().min(1).max(12), maxOutputPerRequest:z.number().int().min(256).max(8192),
+  stageOutputTokens:z.object({extract:z.number().int().min(256).max(8192),relate:z.number().int().min(256).max(8192)}).strict().optional(),
+  maxCallDurationMs:z.number().int().min(1).max(60000).default(60000) }).strict();
 export const RequestSchema = z.object({contractVersion:z.literal(STAGE_A_VERSION),runId:id,scope:ScopeSchema,
   authorizationRevision:id, trigger:z.enum(['upload','information_changed','correction','view']),
   photos:z.array(PhotoSchema).max(5000),references:z.array(ReferenceSchema).max(100),corrections:z.array(CorrectionSchema).max(1000),budget:BudgetSchema}).strict();
