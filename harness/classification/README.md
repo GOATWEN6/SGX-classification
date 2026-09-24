@@ -16,6 +16,16 @@ npm run classification:demo -- timeout
 npm run classification:fake-http
 ```
 
+准备 synthetic-v2 首轮真实 API 探索包：
+
+```sh
+npm run classification:prepare-eval -- \
+  --archive /Users/wenqingzhong/Downloads/sgx_synthetic_photo_testset_v2.zip \
+  --out /private/tmp/sgx-d4-qwen37-exploration-20260924
+```
+
+该命令只读取本地 ZIP、固定图片哈希并生成 `batch.json`、`truth.json` 和 `REVIEW.md`；不会读取密钥或发起网络请求。生成的 manifest 默认是 `draft`，必须先完成独立人工真值复核。任务可显式关闭没有独立真值的 person/pair/identity 指标；被关闭的指标在报告中显示“未评估”，不会记成通过或失败。
+
 测试脚本使用现有 TypeScript 编译器，将分类模块和 Schema 编译到临时目录，然后运行 Node 原生测试并清理临时产物。无需启动 Next.js、配置凭据或联网。其他演示参数：`needs_review`、`failed`、`invalid_output`、`partial_failure`。`failed` 默认可重试；构造 Fake 时可用 `failureCode: 'UNSUPPORTED_INPUT'` 演示终止失败。`classification:fake-http` 会在 `127.0.0.1:8787` 启动仅用于联调的 HTTP 服务，按 Ctrl-C 停止；它不读取媒体、不持久化 Job、不调用模型。
 
 HTTP 草案和运行方式见 [Fake HTTP 联调与验收](HTTP_HANDOFF.md)。该服务仅接受服务端预置的合成 scope / Evidence，严格校验请求，使用进程内状态模拟授权版本、撤回和结果拒收。`authorizationState: "active"` 不能覆盖服务端撤回状态；没有生产身份认证。完整相同请求（忽略 JSON 对象属性顺序）可共享执行或重放；同 key 改 runId、requestId、scenario 等字段仍返回 `IDEMPOTENCY_CONFLICT`。这只是当前 Fake 草案的严格重放语义，真实重试、请求追踪和双方最终 HTTP 契约仍待评审。

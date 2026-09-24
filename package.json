@@ -17,6 +17,7 @@
     "classification:demo": "node scripts/classification-contract-test.mjs --demo",
     "classification:fake-http": "node scripts/classification-fake-http.mjs",
     "classification:stage-a": "node scripts/classification-stage-a.mjs",
+    "classification:prepare-eval": "node harness/classification/prepare-synthetic-v2-eval.mjs",
     "classification:eval": "node scripts/classification-stage-a.mjs --eval"
   },
   "dependencies": {

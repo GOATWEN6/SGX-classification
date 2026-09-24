@@ -71,8 +71,8 @@ if(args.includes('--help')||!manifestPath||!out){
         `请求 ${totals.requests}；图片发送次数（含重复参考）${totals.images}；输入 Token ${totals.inputTokens}；输出 Token ${totals.outputTokens}；记账费用 ¥${totals.costCny.toFixed(6)}；墙钟 ${(Date.now()-start)/1000}s。`,
         '', '费用按清单费率计算；失败无 usage 时保留预留值，供应商账单仍需核对。估计 Token 预留不是供应商硬限额，单次请求可能超出估计并触发停止。',
         '', '## 固定分母结果','', '|任务|状态|计划照片|未处理照片|人物错合并/漏同人|事件错合并/漏同次|', '|---|---|---:|---:|---:|---:|',
-        ...scores.map(s=>`|${s.taskId}|${s.workflowStatus}|${s.plannedPhotos}|${s.failedPhotos.length}|${s.personPairs.falseMerge}/${s.personPairs.missedSame}|${s.eventPairs.falseMerge}/${s.eventPairs.missedSame}|`),
-        '', '五维、身份候选、未知/冲突、候选召回和增量不变项详见 metrics.json；每次请求和预留/实报区分见 ledger.json；原始响应见 provider-responses.jsonl。',
+        ...scores.map(s=>`|${s.taskId}|${s.workflowStatus}|${s.plannedPhotos}|${s.failedPhotos.length}|${s.personPairs.evaluated?`${s.personPairs.falseMerge}/${s.personPairs.missedSame}`:'未评估'}|${s.eventPairs.evaluated?`${s.eventPairs.falseMerge}/${s.eventPairs.missedSame}`:'未评估'}|`),
+        '', '各任务启用的维度、身份候选、未知/冲突、候选召回和增量不变项详见 metrics.json；标记“未评估”的维度不计入通过或失败。每次请求和预留/实报区分见 ledger.json；原始响应见 provider-responses.jsonl。',
         '', '这是一轮探索结果，不自动等于家庭场景达标或产品可用。语义错误须逐例复核，确认阻断错误后不得继续下一批。'];
       await writeFile(path.join(out,'REPORT.md'),report.join('\n')+'\n',{mode:0o600});
       console.log(JSON.stringify({out:path.resolve(out),stopped,plannedTasks:m.tasks.length,totals}));if(stopped)process.exitCode=2;

@@ -52,6 +52,14 @@ test('fixed denominators retain all failed photos and missed person/event pairs'
   assert.equal(score.plannedPhotos,2);assert.equal(score.failedPhotos.length,2);assert.equal(score.facets.time.missed,2);assert.equal(score.facets.person.missed,2);
   assert.equal(score.personPairs.expectedSame,1);assert.equal(score.personPairs.missedSame,1);assert.equal(score.eventPairs.missedSame,1);assert.equal(score.historicalRetrieval.event.missed,1);
 });
+test('evaluation policy excludes ungrounded person metrics without hiding event and facet denominators',async t=>{
+  const f=await fixture(t);f.manifest.tasks[0].evaluation={facets:['time','event','scene'],personPairs:false,eventPairs:true,identityCandidates:false};await f.save();
+  const task=(await preflight(f.manifestPath)).manifest.tasks[0];
+  const result=await f.s.engine.process(f.s.req,f.s.getAuth);const score=scoreTask(task,result,{...f.truth,photos:f.truth.photos.map(p=>({...p,faces:[]}))});
+  assert.equal(score.facets.person.evaluated,false);assert.deepEqual({...score.facets.person},{evaluated:false,expected:0,correct:0,missed:0,extra:0});
+  assert.equal(score.personPairs.evaluated,false);assert.equal(score.personPairs.falseMerge,0);assert.equal(score.identities.evaluated,false);
+  assert.equal(score.eventPairs.evaluated,true);assert.equal(score.eventPairs.correctSame,1);assert.equal(score.facets.time.correct,2);assert.equal(score.unknown.extra,0);
+});
 test('matching uses face boxes rather than assuming model face IDs equal truth IDs',async t=>{
   const f=await fixture(t);const result=await f.s.engine.process(f.s.req,f.s.getAuth);const score=scoreTask(f.manifest.tasks[0],result,f.truth);
   assert.equal(score.facets.person.correct,2);assert.equal(score.personPairs.correctSame,1);assert.equal(score.eventPairs.correctSame,1);assert.equal(score.facets.time.correct,2);

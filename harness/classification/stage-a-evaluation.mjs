@@ -10,13 +10,16 @@ const sha=z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const bytesHash=b=>`sha256:${createHash('sha256').update(b).digest('hex')}`;
 const caps=z.object({maxRequests:z.number().int().positive().max(1000),maxInputTokens:z.number().int().positive(),maxOutputTokens:z.number().int().positive(),
   maxCostCny:z.number().nonnegative(),maxDurationSeconds:z.number().int().positive().max(3600),maxRetries:z.literal(0)}).strict();
+const evaluationPolicy=z.object({facets:z.array(contract.FacetSchema).min(1).refine(values=>new Set(values).size===values.length,'DUPLICATE_FACET'),
+  personPairs:z.boolean(),eventPairs:z.boolean(),identityCandidates:z.boolean()}).strict();
 export const ManifestSchema=z.object({version:z.literal('sgx-eval.1'),batchId:id,status:z.enum(['draft','ready']),partition:z.enum(['exploration','holdout']),
   provider:z.enum(['qwen','glm']),model:z.string().min(1),providerUseReviewRef:z.string().min(1),
   prices:z.object({inputCnyPerMillion:z.number().nonnegative(),outputCnyPerMillion:z.number().nonnegative(),source:z.string().url(),checkedAt:z.string().datetime()}).strict(),
   caps,truth:z.object({path:z.string().min(1),sha256:sha}).strict(),
   photos:z.array(z.object({photo:contract.PhotoSchema,path:z.string().min(1),split:z.enum(['reference','exploration','holdout']),leakageGroup:id,
     externalConsentRef:z.string().min(1),personConsentRef:z.string().optional()}).strict()).min(1),
-  tasks:z.array(z.object({taskId:id,request:contract.RequestSchema,evaluatePhotoIds:z.array(id).min(1),expectedUnchangedPhotoIds:z.array(id).default([])}).strict()).min(1).max(100)
+  tasks:z.array(z.object({taskId:id,request:contract.RequestSchema,evaluatePhotoIds:z.array(id).min(1),expectedUnchangedPhotoIds:z.array(id).default([]),
+    evaluation:evaluationPolicy.optional()}).strict()).min(1).max(100)
 }).strict();
 const region=z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),width:z.number().positive().max(1),height:z.number().positive().max(1)}).strict()
   .refine(b=>b.x+b.width<=1&&b.y+b.height<=1);
@@ -108,41 +111,45 @@ function countPair(c,same,a,b){if(same)c.expectedSame++;else c.expectedDifferent
 }
 /** Truth is never fed to the provider. Missing/failed photos remain in all denominators. */
 export function scoreTask(task,result,truth,previous){
+  const evaluation=task.evaluation??{facets:[...contract.FacetSchema.options],personPairs:true,eventPairs:true,identityCandidates:true};
+  const evaluatedFacets=new Set(evaluation.facets);
   const target=new Set(task.evaluatePhotoIds);const active=new Set(task.request.photos.filter(p=>p.active).map(p=>p.photoId));
   const truthById=new Map(truth.photos.map(p=>[p.photoId,p]));
   for(const p of truth.taskOverrides?.find(t=>t.taskId===task.taskId)?.photos??[])truthById.set(p.photoId,p);
   const actual=[...truthById.values()].filter(p=>active.has(p.photoId));const observations=result?.snapshot?.observations??{};const groups=result?.snapshot?.groups??[];
-  const facets=Object.fromEntries(['person','time','place','event','scene'].map(f=>[f,{expected:0,correct:0,missed:0,extra:0}]));
+  const facets=Object.fromEntries(['person','time','place','event','scene'].map(f=>[f,{evaluated:evaluatedFacets.has(f),expected:0,correct:0,missed:0,extra:0}]));
   const failures=[];const faceMatches=new Map();const unknown={expected:0,correct:0,extra:0};const conflicts={expected:0,correct:0,extra:0};
   for(const t of actual){const o=observations[t.photoId]?.value;const faces=detectedFaces(o,t);faceMatches.set(t.photoId,faces.matches);
     if(!target.has(t.photoId))continue;if(!o)failures.push(t.photoId);
-    for(const k of ['expected','correct','missed','extra'])facets.person[k]+=faces[k];
+    if(evaluatedFacets.has('person'))for(const k of ['expected','correct','missed','extra'])facets.person[k]+=faces[k];
     for(const f of ['time','place','event','scene']){const values=f==='time'?(o?.times??[]).map(x=>`${x.role}:${x.precision}:${x.value}`):
       f==='place'?(o?.places??[]).map(x=>x.canonical||x.label):f==='event'?(o?.events??[]).map(x=>x.type):(o?.scenes??[]).map(x=>x.label);
-      const score=scoreLabels(values,t.facets[f]);for(const k of ['expected','correct','missed','extra'])facets[f][k]+=score[k];}
+      if(evaluatedFacets.has(f)){const score=scoreLabels(values,t.facets[f]);for(const k of ['expected','correct','missed','extra'])facets[f][k]+=score[k];}}
     for(const [counter,predicted,expected] of [[unknown,o?.unknownFacets??[],t.expectedUnknownFacets],[conflicts,o?.conflicts??[],t.expectedConflicts]]){
-      counter.expected+=expected.length;counter.correct+=predicted.filter(p=>expected.includes(p)).length;counter.extra+=predicted.filter(p=>!expected.includes(p)).length;}
+      const scopedExpected=expected.filter(f=>evaluatedFacets.has(f)),scopedPredicted=predicted.filter(f=>evaluatedFacets.has(f));
+      counter.expected+=scopedExpected.length;counter.correct+=scopedPredicted.filter(p=>scopedExpected.includes(p)).length;counter.extra+=scopedPredicted.filter(p=>!scopedExpected.includes(p)).length;}
   }
   const groupId=(kind,pid,fid)=>groups.find(g=>g.kind===kind&&g.members.some(e=>e.photoId===pid&&(kind==='event'||e.faceId===fid)))?.groupId;
-  const person=pairCounters(),event=pairCounters();const retrieval={person:{samePairs:0,selected:0,missed:0},event:{samePairs:0,selected:0,missed:0}};
+  const person={evaluated:evaluation.personPairs,...pairCounters()},event={evaluated:evaluation.eventPairs,...pairCounters()};
+  const retrieval={person:{evaluated:evaluation.personPairs,samePairs:0,selected:0,missed:0},event:{evaluated:evaluation.eventPairs,samePairs:0,selected:0,missed:0}};
   const selected=(a,b)=>(result?.candidateTraces??[]).some(t=>(t.photoId===a&&t.selected.includes(b))||(t.photoId===b&&t.selected.includes(a)))||
     (result?.snapshot?.edges??[]).some(e=>[e.left.photoId,e.right.photoId].includes(a)&&[e.left.photoId,e.right.photoId].includes(b));
   for(let i=0;i<actual.length;i++)for(let j=i+1;j<actual.length;j++){
     const a=actual[i],b=actual[j];if(!target.has(a.photoId)&&!target.has(b.photoId))continue;
-    {const same=Boolean(a.eventInstance&&a.eventInstance===b.eventInstance);countPair(event,same,groupId('event',a.photoId),groupId('event',b.photoId));
+    if(evaluation.eventPairs){const same=Boolean(a.eventInstance&&a.eventInstance===b.eventInstance);countPair(event,same,groupId('event',a.photoId),groupId('event',b.photoId));
       if(same){retrieval.event.samePairs++;retrieval.event[selected(a.photoId,b.photoId)?'selected':'missed']++;}}
-    for(const af of a.faces)for(const bf of b.faces){const same=af.personId===bf.personId;const ap=faceMatches.get(a.photoId)?.get(af.faceId),bp=faceMatches.get(b.photoId)?.get(bf.faceId);
+    if(evaluation.personPairs)for(const af of a.faces)for(const bf of b.faces){const same=af.personId===bf.personId;const ap=faceMatches.get(a.photoId)?.get(af.faceId),bp=faceMatches.get(b.photoId)?.get(bf.faceId);
       countPair(person,same,ap?groupId('person',a.photoId,ap):undefined,bp?groupId('person',b.photoId,bp):undefined);
       if(same){retrieval.person.samePairs++;retrieval.person[selected(a.photoId,b.photoId)?'selected':'missed']++;}}
   }
   const unchanged=task.expectedUnchangedPhotoIds.map(id=>({photoId:id,pass:Boolean(previous?.snapshot?.observations[id]&&observations[id]&&
     contract.digest(previous.snapshot.observations[id])===contract.digest(observations[id]))}));
-  const identities={expectedFaces:0,correctCandidate:0,wrongCandidate:0,unnamedOrMissed:0};
-  for(const t of actual.filter(t=>target.has(t.photoId)))for(const f of t.faces){identities.expectedFaces++;const faceId=faceMatches.get(t.photoId)?.get(f.faceId);
+  const identities={evaluated:evaluation.identityCandidates,expectedFaces:0,correctCandidate:0,wrongCandidate:0,unnamedOrMissed:0};
+  if(evaluation.identityCandidates)for(const t of actual.filter(t=>target.has(t.photoId)))for(const f of t.faces){identities.expectedFaces++;const faceId=faceMatches.get(t.photoId)?.get(f.faceId);
     const personId=faceId?groups.find(g=>g.kind==='person'&&g.members.some(e=>e.photoId===t.photoId&&e.faceId===faceId))?.identity?.personId:undefined;
     if(!personId)identities.unnamedOrMissed++;else if(personId===f.personId)identities.correctCandidate++;else identities.wrongCandidate++;}
-  return {taskId:task.taskId,plannedPhotos:target.size,failedPhotos:failures,facets,unknown,conflicts,personPairs:person,eventPairs:event,
+  return {taskId:task.taskId,plannedPhotos:target.size,failedPhotos:failures,evaluation,facets,unknown,conflicts,personPairs:person,eventPairs:event,
     historicalRetrieval:retrieval,identities,unchangedObservationChecks:unchanged,workflowStatus:result?.workflowStatus??'not_run',
-    labelMetric:'exact_or_frozen_alias; person detection via greedy IoU>=0.5; no model-written ground truth',
+    labelMetric:`enabled facets only: ${evaluation.facets.join(',')}; ${evaluation.facets.includes('person')?'person detection via greedy IoU>=0.5':'person facet not evaluated'}; no model-written ground truth`,
     groupingMetric:'all cross-photo truth pairs involving evaluation photos, including candidate misses and failures'};
 }
