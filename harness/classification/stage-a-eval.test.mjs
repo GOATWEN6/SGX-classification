@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -88,6 +88,24 @@ test('evaluation CLI runs offline preflight and blocks execute without a batch a
   assert.equal(offline.status,0,offline.stderr);const report=JSON.parse(await readFile(path.join(f.root,'offline','preflight.json'),'utf8'));assert.equal(report.externalCalls,0);assert.equal(report.credentialsRead,false);
   const blocked=spawnSync(process.execPath,[cli.pathname,'--manifest',f.manifestPath,'--out',path.join(f.root,'blocked'),'--execute'],{encoding:'utf8',env:process.env});
   assert.equal(blocked.status,2);assert.equal(JSON.parse(await readFile(path.join(f.root,'blocked','blocked.json'),'utf8')).code,'APPROVAL_REQUIRED');
+});
+test('evaluation CLI rejects an existing evidence directory with a stable code and no stack',async t=>{
+  const f=await fixture(t);const cli=new URL('./stage-a-eval.mjs',import.meta.url);const out=path.join(f.root,'existing');await mkdir(out);
+  const child=spawnSync(process.execPath,[cli.pathname,'--manifest',f.manifestPath,'--out',out],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,2);assert.equal(child.stderr.trim(),'OUTPUT_DIRECTORY_EXISTS');assert.ok(!child.stderr.includes('EEXIST'));
+});
+test('evaluation report renders safe provider schema diagnostics',async t=>{
+  const f=await fixture(t);const b=await preflight(f.manifestPath);const approval={version:'sgx-eval-approval.1',batchId:b.manifest.batchId,manifestHash:b.manifestHash,
+    approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',expiresAt:new Date(Date.now()+60000).toISOString(),
+    provider:b.manifest.provider,model:b.manifest.model,photoIds:b.usedPhotoIds,caps:b.manifest.caps,allowExternalImages:true,allowPersonMatching:true};
+  const approvalPath=path.join(f.root,'approval.json');await writeFile(approvalPath,JSON.stringify(approval));const loader=path.join(f.root,'diagnostic-stub.cjs');
+  await writeFile(loader,`const base=process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification';
+    const {ApiVisionProvider}=require(base+'/stage-a-provider.js');const {StageError}=require(base+'/stage-a-contract.js');
+    ApiVisionProvider.prototype.invoke=async()=>{throw new StageError('INVALID_OUTPUT',{phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]});};`);
+  const out=path.join(f.root,'diagnostic-result');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
+    '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,2,child.stderr);const report=await readFile(path.join(out,'REPORT.md'),'utf8');assert.match(report,/## 工程诊断/);
+  assert.match(report,/observations\.0\.places\.0/);assert.match(report,/canonical\?/);assert.ok(!report.includes('test_only_not_external_permission'));
 });
 test('incremental tasks score against the evidence available at that task, without future-label leakage',async t=>{
   const f=await fixture(t);const early=structuredClone(f.truth.photos);for(const p of early){p.facets.time=[];p.expectedUnknownFacets.push('time');}

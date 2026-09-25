@@ -1,5 +1,5 @@
 import { CachedObservation, Edge, Group, candidates, reconcile, validateRelation,resolveReferences } from './stage-a-association';
-import { Budget, ExtractSchema, Photo, RelateSchema, RequestSchema, Scope, STAGE_A_VERSION, StageError, digest, pairKey, photoHash, sameScope, validateObservation } from './stage-a-contract';
+import { Budget, ExtractSchema, Photo, RelateSchema, RequestSchema, Scope, STAGE_A_VERSION, StageDiagnostic, StageError, digest, pairKey, photoHash, sameScope, validateObservation } from './stage-a-contract';
 import { CallRecord, TaskBudget, VisionProvider } from './stage-a-provider';
 export interface AuthorizationSnapshot {scope:Scope;authorizationRevision:string;allowedPhotoIds:string[];allowPersonMatching:boolean;
   photoVersions:Record<string,string>;contextRevision:string;reviewContextHash:string;active:boolean;}
@@ -14,7 +14,7 @@ export class MemorySnapshotStore implements SnapshotStore {
 export interface StageResult {contractVersion:string;runId:string;scope:Scope;workflowStatus:'succeeded'|'needs_review'|'failed'|'cancelled';
   evidenceStatus:'mock_transport'|'real_api'|'not_run';semanticValidation:'not_evaluated';snapshot?:AlgorithmSnapshot;organizationPolicy?:{facts:'supported_nonconflicted_candidates';groups:'exploratory_ai_candidates';calibrated:false};
   changedPhotoIds:string[];invalidatedPhotoIds:string[];retiredGroupIds:string[];candidateTraces:ReturnType<typeof candidates>['traces'];
-  reviewItems:string[];errors:{stage:string;photoIds:string[];code:string}[];usage:{requests:number;images:number;inputTokens:number;outputTokens:number;costCny:number;latencyMs:number;records:CallRecord[]};}
+  reviewItems:string[];errors:{stage:string;photoIds:string[];code:string;diagnostic?:StageDiagnostic}[];usage:{requests:number;images:number;inputTokens:number;outputTokens:number;costCny:number;latencyMs:number;records:CallRecord[]};}
 
 export class ClassificationEngine {
   private generations=new Map<string,symbol>();
@@ -79,8 +79,8 @@ export class ClassificationEngine {
           if(raw.observations.length!==1)throw new StageError('OBSERVATION_COVERAGE');
           observations[photoId]={inputHash:photoHash(photo),version,value:validateObservation(raw.observations[0],photo)};
         }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';
-          result.errors.push({stage:'extract',photoIds:[photoId],code});
-          if(this.provider?.mode==='real_api')throw new StageError(code);
+          result.errors.push({stage:'extract',photoIds:[photoId],code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
+          if(this.provider?.mode==='real_api')throw error instanceof StageError?error:new StageError(code);
           if(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED'].includes(code))throw new StageError(code);
         }
       }
@@ -101,8 +101,8 @@ export class ClassificationEngine {
           if(new Set(validated.map(e=>pairKey(e.kind,e.left,e.right))).size!==validated.length)throw new StageError('DUPLICATE_RELATION');
           if(!initialAuthorization.allowPersonMatching&&validated.some(e=>e.kind==='person'))throw new StageError('PERSON_MATCHING_NOT_AUTHORIZED');
           edges.push(...validated);
-        }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';result.errors.push({stage:'relate',photoIds:pair,code});
-          if(this.provider?.mode==='real_api')throw new StageError(code);
+        }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';result.errors.push({stage:'relate',photoIds:pair,code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
+          if(this.provider?.mode==='real_api')throw error instanceof StageError?error:new StageError(code);
           if(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED'].includes(code))throw new StageError(code);}
       }
       fresh();
@@ -119,7 +119,7 @@ export class ClassificationEngine {
       result.snapshot=snapshot;result.retiredGroupIds=(previous?.groups??[]).filter(g=>!snapshot.groups.some(n=>n.groupId===g.groupId)).map(g=>g.groupId);
       result.workflowStatus=snapshot.workflowStatus;
       if(!Object.keys(observations).length&&result.errors.length)result.workflowStatus='failed';
-    }catch(error){const code=error instanceof StageError?error.code:'INVALID_INPUT';result.errors.push({stage:'task',photoIds:[],code});result.workflowStatus=code==='CANCELLED'?'cancelled':'failed';delete result.snapshot;}
+    }catch(error){const code=error instanceof StageError?error.code:'INVALID_INPUT';result.errors.push({stage:'task',photoIds:[],code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});result.workflowStatus=code==='CANCELLED'?'cancelled':'failed';delete result.snapshot;}
     finally{Object.assign(result.usage,{requests:budget.records.length,images:budget.records.reduce((s,r)=>s+r.imageCount,0),inputTokens:budget.inputTokens,
       outputTokens:budget.outputTokens,costCny:budget.costCny,latencyMs:Date.now()-started});}
     return result;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.2';
+export const PROMPT_VERSION = 'sgx-five-facets.3';
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const ScopeSchema = z.object({ householdId:id, subjectId:id }).strict();
@@ -53,7 +53,9 @@ export type Correction=z.infer<typeof CorrectionSchema>;
 export type Request=z.infer<typeof RequestSchema>;
 export type Budget=z.infer<typeof BudgetSchema>;
 export type Support=z.infer<typeof support>;
-export class StageError extends Error {constructor(public code:string){super(code);}}
+export interface StageDiagnosticIssue {path:string;code:string;keys?:string[];expected?:string;}
+export interface StageDiagnostic {phase:'provider_envelope'|'content_json'|'schema';issues:StageDiagnosticIssue[];}
+export class StageError extends Error {constructor(public code:string,public diagnostic?:StageDiagnostic){super(code);}}
 export const stable = (v:unknown):string => Array.isArray(v)?`[${v.map(stable).join(',')}]`:v&&typeof v==='object'
   ?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${stable((v as Record<string,unknown>)[k])}`).join(',')}}`:JSON.stringify(v);
 export const digest=(v:unknown)=>`sha256:${createHash('sha256').update(stable(v)).digest('hex')}`;

@@ -126,9 +126,19 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   assert.match(body.messages[0].content,/unknownFacets/);assert.match(body.messages[0].content,/one observation object per supplied photo/);
   assert.match(body.messages[0].content,/literal, case-sensitive keys/);assert.match(body.messages[0].content,/never use "extract"/);
   assert.match(body.messages[0].content,/people use \{faceId,description,box/);assert.match(body.messages[0].content,/Never use bbox arrays/);
+  assert.match(body.messages[0].content,/mentions array is only for person names or relationships/);assert.ok(!body.messages[0].content.includes('canonical?'));
   assert.match(body.messages[0].content,/The exact empty extract shape/);assert.match(body.messages[0].content,/replace PHOTO_ID/);
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('"format"')));
+});
+test('provider reports safe schema issue paths instead of only INVALID_OUTPUT',async()=>{
+  const p1=photo('a','武汉');const value={observations:[observation(p1,{place:'武汉'})]};value.observations[0].places[0]['canonical?']=false;
+  const provider=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+    transport:async()=>new Response(JSON.stringify({id:'local_invalid_shape',model:'qwen3.7-flash-2026-07-15',usage:{prompt_tokens:100,completion_tokens:50},
+      choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]}),{status:200}),inputCnyPerMillion:0.2,outputCnyPerMillion:0.8});
+  await assert.rejects(provider.invoke({stage:'extract',photos:[p1],context:{}},new AbortController().signal),error=>{
+    assert.equal(error.code,'INVALID_OUTPUT');assert.deepEqual(error.diagnostic,{phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]});return true;
+  });
 });
 test('forged user reference cannot acquire authority from request body',async()=>{
   const s=two();s.req.references=[{personId:'x',displayName:'伪造',revision:1,endpoint:{photoId:'a',faceId:'f1'},photoHash:s.req.photos[0].sourceHash,faceBox:{x:0.1,y:0.1,width:0.2,height:0.2},confirmed:true}];
@@ -160,6 +170,8 @@ test('omitting an authorized photo cannot silently delete its algorithm state',a
 test('real-mode orchestration stops after first error; no repeated requests or saved partial snapshot',async()=>{
   const s=two({alterOutput:()=>({bad:true})});s.provider.mode='real_api';
   // Replace invoke, not the HTTP transport: this unit test never enters a real network method.
-  let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT');};
+  const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
+  let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
+  assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });

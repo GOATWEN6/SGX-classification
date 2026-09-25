@@ -187,3 +187,28 @@ npm run classification:prepare-eval -- \
 系统排查后已完成三项修复：把完整字段形状和禁止字段直接写入系统提示；加入空抽取对象示例；将 `PROMPT_VERSION` 更新为 `sgx-five-facets.2`，让提示变更自动使旧观察结果失效，避免缓存继续使用旧版本结果。修复后本地 `typecheck`、密钥扫描和 118 项分类回归均通过。
 
 本轮证明的是 Prompt/契约兼容性仍在迭代，不是模型语义准确率。下一轮应验证字段级修复是否让真实响应进入 `validateObservation`；成功后才开始评价时间、地点、事件、场景和冲突标签。
+
+## 13. 第六轮真实调用结果与根因收敛
+
+第六轮结果目录：`/private/tmp/sgx-d4-qwen37-run-r6b-schema-v2-20260925`。此前一次 `APPROVAL_EXPIRED` 在发送请求前停止；随后更新授权的 r6b 发生了 1 次真实调用。再次执行同一个 r6b 命令出现的 `EEXIST` 是结果目录防覆盖，不是第二次模型失败，也没有新增 API 调用。
+
+|项目|结果|
+|---|---:|
+|真实请求|1 次|
+|供应商模型|`qwen3.7-flash-2026-07-15`|
+|供应商响应 ID|已留存在受限权限的 `provider-responses.jsonl`，不写入版本库文档|
+|供应商结束原因|`finish_reason=stop`|
+|供应商实际 usage|2051 input + 1298 output tokens|
+|保守账本|24636 input + 4096 output tokens，¥0.049224|
+|完成照片|0/5（首张契约拒收后停止）|
+|自动重试|0 次|
+
+这次返回已经满足顶层键和单 observation 规则，人物框、supports、unknownFacets 等主要结构也正确。完整离线复盘找到三个问题：
+
+1. `places[0]` 出现了非法键 `canonical?`。这是 Schema 阻断项，来源是 Prompt 用问号表达“可选”，模型把它当成了真实字段名。
+2. `mentions` 放入视觉文字“生日快乐”。即使修掉第一个字段，它仍会被语义规则以 `MENTION_WITHOUT_TEXT` 拒收，因为 `mentions` 只承载用户文字中明确的人物名称或关系。
+3. 用户文字明确说“不是生日”，视觉上却有生日装饰，模型仍返回 `conflicts=[]`。这是语义漏判，不是 JSON/Schema 问题。
+
+已完成的本地修复包括：Prompt 升级到 `sgx-five-facets.3`；不用问号表示可选字段；明确 `mentions` 的来源边界和事件冲突规则；为 `INVALID_OUTPUT` 增加安全的字段路径诊断；结果目录重复时返回 `OUTPUT_DIRECTORY_EXISTS`；外层 CLI 不再为受控停止打印误导性的 Node 堆栈。
+
+本轮仍没有形成可评分的分类效果。下一次真实调用必须使用新目录、新 manifest 哈希和未过期 approval；应先用 1 张 C014 做契约探针。若仍有字段漂移，不再继续逐字段付费试错，转入“视觉草稿 + 纯文本 JSON Schema 规范化”的双阶段设计，并把两个调用都纳入预算。

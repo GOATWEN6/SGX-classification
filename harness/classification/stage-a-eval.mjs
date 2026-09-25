@@ -15,7 +15,8 @@ if(args.includes('--help')||!manifestPath||!out){
   console.log('默认离线预检（不读凭据、不发请求）：npm run classification:eval -- --manifest /absolute/batch.json --out /private/tmp/new-report-dir\n经具体批次授权后才可额外使用 --execute --approval /absolute/approval.json。审批文件不能代替真实用户授权；本轮不执行。\n报告目录必须不存在，避免覆盖已有证据。');
   process.exitCode=args.includes('--help')?0:2;
 }else{
-  await mkdir(path.resolve(out),{mode:0o700});
+  try{await mkdir(path.resolve(out),{mode:0o700});}catch(error){if(error?.code==='EEXIST'){console.error('OUTPUT_DIRECTORY_EXISTS');process.exitCode=2;}else throw error;}
+  if(process.exitCode===2)process.exit();
   const save=(name,value)=>writeFile(path.join(out,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
   let batch,executionAuthorized=false;
   try{
@@ -66,12 +67,18 @@ if(args.includes('--help')||!manifestPath||!out){
           await save('ledger.json',{plannedTasks:m.tasks.length,completedEntries:ledger.length,stopped,totals,tasks:ledger});await save('metrics.json',scores);
         }
       }finally{clearTimeout(timer);process.removeListener('SIGINT',interrupt);process.removeListener('SIGTERM',interrupt);}
+      const resultDiagnostics=[],seenDiagnostics=new Set();
+      for(const task of m.tasks){try{const saved=JSON.parse(await readFile(path.join(out,`result-${task.taskId}.json`),'utf8'));
+        for(const error of saved.errors??[])for(const issue of error.diagnostic?.issues??[]){const key=JSON.stringify([task.taskId,error.code,error.diagnostic.phase,issue]);
+          if(!seenDiagnostics.has(key)){seenDiagnostics.add(key);resultDiagnostics.push(`- ${task.taskId} / ${error.stage} / ${error.code}: \`${error.diagnostic.phase}\` at \`${issue.path}\` (${issue.code}${issue.keys?.length?`; keys=${issue.keys.join(',')}`:''})`);}}
+      }catch{/* not-run tasks have no result file */}}
       const report=['# 自动分类真实 API 探索报告','',`批次：${m.batchId}；模型：${m.provider}/${m.model}；阶段：${m.partition}。`,
         `计划任务 ${m.tasks.length}，发起任务 ${ledger.filter(t=>t.usage).length}；停止原因：${stopped??'无工程错误'}。`,
         `请求 ${totals.requests}；图片发送次数（含重复参考）${totals.images}；输入 Token ${totals.inputTokens}；输出 Token ${totals.outputTokens}；记账费用 ¥${totals.costCny.toFixed(6)}；墙钟 ${(Date.now()-start)/1000}s。`,
         '', '费用按清单费率计算；失败无 usage 时保留预留值，供应商账单仍需核对。估计 Token 预留不是供应商硬限额，单次请求可能超出估计并触发停止。',
         '', '## 固定分母结果','', '|任务|状态|计划照片|未处理照片|人物错合并/漏同人|事件错合并/漏同次|', '|---|---|---:|---:|---:|---:|',
         ...scores.map(s=>`|${s.taskId}|${s.workflowStatus}|${s.plannedPhotos}|${s.failedPhotos.length}|${s.personPairs.evaluated?`${s.personPairs.falseMerge}/${s.personPairs.missedSame}`:'未评估'}|${s.eventPairs.evaluated?`${s.eventPairs.falseMerge}/${s.eventPairs.missedSame}`:'未评估'}|`),
+        ...(resultDiagnostics.length?['','## 工程诊断','',...resultDiagnostics]:[]),
         '', '各任务启用的维度、身份候选、未知/冲突、候选召回和增量不变项详见 metrics.json；标记“未评估”的维度不计入通过或失败。每次请求和预留/实报区分见 ledger.json；原始响应见 provider-responses.jsonl。',
         '', '这是一轮探索结果，不自动等于家庭场景达标或产品可用。语义错误须逐例复核，确认阻断错误后不得继续下一批。'];
       await writeFile(path.join(out,'REPORT.md'),report.join('\n')+'\n',{mode:0o600});
