@@ -124,6 +124,8 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{maxOutputTokens:4096}},new AbortController().signal),/OUTPUT_TRUNCATED/);
   assert.equal(body.max_tokens,4096);assert.match(body.messages[0].content,/normalized decimal coordinates from 0 to 1/);
   assert.match(body.messages[0].content,/unknownFacets/);assert.match(body.messages[0].content,/one observation object per supplied photo/);
+  assert.match(body.messages[0].content,/events\.type must be one of/);assert.match(body.messages[0].content,/scenes\.label must be one of/);
+  assert.match(body.messages[0].content,/never combine several labels into one sentence/);
   assert.match(body.messages[0].content,/literal, case-sensitive keys/);assert.match(body.messages[0].content,/never use "extract"/);
   assert.match(body.messages[0].content,/people use \{faceId,description,box/);assert.match(body.messages[0].content,/Never use bbox arrays/);
   assert.match(body.messages[0].content,/mentions array is only for person names or relationships/);assert.ok(!body.messages[0].content.includes('canonical?'));

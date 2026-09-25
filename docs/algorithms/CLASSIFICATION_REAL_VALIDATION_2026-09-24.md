@@ -212,3 +212,33 @@ npm run classification:prepare-eval -- \
 已完成的本地修复包括：Prompt 升级到 `sgx-five-facets.3`；不用问号表示可选字段；明确 `mentions` 的来源边界和事件冲突规则；为 `INVALID_OUTPUT` 增加安全的字段路径诊断；结果目录重复时返回 `OUTPUT_DIRECTORY_EXISTS`；外层 CLI 不再为受控停止打印误导性的 Node 堆栈。
 
 本轮仍没有形成可评分的分类效果。下一次真实调用必须使用新目录、新 manifest 哈希和未过期 approval；应先用 1 张 C014 做契约探针。若仍有字段漂移，不再继续逐字段付费试错，转入“视觉草稿 + 纯文本 JSON Schema 规范化”的双阶段设计，并把两个调用都纳入预算。
+
+## 14. 第七轮单图契约探针结果
+
+第七轮结果目录：`/private/tmp/sgx-d4-qwen37-run-r7-single-c014-20260925-151830`。本轮只发送合成案例 C014，关闭人物匹配，最多 1 次请求、¥1、5 分钟、0 自动重试。
+
+这次取得了第一个通过完整工程校验的真实多模态响应。模型返回的顶层结构、单 observation、人物框、证据引用、unknownFacets 和 conflicts 均通过 Schema 与 `validateObservation`；批次没有工程停止原因。任务进入 `needs_review`，原因是模型把 C014 标记为 `event` 冲突，这正是需要人工确认的产品状态，不是执行失败。
+
+|项目|结果|
+|---|---:|
+|真实请求|1 次|
+|模型|`qwen3.7-flash-2026-07-15`|
+|Prompt|`sgx-five-facets.3`|
+|供应商结束原因|`finish_reason=stop`|
+|供应商实际 usage|2165 input + 1060 output tokens|
+|按清单费率记账|¥0.007686|
+|延迟|约 8.7 秒|
+|工程契约|通过|
+|工作流状态|`needs_review`|
+|自动重试|0 次|
+
+模型正确使用用户原文，把事件写成 `dinner`，没有把被用户否定的“生日”当作正向事件；同时保留 `conflicts=["event"]`。它把“邻居”作为有 `user_text` 引用的 mention，时间和地点标为未知。以上只能作为该单例的人工观察，不能换算成整体准确率。
+
+自动指标中的 scene 为 0/2，不能直接解释成“视觉完全识别错误”。模型输出的是自由英文短语 `indoor family gathering around a dining table with a cake`，冻结真值是“室内”和“庆典”，当前 scorer 只接受预先冻结的完全相同标签或 alias。模型表达与产品受控分类词表之间缺少归一化层，是本轮暴露的主要缺口。
+
+本轮还发现两处评测口径需要在扩大批次前修正：
+
+1. C014 真值把 `person` 列为 unknown，但当前契约中 person 表示“检测到人物或文字人物提及”，并不表示“已经知道真实身份”；模型检测到人物后不应再把 person 列为 unknown。人物身份未知必须用独立身份指标表示。
+2. 本轮 task 只启用了 `scene`，scorer 会把 unknown/conflict 也限制在启用的 facet 内。因此真实输出中的 `event` 冲突虽然进入了 `reviewItems`，metrics 中仍显示 expected=0、correct=0。后续清单必须显式启用要评价冲突的 facet，或把冲突评价范围从标签评价范围中独立出来。
+
+依据 P0 规格中已经批准的事件和场景受控集合，下一版 Prompt 升级为 `sgx-five-facets.4`：事件和场景要求输出短的受控中文标签，支持同一照片返回多个场景标签，禁止把多个类别拼成描述句。该修改先通过本地回归，再进行小批量探索；不修改已冻结的历史结果，也不把 C014 单例写成模型准确率结论。
