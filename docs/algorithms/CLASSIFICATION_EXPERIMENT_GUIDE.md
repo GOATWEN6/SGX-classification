@@ -50,6 +50,8 @@
 
 当前实现会把安全诊断写入结果和 Markdown 报告，只保留字段路径、错误码、预期类型和非法键名，不回显字段值、密钥、请求头或任意上游错误正文。
 
+真实 API 密钥可通过 `scripts/classification-keychain.zsh setup` 一次性保存到当前 macOS 用户的 Keychain。后续实验使用 `scripts/classification-keychain.zsh eval ...` 读取，避免每轮重复输入。脚本只把密钥注入当前评测子进程，不打印密钥，也不写入 `.env`、Git、approval、结果目录或报告。更换或撤销密钥时，应在 Keychain 中更新或删除服务 `com.freewizardwu.ai-frame.sgx-d4-api-key`，不在聊天中发送明文。
+
 ## 如何降低再次发生的概率
 
 短期继续采用“多模态抽取 + 本地严格校验”，因为第六轮已经接近契约通过；Prompt 版本已升级为 `sgx-five-facets.3`，移除了 `canonical?`、`instanceHint?`、`evidenceId?` 这类会被模型照抄的伪 JSON 写法，并明确 `mentions` 只允许来自 caption、user_text、final_asr 的人物名称或关系。
