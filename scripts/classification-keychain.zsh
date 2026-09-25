@@ -43,9 +43,9 @@ case "$command" in
     export SGX_D4_API_KEY
     cd "$repo"
     npm run classification:eval -- "$@"
-    status=$?
+    exit_code=$?
     unset SGX_D4_API_KEY
-    exit $status
+    exit $exit_code
     ;;
   *)
     print -u2 '用法：scripts/classification-keychain.zsh setup|status|eval [classification:eval 参数]'

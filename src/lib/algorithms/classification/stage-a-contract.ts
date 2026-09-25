@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.5';
+export const PROMPT_VERSION = 'sgx-five-facets.6';
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const ScopeSchema = z.object({ householdId:id, subjectId:id }).strict();
@@ -81,13 +81,18 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
   const parsed=ObservationSchema.parse(raw);
   const times=parsed.times.map(time=>{
     const value=time.value.normalize('NFKC').trim();
-    if(time.precision==='year')return {...time,value:value.replace(/^(\d{4})年$/,'$1')};
+    const normalizedValue=time.precision==='year'?value.replace(/^(\d{4})年$/,'$1'):
+      time.precision==='decade'?value.replace(/^(\d{3}0)年代$/,'$1s'):value;
+    const ocrToken=normalizedValue.match(/^\d{4}/)?.[0];
+    const supports=time.supports.map(item=>item.source==='visual'&&ocrToken&&item.quote.includes(ocrToken)&&
+      /文字|字样|显示|印有|写着|标注|叠加|横幅|海报|text|reads|printed|shows|banner/i.test(item.quote)?{...item,source:'ocr' as const}:item);
+    if(time.precision==='year')return {...time,value:normalizedValue,supports};
     if(time.precision==='date'){
       const match=value.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
-      return match?{...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`}:{...time,value};
+      return match?{...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`,supports}:{...time,value,supports};
     }
-    if(time.precision==='decade')return {...time,value:value.replace(/^(\d{3}0)年代$/,'$1s')};
-    return {...time,value};
+    if(time.precision==='decade')return {...time,value:normalizedValue,supports};
+    return {...time,value,supports};
   });
   const nonempty={person:parsed.people.length+parsed.mentions.length,time:times.length,place:parsed.places.length,event:parsed.events.length,scene:parsed.scenes.length};
   // unknownFacets is a deterministic projection of the accepted arrays, not a model judgement.

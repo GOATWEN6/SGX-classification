@@ -113,6 +113,11 @@ test('mechanical time formatting and unknown facets are normalized locally',()=>
   for(const [input,precision,expected] of cases){const p=photo(`p_${precision}`,input);const o=observation(p,{time:input,precision});o.unknownFacets=[];
     const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].value,expected);assert.deepEqual(normalized.unknownFacets,['person','place','event']);}
 });
+test('explicit image text time support is locally tagged as OCR without accepting visual-era guesses',()=>{
+  const p=photo('p_ocr','');const o=observation(p);o.times=[{value:'2023',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'visual',quote:'图片右下角叠加文字显示“2023 退休纪念”'}]}];o.unknownFacets=[];
+  const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].supports[0].source,'ocr');assert.ok(!normalized.unknownFacets.includes('time'));
+  o.times[0].supports[0].quote='服装看起来像 2023 年前后';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_TIME/);
+});
 test('duplicate conflict facets are rejected before review and scoring',()=>{
   const p=photo('p');const o=observation(p,{conflicts:['time','time']});
   assert.throws(()=>contract.validateObservation(o,p),/DUPLICATE_CONFLICT/);
@@ -131,6 +136,8 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   assert.match(body.messages[0].content,/unknownFacets/);assert.match(body.messages[0].content,/one observation object per supplied photo/);
   assert.match(body.messages[0].content,/events\.type must be one of/);assert.match(body.messages[0].content,/scenes\.label must be one of/);
   assert.match(body.messages[0].content,/never combine several labels into one sentence/);
+  assert.match(body.messages[0].content,/source ocr, not visual/);assert.match(body.messages[0].content,/Generic interiors/);
+  assert.match(body.messages[0].content,/Instructions printed on objects/);
   assert.match(body.messages[0].content,/literal, case-sensitive keys/);assert.match(body.messages[0].content,/never use "extract"/);
   assert.match(body.messages[0].content,/people use \{faceId,description,box/);assert.match(body.messages[0].content,/Never use bbox arrays/);
   assert.match(body.messages[0].content,/mentions array is only for person names or relationships/);assert.ok(!body.messages[0].content.includes('canonical?'));
