@@ -108,6 +108,11 @@ test('unsupported precise date, image-only time and foreign source rejected',()=
   o.times[0].precision='year';o.times[0].value='1982';o.times[0].supports[0].source='visual';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_TIME/);
   o.times[0].supports[0].photoId='other';assert.throws(()=>contract.validateObservation(o,p),/FOREIGN_SOURCE/);
 });
+test('mechanical time formatting and unknown facets are normalized locally',()=>{
+  const cases=[['2005年','year','2005'],['2026年9月7日','date','2026-09-07'],['1980年代','decade','1980s']];
+  for(const [input,precision,expected] of cases){const p=photo(`p_${precision}`,input);const o=observation(p,{time:input,precision});o.unknownFacets=[];
+    const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].value,expected);assert.deepEqual(normalized.unknownFacets,['person','place','event']);}
+});
 test('duplicate conflict facets are rejected before review and scoring',()=>{
   const p=photo('p');const o=observation(p,{conflicts:['time','time']});
   assert.throws(()=>contract.validateObservation(o,p),/DUPLICATE_CONFLICT/);

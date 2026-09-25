@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.4';
+export const PROMPT_VERSION = 'sgx-five-facets.5';
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const ScopeSchema = z.object({ householdId:id, subjectId:id }).strict();
@@ -78,7 +78,20 @@ export function validateSupports(items:Support[], photos:Photo[]) {
   }
 }
 export function validateObservation(raw:unknown, photo:Photo):Observation {
-  const o=ObservationSchema.parse(raw);
+  const parsed=ObservationSchema.parse(raw);
+  const times=parsed.times.map(time=>{
+    const value=time.value.normalize('NFKC').trim();
+    if(time.precision==='year')return {...time,value:value.replace(/^(\d{4})年$/,'$1')};
+    if(time.precision==='date'){
+      const match=value.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+      return match?{...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`}:{...time,value};
+    }
+    if(time.precision==='decade')return {...time,value:value.replace(/^(\d{3}0)年代$/,'$1s')};
+    return {...time,value};
+  });
+  const nonempty={person:parsed.people.length+parsed.mentions.length,time:times.length,place:parsed.places.length,event:parsed.events.length,scene:parsed.scenes.length};
+  // unknownFacets is a deterministic projection of the accepted arrays, not a model judgement.
+  const o:Observation={...parsed,times,unknownFacets:FacetSchema.options.filter(f=>!nonempty[f])};
   if(o.photoId!==photo.photoId)throw new StageError('FOREIGN_PHOTO');
   if(new Set(o.people.map(p=>p.faceId)).size!==o.people.length)throw new StageError('DUPLICATE_FACE');
   const all=[...o.people,...o.mentions,...o.times,...o.places,...o.events,...o.scenes];
@@ -102,7 +115,6 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
     }
     if(time.role==='capture'&&time.supports.some(s=>s.source==='exif')&&!photo.exif?.originalCapture)throw new StageError('SCAN_NOT_CAPTURE');
   }
-  const nonempty={person:o.people.length+o.mentions.length,time:o.times.length,place:o.places.length,event:o.events.length,scene:o.scenes.length};
   for(const f of FacetSchema.options){if(Boolean(nonempty[f])===o.unknownFacets.includes(f))throw new StageError('FACET_COVERAGE');}
   if(new Set(o.unknownFacets).size!==o.unknownFacets.length)throw new StageError('DUPLICATE_FACET');
   if(new Set(o.conflicts).size!==o.conflicts.length)throw new StageError('DUPLICATE_CONFLICT');
