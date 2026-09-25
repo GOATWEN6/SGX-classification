@@ -167,3 +167,23 @@ npm run classification:prepare-eval -- \
 |自动重试|0 次|
 
 因此第四轮仍不能支持分类准确率结论，但它证明上一轮的“每张照片一个 observation”修复已经生效，并定位了新的顶层键偏差。下一步本地修复已写入系统提示和回归测试；再次真实调用需要新的明确授权，不能把本轮失败自动重试当作第五次调用。
+
+## 12. 第五轮真实调用结果与系统排查
+
+第五轮结果目录：`/private/tmp/sgx-d4-qwen37-run-r5-iterative-10call-20260925`。
+
+这次顶层结构已经正确：模型返回了 `observations`，并且 C014 只生成了一个 observation。失败原因变成了字段级契约偏差：人物框使用了 `bbox` 数组而不是 `box` 对象；时间、地点、事件、场景分别使用了 `timeText`、`placeText`、`eventText`、`sceneText`，而契约要求 `value`、`label`、`type`；证据使用了 `evidence` 字符串而不是 `supports` 数组；`conflicts` 使用了对象数组而不是 facet 字符串数组；还输出了契约禁止的 `confidenceScore`。因此 Provider 在 Schema 阶段拒收，没有进入语义评分或后续照片。
+
+|项目|结果|
+|---|---:|
+|真实请求|1 次|
+|供应商模型|`qwen3.7-flash-2026-07-15`|
+|供应商实际 usage|1789 input + 953 output tokens|
+|保守账本|24636 input + 4096 output tokens，¥0.049224|
+|完成照片|0/5（字段契约拒收）|
+|事件关联|0 次|
+|自动重试|0 次|
+
+系统排查后已完成三项修复：把完整字段形状和禁止字段直接写入系统提示；加入空抽取对象示例；将 `PROMPT_VERSION` 更新为 `sgx-five-facets.2`，让提示变更自动使旧观察结果失效，避免缓存继续使用旧版本结果。修复后本地 `typecheck`、密钥扫描和 118 项分类回归均通过。
+
+本轮证明的是 Prompt/契约兼容性仍在迭代，不是模型语义准确率。下一轮应验证字段级修复是否让真实响应进入 `validateObservation`；成功后才开始评价时间、地点、事件、场景和冲突标签。
