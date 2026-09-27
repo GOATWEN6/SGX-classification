@@ -293,7 +293,7 @@ export function organizeContent(raw: unknown): OrganizationResult {
     if(!explicit.toContentId) continue;
     const pair = [explicit.fromContentId, explicit.toContentId].sort().join('/');
     explicitPairs.add(pair);
-    if(explicit.status === 'user_confirmed' && (explicit.relation === 'same_story' || explicit.relation === 'same_event')) union.union(explicit.fromContentId, explicit.toContentId);
+    if(explicit.status === 'user_confirmed' && ['same_story', 'same_event', 'supports'].includes(explicit.relation)) union.union(explicit.fromContentId, explicit.toContentId);
   }
   for(let i = 0; i < contentIds.length; i++) for(let j = i + 1; j < contentIds.length; j++) {
     const left = contentIds[i]; const right = contentIds[j]; const pair = [left, right].sort().join('/');
@@ -369,7 +369,7 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
   for(const explicit of input.explicitAssociations) {
     if(!explicit.toContentId) continue;
     explicitPairs.add([explicit.fromContentId, explicit.toContentId].sort().join('/'));
-    if(explicit.status === 'user_confirmed' && (explicit.relation === 'same_story' || explicit.relation === 'same_event')) {
+    if(explicit.status === 'user_confirmed' && ['same_story', 'same_event', 'supports'].includes(explicit.relation)) {
       union.union(explicit.fromContentId, explicit.toContentId);
     }
   }
