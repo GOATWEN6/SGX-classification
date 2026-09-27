@@ -38,7 +38,10 @@ function png(index, width = 2, height = 2) {
 }
 
 async function buildFixture(t) {
-  const root = await mkdtemp(path.join(tmpdir(), 'sgx-t0-real-'));
+  // This synthetic fixture exercises the contract and preflight implementation only.
+  // `origin=real_user_provided` is the production contract value being validated; this
+  // generated fixture must never be reported as an accepted real-media dataset.
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-t0-contract-fixture-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const plans = Array.from({ length: 30 }, (_, offset) => ({ images: 1, tags: ['album_upload'], index: offset + 1 }));
   Object.assign(plans[0], { tags: ['single_image', 'album_upload', 'old_photo'] });
@@ -76,8 +79,8 @@ async function buildFixture(t) {
       const sourceHash = sha(bytes);
       const lifecycleState = plan.withdrawn ? 'trashed' : 'active';
       evidence.push({
-        evidenceId, subjectId: 'elder_real', householdId: 'house_real', schemaVersion: '1.0',
-        ownerId: 'elder_real', contributorId: plan.family ? 'daughter_real' : 'elder_real', consentRef: `consent_${suffix}`,
+        evidenceId, subjectId: 'elder_fixture', householdId: 'house_fixture', schemaVersion: '1.0',
+        ownerId: 'elder_fixture', contributorId: plan.family ? 'daughter_fixture' : 'elder_fixture', consentRef: `consent_${suffix}`,
         visibility: plan.family ? 'household' : 'private', ingestedAt: createdAt, lifecycleState,
         sourceRef: { kind: modality === 'user_text' ? 'message' : 'object', id: `source_${evidenceId}` },
         sourceHash, revision: 1, byteLength: bytes.length,
@@ -112,8 +115,8 @@ async function buildFixture(t) {
     }
     const envelope = {
       specVersion: '2.0.0', contractVersion: 'classification-ingestion.2', ingestionId: `ingestion_${suffix}`, batchId: groupId,
-      scope: { householdId: 'house_real', subjectId: 'elder_real' }, actorId: plan.family ? 'daughter_real' : 'elder_real',
-      context: plan.family ? { kind: 'family_transfer', senderId: 'daughter_real', recipientIds: ['elder_real'] } : { kind: 'album_upload' },
+      scope: { householdId: 'house_fixture', subjectId: 'elder_fixture' }, actorId: plan.family ? 'daughter_fixture' : 'elder_fixture',
+      context: plan.family ? { kind: 'family_transfer', senderId: 'daughter_fixture', recipientIds: ['elder_fixture'] } : { kind: 'album_upload' },
       authorizationRevision: 'auth_1', taxonomyVersion: 'taxonomy.1', purposes: ['classification', 'album_organization'],
       evidence, contents, bindings,
       ...(plan.family ? { reviewPolicy: { policyVersion: 'family-inbox.1', remindAfterDays: 3, hideFromHomeAfterDays: 7, highRiskRetention: 'until_resolved' } } : {}),
@@ -124,11 +127,11 @@ async function buildFixture(t) {
     groups.push({ groupId, partition: plan.index <= 20 ? 'exploration' : 't1_validation', leakageGroup: `leakage_${suffix}`, envelopePath, sources, scenarioTags: plan.tags });
     truthGroups.push({ groupId, contents: truthContents });
   }
-  const truth = { specVersion: '2.0.0', contractVersion: 'classification-t0-truth.1', datasetId: 'real_batch_1', reviewedBy: 'human_reviewer', frozenAt: createdAt, groups: truthGroups };
+  const truth = { specVersion: '2.0.0', contractVersion: 'classification-t0-truth.1', datasetId: 'contract_fixture_batch_1', reviewedBy: 'fixture_reviewer', frozenAt: createdAt, groups: truthGroups };
   const truthBytes = Buffer.from(`${JSON.stringify(truth, null, 2)}\n`);
   await writeFile(path.join(root, 'truth.json'), truthBytes);
   const manifest = {
-    specVersion: '2.0.0', contractVersion: 'classification-t0-real-media.1', datasetId: 'real_batch_1', status: 'frozen',
+    specVersion: '2.0.0', contractVersion: 'classification-t0-real-media.1', datasetId: 'contract_fixture_batch_1', status: 'frozen',
     purpose: 't0_t1_calibration', plannedGroups: 30, personMatching: 'disabled', rawMediaPolicy: 'outside_git',
     requiredScenarioTags: [...T0_REQUIRED_SCENARIOS], truth: { path: 'truth.json', sourceHash: sha(truthBytes) }, groups, createdAt
   };
@@ -138,7 +141,7 @@ async function buildFixture(t) {
   return { root, manifest, truth, manifestPath, saveManifest };
 }
 
-test('frozen 30-group real-media batch passes offline checks without credentials or external calls', async t => {
+test('synthetic 30-group contract fixture exercises real-media preflight without credentials or external calls', async t => {
   const fixture = await buildFixture(t);
   const result = await preflightT0RealMedia(fixture.manifestPath);
   const validate = await validators();
