@@ -266,17 +266,17 @@ function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[
   const theme = memberObservations.find(observation => observation.facet === 'theme');
   const place = memberObservations.find(observation => observation.facet === 'place');
   const time = memberObservations.find(observation => observation.facet === 'time');
-  const title = truncate(event?.normalizedValue ?? event?.rawValue ?? theme?.normalizedValue ?? theme?.rawValue ?? place?.normalizedValue ?? place?.rawValue ?? '未命名故事', 32);
-  const facetLabels = unique(memberObservations.filter(observation => ['person', 'time', 'place', 'theme'].includes(observation.facet)).map(observation => observation.normalizedValue ?? observation.rawValue)).slice(0, 4);
+  const title = truncate(event?.rawValue ?? theme?.rawValue ?? place?.rawValue ?? '未命名故事', 32);
+  const facetLabels = unique(memberObservations.filter(observation => ['person', 'time', 'place', 'theme'].includes(observation.facet)).map(observation => observation.rawValue)).slice(0, 4);
   const summary = truncate(`包含${members.length}项内容${facetLabels.length ? `，涉及${facetLabels.join('、')}` : ''}`, 120);
   const contentById = new Map(contents.map(content => [content.contentId, content]));
   const supports = unique(memberObservations.flatMap(observation => [observation.evidenceId, ...observation.supports.map(support => support.evidenceId)]));
   const fallbackSupports = unique(members.flatMap(contentId => contentById.get(contentId)?.evidenceIds ?? []));
   return StoryUnitSchema.parse({ storyId: storyId(members), scope: scopeValue, titleCandidate: title, summaryCandidate: summary, memberContentIds: [...members].sort(), facets: {
-    people: unique(memberObservations.filter(observation => observation.facet === 'person').map(valueOf)),
-    times: unique(memberObservations.filter(observation => observation.facet === 'time').map(valueOf)),
-    places: unique(memberObservations.filter(observation => observation.facet === 'place').map(valueOf)),
-    themes: unique(memberObservations.filter(observation => observation.facet === 'theme').map(valueOf))
+    people: unique(memberObservations.filter(observation => observation.facet === 'person').map(observation => observation.rawValue)),
+    times: unique(memberObservations.filter(observation => observation.facet === 'time').map(observation => observation.rawValue)),
+    places: unique(memberObservations.filter(observation => observation.facet === 'place').map(observation => observation.rawValue)),
+    themes: unique(memberObservations.filter(observation => observation.facet === 'theme').map(observation => observation.rawValue))
   }, titleSupports: supports.length ? supports : fallbackSupports, summarySupports: supports.length ? supports : fallbackSupports, state: explicit ? 'user_confirmed' : review ? 'needs_review' : 'ai_candidate' });
 }
 
