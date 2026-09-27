@@ -1,5 +1,7 @@
 # 多模态自动分类：业务关系、数据流程与协作边界
 
+> 当前技术实现、完整 Prompt、模型调用、规则、评分器和五张详细流程图，请从 [《SGX 图文分类与归纳算法：完整架构、Prompt、规则与评分器》](CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md) 开始阅读。本文件继续作为业务关系与协作边界说明。
+
 > 文档状态：ready_for_owner_review
 > 版本：0.1.0
 > 日期：2026-09-06

@@ -1,0 +1,80 @@
+# SGX 分类到产品与 Memory 的交接边界
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, PingFang SC, Microsoft YaHei, sans-serif","primaryColor":"#F1F7F4","primaryTextColor":"#173B2B","primaryBorderColor":"#52806B","lineColor":"#557468","secondaryColor":"#FFF3D8","tertiaryColor":"#F1EBF8"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":30,"rankSpacing":42}}}%%
+flowchart TD
+  I[分类与归纳候选<br/>Observation / Association / StoryUnit]
+
+  subgraph A[相册与内容库]
+    direction LR
+    A1[列表页<br/>AI 标题 + 短摘要]
+    A2[筛选维度<br/>人物 时间 地点 主题]
+    A3[详情页<br/>原照片 原文字 final ASR<br/>证据来源完整保留]
+  end
+
+  subgraph U[授权用户复核]
+    direction LR
+    U1{用户动作}
+    U2[确认]
+    U3[编辑后确认]
+    U4[拒绝]
+    U5[暂不判断]
+    U6[撤回或删除]
+  end
+
+  subgraph M[Memory 边界]
+    direction LR
+    M1[MemoryCandidate<br/>confirmed + evidenceRefs<br/>subject scope provenance]
+    M2[Canonical Memory 写入门禁<br/>权限 敏感度 生命周期]
+    M3[访谈问题生成与检索]
+    M4[用户画像与洞察<br/>只能引用仍有效事实]
+  end
+
+  subgraph Q[失效传播]
+    direction LR
+    Q1[Evidence inactive 或 consent revoked]
+    Q2[作废相关 Assertion / Association]
+    Q3[重算 StoryUnit 与索引]
+    Q4[撤回派生 Memory 与下游缓存]
+  end
+
+  I --> A1
+  I --> A2
+  I --> A3
+  A1 --> U1
+  A3 --> U1
+  U1 --> U2
+  U1 --> U3
+  U1 --> U4
+  U1 --> U5
+  U1 --> U6
+  U2 --> M1
+  U3 --> M1
+  M1 --> M2 --> M3
+  M2 --> M4
+  U4 --> Q2
+  U6 --> Q1 --> Q2 --> Q3 --> Q4
+  Q4 -. 禁止继续用于访谈 .-> M3
+  Q4 -. 禁止继续用于画像 .-> M4
+  U5 -. 保持 needs_review .-> I
+
+  N1[硬边界：AI 自动关联不等于用户确认]:::note
+  N2[硬边界：列表标题与摘要不覆盖用户原文]:::note
+  N3[硬边界：当前这些产品接线仍待全栈实现]:::missing
+  I -.-> N1
+  A3 -.-> N2
+  M2 -.-> N3
+
+  classDef candidate fill:#E9F2FF,stroke:#3F6F9D,color:#183653,stroke-width:2px;
+  classDef product fill:#EAF5EF,stroke:#3A7757,color:#173E2B,stroke-width:2px;
+  classDef user fill:#FFF1D6,stroke:#A46A19,color:#573500,stroke-width:2px;
+  classDef memory fill:#F1EBF8,stroke:#715099,color:#3B2755,stroke-width:2px;
+  classDef revoke fill:#FCE8E8,stroke:#AA4141,color:#681F1F,stroke-width:2px;
+  classDef note fill:#FFFBEA,stroke:#8C7625,color:#4F4210,stroke-width:1px;
+  classDef missing fill:#FCE8E8,stroke:#A83F3F,color:#681F1F,stroke-width:2px,stroke-dasharray: 6 4;
+  class I candidate;
+  class A1,A2,A3 product;
+  class U1,U2,U3,U4,U5,U6 user;
+  class M1,M2,M3,M4 memory;
+  class Q1,Q2,Q3,Q4 revoke;
+```
