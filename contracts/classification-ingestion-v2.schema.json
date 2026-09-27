@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-ingestion:v2",
+  "title": "SGX multimodal ingestion envelope v2",
+  "definitions": {
+    "Scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "householdId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "subjectId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" }
+      },
+      "required": ["householdId", "subjectId"]
+    },
+    "Context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["album_upload", "family_transfer"] },
+        "senderId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "recipientIds": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        }
+      },
+      "required": ["kind"]
+    },
+    "Content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "modality": { "enum": ["image", "user_text", "final_asr"] },
+        "lifecycleState": { "enum": ["active", "withdrawn"] }
+      },
+      "required": ["contentId", "evidenceId", "modality", "lifecycleState"]
+    },
+    "BindingTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "batch" } },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "contents" },
+            "contentIds": {
+              "type": "array",
+              "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+              "minItems": 1,
+              "maxItems": 5000,
+              "uniqueItems": true
+            }
+          },
+          "required": ["kind", "contentIds"]
+        }
+      ]
+    },
+    "EvidenceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bindingId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "sourceContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "target": { "$ref": "#/definitions/BindingTarget" },
+        "authority": { "enum": ["user_explicit", "ai_candidate"] },
+        "state": { "enum": ["active", "withdrawn"] },
+        "method": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["bindingId", "sourceContentId", "target", "authority", "state", "method", "evidenceRefs", "createdAt"]
+    },
+    "ReviewPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policyVersion": { "const": "family-inbox.1" },
+        "remindAfterDays": { "const": 3 },
+        "hideFromHomeAfterDays": { "const": 7 },
+        "highRiskRetention": { "const": "until_resolved" }
+      },
+      "required": ["policyVersion", "remindAfterDays", "hideFromHomeAfterDays", "highRiskRetention"]
+    },
+    "IngestionEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "specVersion": { "const": "2.0.0" },
+        "contractVersion": { "const": "classification-ingestion.2" },
+        "ingestionId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "batchId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "actorId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "context": { "$ref": "#/definitions/Context" },
+        "authorizationRevision": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "taxonomyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "purposes": {
+          "type": "array",
+          "items": { "enum": ["classification", "album_organization", "search_candidate", "interview_candidate"] },
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/EvidenceRecord" },
+          "minItems": 1,
+          "maxItems": 5000
+        },
+        "contents": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Content" },
+          "minItems": 1,
+          "maxItems": 5000
+        },
+        "bindings": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/EvidenceBinding" },
+          "maxItems": 10000
+        },
+        "reviewPolicy": { "$ref": "#/definitions/ReviewPolicy" },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["specVersion", "contractVersion", "ingestionId", "batchId", "scope", "actorId", "context", "authorizationRevision", "taxonomyVersion", "purposes", "evidence", "contents", "bindings", "createdAt"]
+    }
+  },
+  "$ref": "#/definitions/IngestionEnvelope"
+}

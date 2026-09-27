@@ -1,5 +1,13 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-09-27：新增多模态入口契约
+> [`classification-ingestion-v2.schema.json`](classification-ingestion-v2.schema.json)，
+> 固定 `specVersion=2.0.0`，覆盖 `album_upload / family_transfer`、纯文本、
+> final ASR、单图/多图/批次绑定以及家庭互传 3/7 天待整理策略。未指定图片的
+> 用户说明保留为批次级 Evidence；AI 只能增加 `ai_candidate` 单图/多图绑定，
+> 不能把它升级为用户事实。运行时跨字段校验位于
+> `src/lib/algorithms/classification/ingestion-contract.ts`。
+
 > 2026-09-27：混合召回与渐进自动化新增语言无关契约
 > [`classification-hybrid.schema.json`](classification-hybrid.schema.json)，覆盖
 > `AssetFeature`、`RetrievalCandidate`、`SparseAssociationInput`、

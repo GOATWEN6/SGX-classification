@@ -1,0 +1,110 @@
+{
+  "familyTransfer": {
+    "specVersion": "2.0.0",
+    "contractVersion": "classification-ingestion.2",
+    "ingestionId": "ingestion_family_1",
+    "batchId": "batch_family_1",
+    "scope": { "householdId": "house_a", "subjectId": "elder_a" },
+    "actorId": "daughter_a",
+    "context": { "kind": "family_transfer", "senderId": "daughter_a", "recipientIds": ["elder_a"] },
+    "authorizationRevision": "auth_1",
+    "taxonomyVersion": "taxonomy.1",
+    "purposes": ["classification", "album_organization", "search_candidate", "interview_candidate"],
+    "evidence": [
+      {
+        "evidenceId": "evidence_photo_1", "subjectId": "elder_a", "householdId": "house_a", "schemaVersion": "1.0",
+        "ownerId": "elder_a", "contributorId": "daughter_a", "consentRef": "consent_1", "visibility": "household",
+        "ingestedAt": "2026-09-27T10:00:00.000Z", "lifecycleState": "active",
+        "sourceRef": { "kind": "object", "id": "object_photo_1" },
+        "sourceHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "revision": 1, "byteLength": 2048,
+        "modality": "image", "mimeType": "image/jpeg", "dimensions": { "width": 640, "height": 480 }
+      },
+      {
+        "evidenceId": "evidence_photo_2", "subjectId": "elder_a", "householdId": "house_a", "schemaVersion": "1.0",
+        "ownerId": "elder_a", "contributorId": "daughter_a", "consentRef": "consent_1", "visibility": "household",
+        "ingestedAt": "2026-09-27T10:00:01.000Z", "lifecycleState": "active",
+        "sourceRef": { "kind": "object", "id": "object_photo_2" },
+        "sourceHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "revision": 1, "byteLength": 3072,
+        "modality": "image", "mimeType": "image/png", "dimensions": { "width": 800, "height": 600 }
+      },
+      {
+        "evidenceId": "evidence_text_1", "subjectId": "elder_a", "householdId": "house_a", "schemaVersion": "1.0",
+        "ownerId": "daughter_a", "contributorId": "daughter_a", "consentRef": "consent_1", "visibility": "household",
+        "ingestedAt": "2026-09-27T10:00:02.000Z", "lifecycleState": "active",
+        "sourceRef": { "kind": "message", "id": "message_text_1" },
+        "sourceHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "revision": 1, "byteLength": 32,
+        "modality": "text", "mimeType": "text/plain"
+      },
+      {
+        "evidenceId": "evidence_asr_1", "subjectId": "elder_a", "householdId": "house_a", "schemaVersion": "1.0",
+        "ownerId": "daughter_a", "contributorId": "daughter_a", "consentRef": "consent_1", "visibility": "household",
+        "ingestedAt": "2026-09-27T10:00:03.000Z", "lifecycleState": "active",
+        "sourceRef": { "kind": "object", "id": "object_asr_1" },
+        "sourceHash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "revision": 1, "byteLength": 48,
+        "modality": "transcript", "mimeType": "text/plain", "asr": { "final": true, "producerVersion": "fixture-asr.1" }
+      }
+    ],
+    "contents": [
+      { "contentId": "content_photo_1", "evidenceId": "evidence_photo_1", "modality": "image", "lifecycleState": "active" },
+      { "contentId": "content_photo_2", "evidenceId": "evidence_photo_2", "modality": "image", "lifecycleState": "active" },
+      { "contentId": "content_text_1", "evidenceId": "evidence_text_1", "modality": "user_text", "lifecycleState": "active" },
+      { "contentId": "content_asr_1", "evidenceId": "evidence_asr_1", "modality": "final_asr", "lifecycleState": "active" }
+    ],
+    "bindings": [
+      {
+        "bindingId": "binding_text_batch", "sourceContentId": "content_text_1", "target": { "kind": "batch" },
+        "authority": "user_explicit", "state": "active", "method": "user-unspecified-batch.1",
+        "evidenceRefs": ["evidence_text_1"], "createdAt": "2026-09-27T10:00:04.000Z"
+      },
+      {
+        "bindingId": "binding_asr_multi", "sourceContentId": "content_asr_1",
+        "target": { "kind": "contents", "contentIds": ["content_photo_1", "content_photo_2"] },
+        "authority": "user_explicit", "state": "active", "method": "user-selection.1",
+        "evidenceRefs": ["evidence_asr_1", "evidence_photo_1", "evidence_photo_2"], "createdAt": "2026-09-27T10:00:05.000Z"
+      },
+      {
+        "bindingId": "binding_text_candidate", "sourceContentId": "content_text_1",
+        "target": { "kind": "contents", "contentIds": ["content_photo_1"] },
+        "authority": "ai_candidate", "state": "active", "method": "binding-candidate.1",
+        "evidenceRefs": ["evidence_text_1", "evidence_photo_1"], "createdAt": "2026-09-27T10:00:06.000Z"
+      }
+    ],
+    "reviewPolicy": {
+      "policyVersion": "family-inbox.1", "remindAfterDays": 3, "hideFromHomeAfterDays": 7, "highRiskRetention": "until_resolved"
+    },
+    "createdAt": "2026-09-27T10:00:00.000Z"
+  },
+  "albumUpload": {
+    "specVersion": "2.0.0",
+    "contractVersion": "classification-ingestion.2",
+    "ingestionId": "ingestion_album_1",
+    "batchId": "batch_album_1",
+    "scope": { "householdId": "house_a", "subjectId": "elder_a" },
+    "actorId": "elder_a",
+    "context": { "kind": "album_upload" },
+    "authorizationRevision": "auth_1",
+    "taxonomyVersion": "taxonomy.1",
+    "purposes": ["classification", "album_organization"],
+    "evidence": [
+      {
+        "evidenceId": "evidence_text_only", "subjectId": "elder_a", "householdId": "house_a", "schemaVersion": "1.0",
+        "ownerId": "elder_a", "contributorId": "elder_a", "consentRef": "consent_1", "visibility": "private",
+        "ingestedAt": "2026-09-27T11:00:00.000Z", "lifecycleState": "active",
+        "sourceRef": { "kind": "message", "id": "message_text_only" },
+        "sourceHash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "revision": 1, "byteLength": 24,
+        "modality": "text", "mimeType": "text/plain"
+      }
+    ],
+    "contents": [
+      { "contentId": "content_text_only", "evidenceId": "evidence_text_only", "modality": "user_text", "lifecycleState": "active" }
+    ],
+    "bindings": [
+      {
+        "bindingId": "binding_text_only_batch", "sourceContentId": "content_text_only", "target": { "kind": "batch" },
+        "authority": "user_explicit", "state": "active", "method": "user-unspecified-batch.1",
+        "evidenceRefs": ["evidence_text_only"], "createdAt": "2026-09-27T11:00:01.000Z"
+      }
+    ],
+    "createdAt": "2026-09-27T11:00:00.000Z"
+  }
+}
