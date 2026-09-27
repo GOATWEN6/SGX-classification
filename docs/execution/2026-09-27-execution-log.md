@@ -58,6 +58,7 @@
 ## 本日形成的设计
 
 - 新增 [混合召回、按需 VLM 与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)。
+- 新增 [T0/T1 实施与全栈交付计划](../superpowers/plans/2026-09-27-classification-t0-t1-delivery-plan.md)。
 - 新增 [目标流程图](../../figures/sgx-classification-hybrid-retrieval-adaptive-flow.md)。
 - 更新 [分类算法完整指南](../algorithms/CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md)，把下一阶段顺序改为：适配器与稀疏候选 → 本地特征 Spike → VLM router → scorer 校准 → 家庭参考 → 产品闭环。
 
