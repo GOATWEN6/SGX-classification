@@ -1,8 +1,11 @@
 # T0/T1 真实多模态素材准备与离线门禁
 
-> 状态：工程门禁已实现，真实素材与人工真值尚未提供  
-> 版本：`specVersion=2.0.0` / `classification-t0-real-media.1`  
+> 状态：工程门禁已实现，真实素材与人工真值尚未提供<br>
+> 版本：`specVersion=2.0.0` / `classification-t0-real-media.1`<br>
 > 用途：T0 离线算法校准和 T1 本地产品 Alpha；不用于 T3 跨家庭泛化结论
+
+需要交给另一个 AI 执行素材盘点和结构化时，使用
+[`SGX T0/T1 真实多模态数据准备：AI 执行任务书`](CLASSIFICATION_REAL_DATA_AI_TASK_BRIEF.md)。
 
 ## 1. 这一步解决什么
 

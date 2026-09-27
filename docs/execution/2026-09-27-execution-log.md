@@ -146,3 +146,5 @@ T0/T1 顺序、责任边界、轻量实验台和首批真实材料规模已经�
 ## 下一任务
 
 主线下一任务是 T0-B/T0-C 真实数据验证：产品负责人准备 30–50 组已授权真实图片、用户说明和 final ASR；算法侧运行离线 preflight、冻结真值和固定分母，再决定具体真实 Provider 调用。H2 本地 OCR/embedding/近重复 Spike 可以并行准备，但在 license manifest 与真实数据门禁完成前不形成正式选型结论。
+
+为避免新的 AI 把生成图片或自动化 fixture 当作真实数据，新增 [真实多模态数据准备 AI 执行任务书](../algorithms/CLASSIFICATION_REAL_DATA_AI_TASK_BRIEF.md)。任务书冻结了真实数据定义、30–50 组覆盖矩阵、授权边界、目录结构、人工真值独立性、preflight 命令和完成标准。AI 只负责盘点、结构化和门禁，不得生成素材补足真实分母。
