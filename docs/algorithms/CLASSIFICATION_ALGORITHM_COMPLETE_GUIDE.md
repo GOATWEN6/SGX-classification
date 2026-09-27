@@ -593,7 +593,7 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 9. 接入持久 Job、相册 UI、批量复核、删除传播和 MemoryCandidate；
 10. 完成浏览器 E2E 和小规模真实产品验证。
 
-详细任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)。下一次工程提交先完成其中 H0 + H1，不安装模型、不调用付费 API、不接生产数据库。
+详细候选任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Draft Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)。它仍待产品负责人确认自动化权限、错误取舍、确认交互、性能目标和部署范围；完成这些决策后再冻结并安排 H0 + H1。
 
 ## 17. 源码与文档导航
 
