@@ -1,5 +1,13 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-09-27：混合召回与渐进自动化新增语言无关契约
+> [`classification-hybrid.schema.json`](classification-hybrid.schema.json)，覆盖
+> `AssetFeature`、`RetrievalCandidate`、`SparseAssociationInput`、
+> `FamilyReference`、`DecisionPolicy` 和 `DecisionPolicyResult`。运行时语义校验位于
+> `src/lib/algorithms/classification/hybrid-contract.ts`。新策略默认 `shadow`；
+> 原始 embedding 不进入契约，人物特征必须携带独立生物识别 consent；AI 结果不能产生
+> `user_confirmed` 或直接写长期 Memory。
+
 本批只提供合成数据的 integration contract：Schema、生成的 TypeScript 类型、正反 fixtures、Fake Provider 和接入保护函数。上传/API、持久化 Job、用户确认/修改 UI、Memory adapter 和删除传播由全栈后续接入；这些尚未验收，`algorithm_ready=false`、`integration_ready=false`。
 
 ## 冻结计划与文件所有权（2026-09-07）

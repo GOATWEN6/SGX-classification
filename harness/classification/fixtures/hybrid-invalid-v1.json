@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "person-feature-without-biometric-consent",
+      "base": "assetFeatures.personEmbedding",
+      "mutation": { "op": "delete", "path": "/biometricConsentRef" },
+      "error": "BIOMETRIC_CONSENT_REQUIRED"
+    },
+    {
+      "id": "stable-person-with-one-reference",
+      "base": "familyReferences.stablePerson",
+      "mutation": { "op": "set", "path": "/sourceContentIds", "value": ["content_photo_2"] },
+      "error": "STABLE_PERSON_REFERENCE_REQUIRES_DIVERSE_SOURCES"
+    },
+    {
+      "id": "active-policy-without-calibration",
+      "base": "decisionPolicies.shadow",
+      "mutation": { "op": "set", "path": "/mode", "value": "active" },
+      "error": "ACTIVE_POLICY_REQUIRES_CALIBRATION"
+    },
+    {
+      "id": "self-retrieval-candidate",
+      "base": "retrievalCandidate",
+      "mutation": { "op": "set", "path": "/toContentId", "value": "content_photo_1" },
+      "error": "SELF_RETRIEVAL_CANDIDATE"
+    },
+    {
+      "id": "active-decision-without-calibrated-probability",
+      "base": "decisionResult",
+      "mutation": { "op": "set", "path": "/shadow", "value": false },
+      "error": "ACTIVE_DECISION_REQUIRES_CALIBRATED_PROBABILITY"
+    }
+  ]
+}

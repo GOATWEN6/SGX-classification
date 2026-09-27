@@ -1,0 +1,284 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-hybrid:v1",
+  "title": "SGX classification hybrid retrieval contract v1",
+  "definitions": {
+    "Scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "householdId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "subjectId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" }
+      },
+      "required": ["householdId", "subjectId"]
+    },
+    "AssetFeature": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "featureId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "sourceEvidenceIds": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "sourceDigest": { "$ref": "urn:sgx:classification:v1#/definitions/Hash" },
+        "featureKind": {
+          "enum": ["exact_hash", "perceptual_hash", "exif_time", "geo", "ocr_text", "image_embedding", "text_embedding", "quality", "person_embedding"]
+        },
+        "producerVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "modelVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "valueRef": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "valueDigest": { "$ref": "urn:sgx:classification:v1#/definitions/Hash" },
+        "vectorDimensions": { "type": "integer", "minimum": 1, "maximum": 65536 },
+        "biometricConsentRef": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "lifecycleState": { "enum": ["active", "invalidated", "withdrawn"] },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["schemaVersion", "contractVersion", "featureId", "scope", "contentId", "sourceEvidenceIds", "sourceDigest", "featureKind", "producerVersion", "valueDigest", "lifecycleState", "createdAt"]
+    },
+    "RetrievalCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "candidateId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "fromContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "toContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "relation": { "enum": ["same_story", "same_event", "same_person", "related"] },
+        "rank": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "retrievalScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "stageDecision": { "enum": ["same", "different", "unknown"] },
+        "method": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "coverage": { "enum": ["selected", "fallback"] },
+        "reasons": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "featureRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["schemaVersion", "contractVersion", "candidateId", "scope", "fromContentId", "toContentId", "relation", "rank", "method", "coverage", "reasons", "featureRefs", "evidenceRefs", "createdAt"]
+    },
+    "FamilyReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "referenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "kind": { "enum": ["person", "event", "place", "vocabulary", "relation_correction"] },
+        "canonicalId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "labelState": { "enum": ["unnamed", "user_confirmed"] },
+        "displayLabel": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "maturity": { "enum": ["provisional", "stable"] },
+        "sourceContentIds": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "featureRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "confirmedBy": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "confirmedAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" },
+        "authorizationRevision": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "biometricConsentRef": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "lifecycleState": { "enum": ["active", "withdrawn"] }
+      },
+      "required": ["schemaVersion", "contractVersion", "referenceId", "scope", "kind", "canonicalId", "labelState", "maturity", "sourceContentIds", "evidenceRefs", "featureRefs", "confirmedBy", "confirmedAt", "authorizationRevision", "revision", "lifecycleState"]
+    },
+    "DecisionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "policyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "mode": { "enum": ["shadow", "active"] },
+        "calibrated": { "type": "boolean" },
+        "calibrationVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "autoLinkMin": { "type": "number", "minimum": 0, "maximum": 1 },
+        "autoSeparateMax": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxCandidatesPerContent": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "riskPolicyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["schemaVersion", "contractVersion", "policyVersion", "mode", "calibrated", "maxCandidatesPerContent", "riskPolicyVersion", "createdAt"]
+    },
+    "DecisionPolicyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "resultId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "candidateId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "policyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "calibrationVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "action": { "enum": ["auto_link_candidate", "auto_separate", "review"] },
+        "riskLevel": { "enum": ["low", "medium", "high"] },
+        "shadow": { "type": "boolean" },
+        "inDistribution": { "type": "boolean" },
+        "pSameCalibrated": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reasons": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["schemaVersion", "contractVersion", "resultId", "candidateId", "policyVersion", "action", "riskLevel", "shadow", "inDistribution", "reasons", "createdAt"]
+    },
+    "ContentItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "modality": { "enum": ["photo", "user_text", "final_asr", "file", "work"] },
+        "evidenceIds": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "originalText": { "type": "string", "maxLength": 65536 },
+        "capturedAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" },
+        "lifecycle": { "enum": ["active", "withdrawn"] }
+      },
+      "required": ["contentId", "scope", "modality", "evidenceIds", "lifecycle"]
+    },
+    "ObservationSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "region": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+          },
+          "required": ["x", "y", "width", "height"]
+        }
+      },
+      "required": ["evidenceId"]
+    },
+    "ContentObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "facet": { "enum": ["person", "time", "place", "event", "scene", "theme", "content_type"] },
+        "rawValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "normalizedValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "supports": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ObservationSupport" },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "state": { "enum": ["candidate", "abstained", "conflicted"] }
+      },
+      "required": ["contentId", "evidenceId", "facet", "rawValue", "supports", "state"]
+    },
+    "ExplicitAssociation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "associationId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "fromContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "toContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "relation": { "enum": ["same_story", "same_event", "supports", "related"] },
+        "source": { "const": "user_explicit" },
+        "status": { "enum": ["user_confirmed", "rejected"] },
+        "method": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["associationId", "fromContentId", "toContentId", "relation", "source", "status", "method", "evidenceRefs", "createdAt"]
+    },
+    "SparseAssociationInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "contents": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ContentItem" },
+          "minItems": 1,
+          "maxItems": 5000
+        },
+        "observations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ContentObservation" },
+          "maxItems": 30000
+        },
+        "retrievalCandidates": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RetrievalCandidate" },
+          "maxItems": 30000
+        },
+        "explicitAssociations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ExplicitAssociation" },
+          "maxItems": 30000
+        },
+        "decisionPolicy": { "$ref": "#/definitions/DecisionPolicy" },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["schemaVersion", "contractVersion", "scope", "contents", "observations", "retrievalCandidates", "explicitAssociations", "decisionPolicy", "createdAt"]
+    }
+  }
+}
