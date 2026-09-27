@@ -1,7 +1,17 @@
 import { z } from 'zod';
 import { digest } from './stage-a-contract';
+import {
+  DecisionPolicyResultSchema,
+  DecisionPolicySchema,
+  HYBRID_CONTRACT_VERSION,
+  HYBRID_SCHEMA_VERSION,
+  RetrievalCandidateSchema,
+  type DecisionPolicyResult,
+  type RetrievalCandidate
+} from './hybrid-contract';
 
 export const CONTENT_ORGANIZATION_VERSION = 'content-organization.1';
+export const SPARSE_CONTENT_ORGANIZATION_VERSION = 'content-organization.2';
 export const ASSOCIATION_RULES_VERSION = 'association-rules.1';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -94,6 +104,34 @@ export const OrganizationResultSchema = z.object({
   reviewItems: z.array(z.string().min(1).max(256)).max(30000)
 }).strict();
 
+export const SparseAssociationInputSchema = z.object({
+  schemaVersion: z.literal(HYBRID_SCHEMA_VERSION),
+  contractVersion: z.literal(HYBRID_CONTRACT_VERSION),
+  scope,
+  contents: z.array(ContentItemSchema).min(1).max(5000),
+  observations: z.array(ContentObservationSchema).max(30000),
+  retrievalCandidates: z.array(RetrievalCandidateSchema).max(30000),
+  explicitAssociations: z.array(AssociationCandidateSchema).max(30000),
+  decisionPolicy: DecisionPolicySchema,
+  createdAt: dateTime
+}).strict();
+
+export const SparseOrganizationResultSchema = z.object({
+  version: z.literal(SPARSE_CONTENT_ORGANIZATION_VERSION),
+  scope,
+  stories: z.array(StoryUnitSchema).max(5000),
+  associations: z.array(AssociationCandidateSchema).max(30000),
+  decisionResults: z.array(DecisionPolicyResultSchema).max(30000),
+  reviewItems: z.array(z.string().min(1).max(256)).max(30000),
+  retrievalAudit: z.object({
+    candidateCount: z.number().int().nonnegative().max(30000),
+    evaluatedCount: z.number().int().nonnegative().max(30000),
+    skippedPersonOnlyCount: z.number().int().nonnegative().max(30000),
+    maxCandidatesPerContent: z.number().int().min(1).max(128),
+    policyMode: z.literal('shadow')
+  }).strict()
+}).strict();
+
 export type Scope = z.infer<typeof scope>;
 export type ContentItem = z.infer<typeof ContentItemSchema>;
 export type ContentObservation = z.infer<typeof ContentObservationSchema>;
@@ -103,6 +141,8 @@ export type StoryUnit = z.infer<typeof StoryUnitSchema>;
 export type OrganizationConfig = z.infer<typeof OrganizationConfigSchema>;
 export type OrganizationInput = z.infer<typeof OrganizationInputSchema>;
 export type OrganizationResult = z.infer<typeof OrganizationResultSchema>;
+export type SparseAssociationInput = z.infer<typeof SparseAssociationInputSchema>;
+export type SparseOrganizationResult = z.infer<typeof SparseOrganizationResultSchema>;
 
 export class ContentOrganizationError extends Error {
   constructor(public readonly code: string) { super(code); }
@@ -145,6 +185,40 @@ export function validateOrganizationInput(raw: unknown): OrganizationInput {
     const to = association.toContentId ? contentById.get(association.toContentId) : undefined;
     if(!from || !to) fail('FOREIGN_ASSOCIATION_CONTENT');
     if(association.evidenceRefs.some(ref => !from.evidenceIds.includes(ref) && !to.evidenceIds.includes(ref))) fail('FOREIGN_ASSOCIATION_EVIDENCE');
+  }
+  return input;
+}
+
+export function validateSparseAssociationInput(raw: unknown): SparseAssociationInput {
+  const input = SparseAssociationInputSchema.parse(raw);
+  if(input.decisionPolicy.mode !== 'shadow') fail('ACTIVE_DECISION_POLICY_NOT_IMPLEMENTED');
+  validateOrganizationInput({
+    scope: input.scope,
+    contents: input.contents,
+    observations: input.observations,
+    explicitAssociations: input.explicitAssociations,
+    createdAt: input.createdAt,
+    config: {}
+  });
+  const active = new Map(input.contents.filter(content => content.lifecycle === 'active').map(content => [content.contentId, content]));
+  const ids = new Set<string>();
+  const pairs = new Set<string>();
+  const perSource = new Map<string, number>();
+  for(const candidate of input.retrievalCandidates) {
+    if(ids.has(candidate.candidateId)) fail('DUPLICATE_RETRIEVAL_CANDIDATE');
+    ids.add(candidate.candidateId);
+    if(!sameScope(candidate.scope, input.scope)) fail('CROSS_SCOPE');
+    const from = active.get(candidate.fromContentId);
+    const to = active.get(candidate.toContentId);
+    if(!from || !to) fail('FOREIGN_RETRIEVAL_CONTENT');
+    const pair = [...[candidate.fromContentId, candidate.toContentId].sort(), candidate.relation].join('/');
+    if(pairs.has(pair)) fail('DUPLICATE_RETRIEVAL_PAIR');
+    pairs.add(pair);
+    const allowedEvidence = new Set([...from.evidenceIds, ...to.evidenceIds]);
+    if(candidate.evidenceRefs.some(ref => !allowedEvidence.has(ref))) fail('FOREIGN_RETRIEVAL_EVIDENCE');
+    const count = (perSource.get(candidate.fromContentId) ?? 0) + 1;
+    perSource.set(candidate.fromContentId, count);
+    if(count > input.decisionPolicy.maxCandidatesPerContent) fail('RETRIEVAL_LIMIT_EXCEEDED');
   }
   return input;
 }
@@ -240,4 +314,152 @@ export function organizeContent(raw: unknown): OrganizationResult {
   for(const review of associations.filter(association => association.status === 'needs_review')) { reviewByRoot.add(union.find(review.fromContentId)); if(review.toContentId) reviewByRoot.add(union.find(review.toContentId)); }
   const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations, explicitByRoot.has(union.find(members[0])), reviewByRoot.has(union.find(members[0]))));
   return OrganizationResultSchema.parse({ version: CONTENT_ORGANIZATION_VERSION, scope: input.scope, stories, associations, reviewItems: unique(reviewItems) });
+}
+
+function sparseDecisionResult(candidate: RetrievalCandidate, score: ReturnType<typeof scoreAssociation>, policyVersion: string, createdAt: string): DecisionPolicyResult {
+  const reasons: string[] = ['uncalibrated_policy'];
+  let action: DecisionPolicyResult['action'] = 'review';
+  let riskLevel: DecisionPolicyResult['riskLevel'] = 'medium';
+  if(candidate.stageDecision === 'different') {
+    action = 'auto_separate';
+    riskLevel = 'low';
+    reasons.push('stage_different');
+  } else if(candidate.stageDecision === 'unknown') {
+    reasons.push('stage_unknown');
+  } else if(score.conflicted) {
+    riskLevel = 'high';
+    reasons.push('association_conflict');
+  } else if(score.score >= 0.8) {
+    action = 'auto_link_candidate';
+    riskLevel = 'low';
+    reasons.push('legacy_baseline_high_score');
+  } else {
+    reasons.push('insufficient_link_evidence');
+  }
+  return DecisionPolicyResultSchema.parse({
+    schemaVersion: HYBRID_SCHEMA_VERSION,
+    contractVersion: HYBRID_CONTRACT_VERSION,
+    resultId: `decision_${digest([candidate.candidateId, policyVersion]).slice(7, 31)}`,
+    candidateId: candidate.candidateId,
+    policyVersion,
+    action,
+    riskLevel,
+    shadow: true,
+    inDistribution: false,
+    reasons,
+    createdAt
+  });
+}
+
+/**
+ * Hybrid path: only supplied retrieval candidates are evaluated. The legacy
+ * all-pairs organizer remains available as a reproducible baseline.
+ */
+export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
+  const input = validateSparseAssociationInput(raw);
+  const active = input.contents.filter(content => content.lifecycle === 'active');
+  const contentIds = active.map(content => content.contentId);
+  const contentById = new Map(active.map(content => [content.contentId, content]));
+  const union = new UnionFind(contentIds);
+  const explicitPairs = new Set<string>();
+  const associations: AssociationCandidate[] = [...input.explicitAssociations];
+  const reviewItems: string[] = [];
+  const decisionResults: DecisionPolicyResult[] = [];
+
+  for(const explicit of input.explicitAssociations) {
+    if(!explicit.toContentId) continue;
+    explicitPairs.add([explicit.fromContentId, explicit.toContentId].sort().join('/'));
+    if(explicit.status === 'user_confirmed' && (explicit.relation === 'same_story' || explicit.relation === 'same_event')) {
+      union.union(explicit.fromContentId, explicit.toContentId);
+    }
+  }
+
+  let skippedPersonOnlyCount = 0;
+  let evaluatedCount = 0;
+  for(const candidate of input.retrievalCandidates) {
+    if(candidate.relation === 'same_person') {
+      skippedPersonOnlyCount += 1;
+      decisionResults.push(DecisionPolicyResultSchema.parse({
+        schemaVersion: HYBRID_SCHEMA_VERSION,
+        contractVersion: HYBRID_CONTRACT_VERSION,
+        resultId: `decision_${digest([candidate.candidateId, input.decisionPolicy.policyVersion]).slice(7, 31)}`,
+        candidateId: candidate.candidateId,
+        policyVersion: input.decisionPolicy.policyVersion,
+        action: 'review',
+        riskLevel: 'medium',
+        shadow: true,
+        inDistribution: false,
+        reasons: ['person_relation_not_story_edge', 'uncalibrated_policy'],
+        createdAt: input.createdAt
+      }));
+      continue;
+    }
+    const pair = [candidate.fromContentId, candidate.toContentId].sort().join('/');
+    if(explicitPairs.has(pair)) continue;
+    evaluatedCount += 1;
+    const scored = scoreAssociation(candidate.fromContentId, candidate.toContentId, input.observations);
+    const decision = sparseDecisionResult(candidate, scored, input.decisionPolicy.policyVersion, input.createdAt);
+    decisionResults.push(decision);
+    const status: AssociationCandidate['status'] = candidate.stageDecision === 'different'
+      ? 'not_selected'
+      : candidate.stageDecision === 'unknown' || scored.conflicted
+        ? 'needs_review'
+        : scored.score >= 0.8
+          ? 'ai_auto'
+          : scored.score >= 0.55
+            ? 'needs_review'
+            : 'not_selected';
+    const from = contentById.get(candidate.fromContentId)!;
+    const to = contentById.get(candidate.toContentId)!;
+    const association = AssociationCandidateSchema.parse({
+      associationId: `assoc_${digest([candidate.candidateId, candidate.relation]).slice(7, 31)}`,
+      fromContentId: candidate.fromContentId,
+      toContentId: candidate.toContentId,
+      relation: candidate.relation === 'same_event' ? 'same_event' : candidate.relation === 'same_story' ? 'same_story' : 'related',
+      source: 'ai_inferred',
+      status,
+      score: scored.score,
+      confidenceBand: scored.confidenceBand,
+      method: `${candidate.method}:${ASSOCIATION_RULES_VERSION}`,
+      evidenceRefs: unique([...candidate.evidenceRefs, ...scored.evidenceRefs, ...from.evidenceIds, ...to.evidenceIds]),
+      createdAt: input.createdAt
+    });
+    associations.push(association);
+    if(status === 'ai_auto') union.union(candidate.fromContentId, candidate.toContentId);
+    if(status === 'needs_review') reviewItems.push(`NEEDS_REVIEW:${association.associationId}`);
+    if(scored.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
+  }
+
+  const explicitByRoot = new Set<string>();
+  for(const explicit of input.explicitAssociations) {
+    if(explicit.status === 'user_confirmed' && explicit.toContentId) explicitByRoot.add(union.find(explicit.fromContentId));
+  }
+  const reviewByRoot = new Set<string>();
+  for(const association of associations.filter(item => item.status === 'needs_review')) {
+    reviewByRoot.add(union.find(association.fromContentId));
+    if(association.toContentId) reviewByRoot.add(union.find(association.toContentId));
+  }
+  const stories = [...union.groups().values()].map(members => buildStory(
+    input.scope,
+    members,
+    active,
+    input.observations,
+    explicitByRoot.has(union.find(members[0])),
+    reviewByRoot.has(union.find(members[0]))
+  ));
+  return SparseOrganizationResultSchema.parse({
+    version: SPARSE_CONTENT_ORGANIZATION_VERSION,
+    scope: input.scope,
+    stories,
+    associations,
+    decisionResults,
+    reviewItems: unique(reviewItems),
+    retrievalAudit: {
+      candidateCount: input.retrievalCandidates.length,
+      evaluatedCount,
+      skippedPersonOnlyCount,
+      maxCandidatesPerContent: input.decisionPolicy.maxCandidatesPerContent,
+      policyMode: 'shadow'
+    }
+  });
 }
