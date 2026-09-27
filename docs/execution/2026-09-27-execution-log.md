@@ -86,23 +86,63 @@ Evidence 门禁
 
 ## 当前决策门禁
 
-T0/T1 顺序、责任边界、轻量实验台和首批真实材料规模已经确认，H0/H1 可以开始。仍需在 exploration 后、查看独立 holdout 前冻结语义数值 Gate；这不阻塞契约、稀疏候选、适配器和实验台的工程实现。
+T0/T1 顺序、责任边界、轻量实验台和首批真实材料规模已经确认。H0/H1 和 T1 本地工程闭环已完成。仍需在 exploration 后、查看独立 holdout 前冻结语义数值 Gate。
 
-混合召回架构已获产品方向批准；具体本地模型/checkpoint、许可、资源和数值阈值仍必须经过 H2 Source Gate 与真实数据验证。
+混合召回架构已获产品方向批准；具体本地模型/checkpoint、许可、资源和数值阈值仍必须经过 H2 Source Gate 与真实数据验证。30–50 组真实素材、人工真值和授权是当前实际门禁。
 
 ## 候选下一任务与结束标准
 
-上述决策完成后，候选的下一次提交执行 H0 + H1：
+工程主线的下一步是执行 T0-B/T0-C：
 
-1. 冻结 `AssetFeature`、`RetrievalCandidate`、`SparseAssociationInput`、`FamilyReference`、`DecisionPolicy`；
-2. 先写 250 项输入不允许全量 pair 的回归；
-3. 让内容组织器消费稀疏候选边；
-4. 实现 `Stage A Observation/Group → ContentObservation`；
-5. 运行分类回归、typecheck、密钥扫描和 diff 检查；
-6. 一个小提交结束，不安装模型、不调用付费 API、不接生产数据库。
+1. 收集并授权 30–50 组真实图片、用户说明和 final ASR；
+2. 完成独立人工真值、leakage group 和固定分母；
+3. 运行离线 preflight 并冻结 manifest/truth digest；
+4. 先跑 deterministic/Fake，再按单独批准运行真实 Provider；
+5. 输出候选召回、错误合并/拆分、拒判、费用、请求数和时延报告；
+6. 完成 T1 30 项人工操作验收并交给全栈进入 T2。
 
 ## 验证记录
 
-- 本轮为文档与架构规划，不构成真实准确率、真实产品效果或本地模型性能结论。
+- 文档规划和随后完成的本地工程门禁均不构成真实准确率、真实产品效果或本地模型性能结论。
 - `git diff --check`：通过。
 - Mermaid CLI 在当前依赖中不可用，因此保留 `.mmd` 与 Markdown Mermaid 预览；未宣称 PNG 已渲染验证。
+
+## 当日工程实施结果
+
+用户确认只由本窗口完成 T0/T1，并要求形成可直接交给全栈的工程包后，实际完成了：
+
+- `0043171`：冻结 hybrid retrieval、FamilyReference 和 DecisionPolicy 契约；
+- `d1cabef`：组织器支持稀疏候选输入；
+- `f4f78ec`：Stage A Observation/Group 接入 `ContentObservation`；
+- `fded904`：增加 bounded exact top-K 召回基线；
+- `42b86d4`：冻结图文/final ASR、单图/多图/批次和家庭互传 ingestion v2；
+- `d1393da`：接通 ingestion 到 StoryUnit 的输入桥；
+- `7d7cd42`：增加供未来 30–50 组真实素材使用的 manifest/truth 离线门禁；该提交内的测试 fixture 非真实素材；
+- `fe9b0da`：增加 loopback BFF、本地任务与确定性 Provider；
+- `44f845d`：修正 AI 生成 StoryUnit 被用户显式 binding 错误升级为 `user_confirmed` 的边界；
+- `d9d971f`：增加 `/classification-lab` 浏览器实验台及 loopback 专用启动命令；
+- `44371d0`：增加确认、拒绝、移出、拆分、合并、删除和撤权七类 append-only 动作。
+- `3841dd0`：把 T0 自动化中的 30 组程序生成素材明确改名为 synthetic contract fixture，避免误报成真实素材验收。
+
+浏览器实际提交了 2 张非真实的程序生成测试图、用户原文和 final ASR：服务端形成 4 份独立 Evidence、1 个 StoryUnit，耗时 30ms，模型调用 0、费用 ¥0.00。随后通过独立 `accept_story` 动作把故事从“AI 整理候选”升级为“用户已确认”，动作审计可见。删除与撤权只在临时目录自动化测试中执行，没有在浏览器验收中破坏样本。
+
+168 项回归中的“30 组”同样是运行时构造的 2×2 PNG/文字契约 fixture，只证明真实素材 preflight 工具能校验结构、哈希、分母和场景覆盖；它不是 30 组真实照片，也不能计入 T0/T1 真实验证。
+
+浏览器验收发现并修复两项问题：
+
+1. 通用 `npm run dev` 监听 `0.0.0.0`，与实验台 loopback 门禁冲突；新增 `npm run classification:lab` 固定监听 `127.0.0.1`；
+2. 用户明确绑定文字与图片不等于确认 AI 生成的标题/故事；现在关系仍为 `user_confirmed`，StoryUnit 保持 `ai_candidate`，只有 `accept_story` 可升级。
+
+最终工程门禁：
+
+- `npm run test:classification`：168/168 通过；
+- `npm run typecheck`：通过；
+- 使用仅限构建进程的临时 JWT 值执行 `npm run build`：通过；
+- `npm run test:classification:secret`：通过；
+- `git diff --check`：通过。
+
+全栈权威交接文件为 [图文分类 T0/T1 全栈交接手册](../algorithms/CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)。当前未完成项是 30–50 组真实素材、独立真值、T0 固定分母真实评测和 T1 30 项人工验收；因此不能声称真实准确率、跨家庭泛化或产品上线完成。
+
+## 下一任务
+
+主线下一任务是 T0-B/T0-C 真实数据验证：产品负责人准备 30–50 组已授权真实图片、用户说明和 final ASR；算法侧运行离线 preflight、冻结真值和固定分母，再决定具体真实 Provider 调用。H2 本地 OCR/embedding/近重复 Spike 可以并行准备，但在 license manifest 与真实数据门禁完成前不形成正式选型结论。

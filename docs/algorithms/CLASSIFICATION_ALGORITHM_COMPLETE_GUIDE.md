@@ -1,7 +1,8 @@
 # SGX 图文分类与归纳算法：完整架构、Prompt、规则与评分器
 
-> 当前统一阅读入口 · 文档版本：1.0.0 · 更新日期：2026-09-27<br>
-> 当前代码版本：`classification-stage-a.1` · 当前 Prompt 版本：`sgx-five-facets.6`
+> 当前统一阅读入口 · 文档版本：1.1.0 · 更新日期：2026-09-27<br>
+> 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt 版本：`sgx-five-facets.6`<br>
+> 全栈接入与运行命令见：[T0/T1 全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)
 
 ## 1. 先看结论
 
@@ -9,18 +10,20 @@
 
 当前不能把模型结果直接当作用户事实。模型只能提出候选，所有候选都必须能追溯到照片、原文、EXIF、OCR 或 final ASR。冲突、未知和拒判必须保留。只有经过用户确认、仍在授权范围内、来源未被删除或撤回的事实，未来才可以进入长期 Memory。
 
-仓库里已经有三条相邻的链，但目前还没有完全串起来：
+仓库里的三条算法链已经通过 ingestion bridge、Stage A adapter 和稀疏组织器完成工程接线；T1 本地实验台使用确定性 Provider 跑通浏览器闭环：
 
 |链路|当前状态|主要输入与输出|
 |---|---|---|
 |通用业务契约链|已实现契约、Fake 与校验|`ContentBundle → ClassificationProviderRequest → ClassificationAssertion`|
 |Stage A 真实视觉算法链|已实现；真实模型仅做过少量工程探针|`TrustedStageACatalog → Observation / Edge / Group`|
-|统一内容与 StoryUnit 组织链|已实现确定性规则与测试|`ContentItem + ContentObservation → AssociationCandidate → StoryUnit`|
+|统一内容与 StoryUnit 组织链|已实现 bounded retrieval、稀疏组织与测试|`ContentItem + ContentObservation + RetrievalCandidate → StoryUnit`|
+|T1 本地产品链|已实现 loopback BFF、实验页与动作审计|`Browser upload → Evidence → Provider base result → LabAction → current view`|
 
-当前还缺两段生产接线：
+当前还缺三段生产接线：
 
-1. `Stage A Observation/Group → ContentObservation` 的正式适配器；
-2. 独立纯文字、纯 final ASR 的真实抽取 Provider。
+1. 把真实 Stage A、OCR、embedding 和 VLM router 接入实验台 Provider；
+2. 把本地文件适配器替换为生产数据库、对象存储、队列和正式鉴权；
+3. 使用 30–50 组真实素材完成 T0/T1 固定分母评测与人工验收。
 
 因此，当前 `StoryUnit` 的标题、摘要和关联分数是规则生成的工程候选，不是已经验证的真实 AI 摘要或概率。
 
@@ -573,8 +576,10 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 - 纯文字、纯 final ASR 的独立真实分类；
 - StoryUnit 的真实 AI 标题摘要质量；
 - 自动关联分数经过概率校准；
-- 产品上传、确认、纠错、撤回、删除和 Memory 的浏览器闭环；
+- 真实 Provider 驱动的正式产品上传、确认、纠错、撤回、物理删除和 Memory 闭环；
 - 用户收益、访谈提升或真实家庭泛化。
+
+本地 T1 已用确定性 Provider 跑通上传、确认、纠错、逻辑删除和撤权浏览器闭环；这只证明工程接线，不属于上述真实效果证据。
 
 合成数据集 `ACCEPTED` 只说明数据包与离线工程链符合冻结标准，不能写成模型准确率或产品效果。
 
@@ -582,18 +587,18 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 
 用户已经明确要求降低图片两两模型调用、减少人工确认并保证长期泛化，因此执行顺序更新为：
 
-1. 冻结混合召回与渐进自动化契约，保留当前实现作为 baseline；
-2. 实现 Stage A 到 `ContentObservation` 的适配器；
-3. 让内容组织器消费稀疏候选边，移除正常路径的全量两两枚举；
-4. 在隔离环境做 pHash、EXIF、PaddleOCR、SigLIP/OpenCLIP 和 exact/ANN 召回 Spike；
-5. 用真实 exploration 数据验证 Recall@K、成本、调用量、时延和高风险切片；
-6. 实现只处理 ambiguous/merge-impact 的 VLM router 和组级摘要；
-7. 用按家庭/事件隔离的 calibration/holdout 校准 scorer，正式冻结数值 Gate；
-8. 建立版本化 FamilyReferenceStore，使确认随参考增加而减少；
-9. 接入持久 Job、相册 UI、批量复核、删除传播和 MemoryCandidate；
-10. 完成浏览器 E2E 和小规模真实产品验证。
+1. **已完成**：冻结混合召回与渐进自动化契约，保留旧规则作为 baseline；
+2. **已完成**：实现 Stage A 到 `ContentObservation` 的适配器；
+3. **已完成**：让新组织器消费稀疏候选边，并提供 bounded exact top-K；
+4. **已完成工程入口**：本地 T1 实验台、动作审计和全栈 adapter 边界；
+5. **当前待办**：准备 30–50 组真实素材并完成固定分母 T0/T1 验收；
+6. 在隔离环境做 pHash、EXIF、PaddleOCR、SigLIP/OpenCLIP 和 exact/ANN 召回 Spike；
+7. 实现只处理 ambiguous/merge-impact 的 VLM router 和组级摘要；
+8. 用按家庭/事件隔离的 calibration/holdout 校准 scorer，正式冻结数值 Gate；
+9. 建立版本化 FamilyReferenceStore，使确认随参考增加而减少；
+10. 由全栈接入生产 Job、相册 UI、批量复核、物理删除传播和 MemoryCandidate，再进入 T3。
 
-详细候选任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Draft Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)。它仍待产品负责人确认自动化权限、错误取舍、确认交互、性能目标和部署范围；完成这些决策后再冻结并安排 H0 + H1。
+详细任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)；T0/T1 的实际运行和全栈替换点见 [全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)。
 
 ## 17. 源码与文档导航
 
@@ -605,6 +610,7 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 |候选检索、关系和归组|[`stage-a-association.ts`](../../src/lib/algorithms/classification/stage-a-association.ts)|
 |可信 Evidence 适配|[`stage-a-adapter.ts`](../../src/lib/algorithms/classification/stage-a-adapter.ts)|
 |StoryUnit 与内容组织|[`content-organization.ts`](../../src/lib/algorithms/classification/content-organization.ts)|
+|T0/T1 全栈交接、HTTP 与本地运行|[`CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md`](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)|
 |Manifest、Truth、Approval 与评分器|[`stage-a-evaluation.mjs`](../../harness/classification/stage-a-evaluation.mjs)|
 |批次执行与报告|[`stage-a-eval.mjs`](../../harness/classification/stage-a-eval.mjs)|
 |可信输入集成 Spec|[`2026-09-23-classification-stage-a-integration-spec.md`](../superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md)|

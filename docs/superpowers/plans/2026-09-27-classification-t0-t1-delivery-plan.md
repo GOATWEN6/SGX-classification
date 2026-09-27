@@ -1,7 +1,7 @@
 # 图文分类 T0/T1 实施与全栈交付计划
 
-> 状态：Active  
-> 日期：2026-09-27  
+> 状态：工程交付完成；真实素材 T0/T1 验收待执行
+> 日期：2026-09-27
 > 产品依据：[混合召回、按需 VLM 与渐进自动化 Spec](../specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)
 
 ## 1. 目标与责任边界
@@ -15,6 +15,15 @@
 全栈在此基础上负责 T2 的生产数据库、对象存储、队列、鉴权、双端互传和正式智能相册页面。T3 使用另一套跨家庭独立数据；不得复用 T0/T1 素材或调参信息证明泛化。
 
 本计划不调用付费 API，不读取密钥，不部署，不 push，不制作正式相册 UI。真实 Provider 运行仍需按具体模型、批次、费用和授权单独审批。
+
+### 1.1 2026-09-27 完成快照
+
+- P0、T0-A、T0-B 门禁工具、T1-A 和 T1-B 已实现；
+- `classification:lab` 已在 loopback 浏览器完成图片 + 原文 + final ASR smoke；
+- 七类纠错/生命周期动作已接入 append-only action log；
+- 168 项分类回归、typecheck、build 和 secret scan 通过；
+- 权威交接入口为 [`CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md`](../../algorithms/CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)；
+- T0-C 与 T1-C 仍等待 30–50 组授权真实素材及独立人工真值，不能标成真实效果完成。
 
 ## 2. 依赖顺序
 
@@ -98,11 +107,12 @@ Gate：30 项达到批准的等待体验；typecheck、分类回归、secret sca
 2. `classification: accept sparse association candidates`
 3. `classification: bridge stage-a observations`
 4. `classification: add bounded exact retrieval baseline`
-5. `evaluation: prepare frozen real-media T0 batch`
+5. `evaluation: prepare frozen real-media T0 batch`（门禁工具；回归素材为 synthetic fixture）
 6. `lab-api: add local classification runtime`
 7. `lab-ui: add local classification workbench`
 8. `lab-actions: add correction and lifecycle controls`
-9. `qa: freeze T1 acceptance and full-stack handoff`
+9. `test: label T0 fixtures as synthetic`
+10. `qa: freeze T1 acceptance and full-stack handoff`
 
 每个提交独立可回退。共享状态机、`package.json`、执行日志和最终交接由主线统一维护。
 
