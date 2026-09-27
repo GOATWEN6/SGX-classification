@@ -55,9 +55,20 @@
 .metrics span { min-width: 110px; padding: 10px 13px; border-radius: 12px; background: #f5f0e8; color: #75695d; font-size: 12px; }
 .metrics strong { display: block; color: #3b332c; font-size: 17px; }
 .notice { margin: 20px 0; padding: 13px 16px; border-left: 4px solid #bd8a50; border-radius: 8px; background: #fff7e8; color: #725633; }
+.actionBar { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 18px; padding: 12px 14px; border-radius: 14px; background: #eef4ef; color: #496254; font-size: 13px; }
+.actionBar > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.smallAction, .dangerAction, .memberActions button, .rowAction button { min-height: 34px; padding: 7px 11px; border: 1px solid #bfcfc4; border-radius: 9px; background: white; color: #315c48; box-shadow: none; font-size: 12px; }
+.smallAction:hover, .memberActions button:hover, .rowAction button:hover { background: #e8f1eb; }
+.smallAction:disabled, .dangerAction:disabled, .memberActions button:disabled, .rowAction button:disabled { cursor: not-allowed; opacity: .45; }
+.dangerAction { border-color: #d7aaa2; color: #8a4037; }
+.dangerAction:hover, .dangerText:hover { background: #fff0ed !important; }
+.revoked { margin-top: 18px; padding: 14px 16px; border: 1px solid #d7aaa2; border-radius: 14px; background: #fff0ed; color: #7c3c34; }
 .storyGrid { display: grid; gap: 16px; }
 .storyCard { padding: 20px; border: 1px solid #ddd1c2; border-radius: 18px; background: #fff; }
 .storyTop { display: flex; justify-content: space-between; gap: 20px; }
+.storyTools { display: flex; align-items: flex-end; flex-direction: column; gap: 7px; }
+.mergeCheck { display: flex; align-items: center; gap: 6px; color: #6f6458; font-size: 12px; white-space: nowrap; }
+.mergeCheck input { width: 16px; min-height: 16px; }
 .storyTop h3 { margin: 7px 0 4px; font-family: Georgia, 'Songti SC', serif; font-size: 27px; }
 .state { padding: 4px 8px; border-radius: 999px; background: #e6efe9; color: #2f5b47; font-size: 11px; font-weight: 800; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -67,6 +78,7 @@
 .member img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 9px; background: #e9e5df; }
 .member blockquote { min-height: 110px; margin: 0 0 8px; padding: 14px; border-left: 3px solid #b79268; border-radius: 7px; background: white; color: #53473b; }
 .member > strong { display: block; margin: 7px 0; }
+.memberActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .storyCard details { margin-top: 14px; color: #6f6358; font-size: 13px; }
 .storyCard summary { cursor: pointer; font-weight: 700; }
 .detailGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
@@ -77,6 +89,8 @@
 .row strong, .row small { display: block; }
 .row small { color: #8b8075; }
 .row > span, .row > strong { max-width: 54%; overflow-wrap: anywhere; text-align: right; }
+.rowAction { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; max-width: 54%; overflow-wrap: anywhere; text-align: right; }
+.dangerText { border-color: transparent !important; background: transparent !important; color: #9a493f !important; }
 .risk { margin: 8px 0 0; color: #9b493d; font-size: 13px; }
 .footer { max-width: 1440px; margin: 26px auto 0; padding: 22px; }
 .footer code { display: block; overflow-x: auto; margin: 10px 0; padding: 12px; border-radius: 10px; background: #2f2924; color: #f7ead8; font-size: 13px; }

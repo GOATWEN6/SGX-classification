@@ -34,13 +34,15 @@ type Association = {
   score?: number;
   evidenceRefs: string[];
 };
+type LabActionKind = 'accept_story' | 'reject_association' | 'remove_content' | 'split_content' | 'merge_stories' | 'delete_evidence' | 'revoke_authorization';
+type LabAction = { actionId: string; kind: LabActionKind; targetIds: string[]; actorId: string; createdAt: string };
 type LabJob = {
   jobId: string;
   status: string;
   createdAt: string;
   updatedAt: string;
   scope: { householdId: string; subjectId: string };
-  envelope: { context: { kind: string }; evidence: Evidence[]; contents: Content[] };
+  envelope: { actorId: string; authorizationRevision: string; context: { kind: string }; evidence: Evidence[]; contents: Content[] };
   originalTextByEvidenceId: Record<string, string>;
   result?: {
     provider: { mode: string; providerVersion: string; modelVersion: string; evidenceStatus: string; accuracyClaim: string };
@@ -51,6 +53,8 @@ type LabJob = {
   };
   metrics?: { latencyMs: number; modelRequests: number; costCny: number };
   error?: { code: string };
+  actions: LabAction[];
+  view?: { source: string; actionCount: number; authorizationState: 'active' | 'revoked' };
 };
 type Capabilities = {
   enabled: boolean;
@@ -69,7 +73,12 @@ const errorCopy: Record<string, string> = {
   IMAGE_PIXEL_LIMIT: '单张图片超过 4000 万像素。',
   TOO_MANY_IMAGES: '一次最多上传 20 张图片。',
   EMPTY_SUBMISSION: '请至少添加图片、用户说明或最终 ASR 文字之一。',
-  REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: '真实模型适配器尚未配置，本阶段只能使用本地确定性基线。'
+  REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: '真实模型适配器尚未配置，本阶段只能使用本地确定性基线。',
+  LAB_ACTION_STALE: '任务已在其他页面更新，请刷新后再操作。',
+  LAB_ACTION_ACTOR_FORBIDDEN: '当前操作人没有权限修改这批结果。',
+  LAB_AUTHORIZATION_REVOKED: '本批授权已经撤销，不能继续修改或读取素材。',
+  LAB_STORY_NOT_FOUND: '目标故事已经变化，请刷新后重试。',
+  LAB_CONTENT_NOT_IN_STORY: '该内容已经不在当前故事中。'
 };
 
 function shortHash(value?: string) { return value ? `${value.slice(0, 15)}…${value.slice(-6)}` : '—'; }
@@ -80,6 +89,9 @@ function storyStateCopy(state: string) {
   return ({ ai_candidate: 'AI 整理候选', needs_review: '待确认', user_confirmed: '用户已确认', withdrawn: '已撤回' } as Record<string, string>)[state] ?? state;
 }
 function modalityCopy(modality: string) { return ({ image: '图片', user_text: '用户原文', final_asr: '最终 ASR' } as Record<string, string>)[modality] ?? modality; }
+function actionCopy(kind: LabActionKind) {
+  return ({ accept_story: '确认故事', reject_association: '拒绝关系', remove_content: '移出整理', split_content: '单独成组', merge_stories: '合并故事', delete_evidence: '删除素材', revoke_authorization: '撤销授权' } as Record<LabActionKind, string>)[kind];
+}
 
 export default function ClassificationLabPage() {
   const [files, setFiles] = useState<File[]>([]);
@@ -98,6 +110,7 @@ export default function ClassificationLabPage() {
   const [history, setHistory] = useState<LabJob[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -152,6 +165,40 @@ export default function ClassificationLabPage() {
       const code = value instanceof Error ? value.message : 'LAB_REQUEST_FAILED';
       setError(errorCopy[code] ?? `处理失败：${code}`);
     } finally { setLoading(false); }
+  };
+
+  const performAction = async (kind: LabActionKind, targetIds: string[]) => {
+    if(!job || loading || job.view?.authorizationState === 'revoked') return;
+    if(kind === 'delete_evidence' && !window.confirm('删除后该素材将不再参与分类、搜索或故事展示。确认删除吗？')) return;
+    if(kind === 'revoke_authorization' && !window.confirm('撤销后整批素材将停止展示和后续使用。确认撤销本批授权吗？')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/classification-lab', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-sgx-classification-lab': '1' },
+        body: JSON.stringify({
+          jobId: job.jobId,
+          actionId: `action_${crypto.randomUUID()}`,
+          expectedUpdatedAt: job.updatedAt,
+          kind,
+          targetIds,
+          actorId: job.envelope.actorId
+        })
+      });
+      const body = await response.json();
+      if(!response.ok) throw new Error(body.error?.code ?? 'LAB_ACTION_FAILED');
+      setJob(body.job);
+      setHistory(current => current.map(item => item.jobId === body.job.jobId ? body.job : item));
+      setSelectedStoryIds([]);
+    } catch(value) {
+      const code = value instanceof Error ? value.message : 'LAB_ACTION_FAILED';
+      setError(errorCopy[code] ?? `操作失败：${code}`);
+    } finally { setLoading(false); }
+  };
+
+  const toggleStory = (storyId: string) => {
+    setSelectedStoryIds(current => current.includes(storyId) ? current.filter(value => value !== storyId) : [...current, storyId]);
   };
 
   const contentById = useMemo(() => new Map(job?.envelope.contents.map(content => [content.contentId, content]) ?? []), [job]);
@@ -244,11 +291,27 @@ export default function ClassificationLabPage() {
             <span><strong>{job.metrics?.modelRequests ?? 0}</strong>模型调用</span>
           </div>
         </div>
+        {job.view?.authorizationState === 'revoked'
+          ? <div className={styles.revoked}><strong>本批授权已撤销。</strong>素材预览、后续整理和下游使用均已停止；动作审计仍保留。</div>
+          : <div className={styles.actionBar}>
+              <span>已记录 {job.actions?.length ?? 0} 次人工动作</span>
+              <div>
+                {(job.result?.organization.stories.length ?? 0) > 1 && <button type="button" className={styles.smallAction} disabled={selectedStoryIds.length < 2 || loading} onClick={() => void performAction('merge_stories', selectedStoryIds)}>合并所选故事（{selectedStoryIds.length}）</button>}
+                <button type="button" className={styles.dangerAction} disabled={loading} onClick={() => void performAction('revoke_authorization', [job.envelope.authorizationRevision])}>撤销本批授权</button>
+              </div>
+            </div>}
         <div className={styles.notice}><strong>AI 整理状态：</strong>当前结果来自规则/确定性集成基线，只用于验证数据流和产品交互。图片本身尚未经过真实视觉模型理解。</div>
 
         <div className={styles.storyGrid}>
           {job.result?.organization.stories.map(story => <article className={styles.storyCard} key={story.storyId}>
-            <div className={styles.storyTop}><div><span className={styles.state}>{storyStateCopy(story.state)}</span><h3>{story.titleCandidate}</h3></div><small>{story.memberContentIds.length} 项内容</small></div>
+            <div className={styles.storyTop}>
+              <div><span className={styles.state}>{storyStateCopy(story.state)}</span><h3>{story.titleCandidate}</h3></div>
+              <div className={styles.storyTools}>
+                {job.view?.authorizationState !== 'revoked' && <label className={styles.mergeCheck}><input type="checkbox" checked={selectedStoryIds.includes(story.storyId)} onChange={() => toggleStory(story.storyId)} />选择合并</label>}
+                <small>{story.memberContentIds.length} 项内容</small>
+                {job.view?.authorizationState !== 'revoked' && story.state !== 'user_confirmed' && <button type="button" className={styles.smallAction} disabled={loading} onClick={() => void performAction('accept_story', [story.storyId])}>确认这个故事</button>}
+              </div>
+            </div>
             <p>{story.summaryCandidate}</p>
             <div className={styles.chips}>{[...story.facets.people, ...story.facets.times, ...story.facets.places, ...story.facets.themes].map(value => <span key={value}>{value}</span>)}</div>
             <div className={styles.members}>
@@ -262,6 +325,10 @@ export default function ClassificationLabPage() {
                     : <blockquote>{job.originalTextByEvidenceId[evidence.evidenceId]}</blockquote>}
                   <strong>{modalityCopy(content.modality)}</strong>
                   <div className={styles.chips}>{(observationByContent.get(contentId) ?? []).filter(item => item.facet !== 'content_type').map(item => <span key={`${item.facet}-${item.rawValue}`}>{item.facet}: {item.rawValue}</span>)}</div>
+                  {job.view?.authorizationState !== 'revoked' && <div className={styles.memberActions}>
+                    {story.memberContentIds.length > 1 && <button type="button" disabled={loading} onClick={() => void performAction('split_content', [contentId])}>单独成组</button>}
+                    <button type="button" disabled={loading} onClick={() => void performAction('remove_content', [contentId])}>移出整理</button>
+                  </div>}
                 </div>;
               })}
             </div>
@@ -271,11 +338,11 @@ export default function ClassificationLabPage() {
 
         <div className={styles.detailGrid}>
           <section className={styles.detailCard}><h3>关系与风险</h3>
-            {(job.result?.organization.associations.length ?? 0) === 0 ? <p className={styles.empty}>没有产生关系候选。</p> : job.result?.organization.associations.map(item => <div className={styles.row} key={item.associationId}><div><strong>{item.relation}</strong><small>{item.source} · {item.status}</small></div><span>{item.score === undefined ? '用户明确指定' : `规则分 ${item.score.toFixed(2)}`}</span></div>)}
+            {(job.result?.organization.associations.length ?? 0) === 0 ? <p className={styles.empty}>没有产生关系候选。</p> : job.result?.organization.associations.map(item => <div className={styles.row} key={item.associationId}><div><strong>{item.relation}</strong><small>{item.source} · {item.status}</small></div><div className={styles.rowAction}><span>{item.score === undefined ? '用户明确指定' : `规则分 ${item.score.toFixed(2)}`}</span>{job.view?.authorizationState !== 'revoked' && item.status !== 'rejected' && <button type="button" disabled={loading} onClick={() => void performAction('reject_association', [item.associationId])}>拒绝关系</button>}</div></div>)}
             {job.result?.organization.reviewItems.map(item => <p className={styles.risk} key={item}>{item}</p>)}
           </section>
           <section className={styles.detailCard}><h3>输入 Evidence</h3>
-            {job.envelope.evidence.map(item => <div className={styles.row} key={item.evidenceId}><div><strong>{item.modality ? modalityCopy(item.modality === 'text' ? 'user_text' : item.modality === 'transcript' ? 'final_asr' : 'image') : '删除记录'}</strong><small>{item.evidenceId}</small></div><span title={item.sourceHash}>{shortHash(item.sourceHash)}</span></div>)}
+            {job.envelope.evidence.map(item => <div className={styles.row} key={item.evidenceId}><div><strong>{item.modality ? modalityCopy(item.modality === 'text' ? 'user_text' : item.modality === 'transcript' ? 'final_asr' : 'image') : '删除记录'}</strong><small>{item.evidenceId}</small></div><div className={styles.rowAction}><span title={item.sourceHash}>{shortHash(item.sourceHash)}</span>{job.view?.authorizationState !== 'revoked' && item.lifecycleState !== 'deleted' && <button type="button" className={styles.dangerText} disabled={loading} onClick={() => void performAction('delete_evidence', [item.evidenceId])}>删除素材</button>}</div></div>)}
           </section>
           <section className={styles.detailCard}><h3>运行审计</h3>
             <div className={styles.row}><span>Provider</span><strong>{job.result?.provider.providerVersion ?? '—'}</strong></div>
@@ -283,6 +350,9 @@ export default function ClassificationLabPage() {
             <div className={styles.row}><span>候选边</span><strong>{job.result?.retrieval.candidateCount ?? 0}</strong></div>
             <div className={styles.row}><span>内部比较</span><strong>{job.result?.retrieval.comparisonCount ?? 0}</strong></div>
             <div className={styles.row}><span>分数含义</span><strong>召回启发值，非概率</strong></div>
+          </section>
+          <section className={styles.detailCard}><h3>人工动作审计</h3>
+            {(job.actions?.length ?? 0) === 0 ? <p className={styles.empty}>尚无人工修改，当前视图等于 Provider 原始结果。</p> : job.actions.map(item => <div className={styles.row} key={item.actionId}><div><strong>{actionCopy(item.kind)}</strong><small>{new Date(item.createdAt).toLocaleString('zh-CN')}</small></div><span>{item.targetIds.length} 个目标</span></div>)}
           </section>
         </div>
       </section>}
