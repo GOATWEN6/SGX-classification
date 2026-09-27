@@ -1,5 +1,12 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-09-27：新增 T0/T1 真实素材离线冻结契约
+> [`classification-t0-real-media-v2.schema.json`](classification-t0-real-media-v2.schema.json)，
+> 固定 `specVersion=2.0.0`、30–50 组分母、真实用户授权来源、exploration / T1 validation
+> 防泄漏分区和独立真值结构。它不包含媒体原件，也不是模型准确率结果；跨字段、文件哈希、
+> MIME/尺寸、路径安全和覆盖矩阵由
+> `src/lib/algorithms/classification/t0-real-media.ts` 离线校验。
+
 > 2026-09-27：新增多模态入口契约
 > [`classification-ingestion-v2.schema.json`](classification-ingestion-v2.schema.json)，
 > 固定 `specVersion=2.0.0`，覆盖 `album_upload / family_transfer`、纯文本、

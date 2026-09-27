@@ -14,7 +14,13 @@ npm run classification:demo -- success
 npm run classification:demo -- conflicted
 npm run classification:demo -- timeout
 npm run classification:fake-http
+npm run classification:t0-preflight -- --manifest /受控目录/manifest.json
 ```
+
+`classification:t0-preflight` 只读取本地受控目录，不读取密钥、不联网、不调用模型。真实素材目录结构、
+真值字段和 30–50 组覆盖要求见
+[`CLASSIFICATION_T0_REAL_MEDIA_KIT.md`](../../docs/algorithms/CLASSIFICATION_T0_REAL_MEDIA_KIT.md)。
+原始家庭媒体和真值文件必须保存在 Git 仓库之外。
 
 准备 synthetic-v2 首轮真实 API 探索包：
 

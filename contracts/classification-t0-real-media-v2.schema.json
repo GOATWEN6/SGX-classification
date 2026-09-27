@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-t0-real-media:v2",
+  "title": "SGX T0/T1 authorized real-media dataset v2",
+  "definitions": {
+    "ScenarioTag": {
+      "enum": [
+        "single_image", "multi_image", "text_only", "asr_only", "image_text", "image_asr", "image_text_asr",
+        "album_upload", "family_transfer", "batch_text", "explicit_multi_binding", "conflict", "abstain",
+        "old_photo", "new_photo", "near_duplicate", "same_event", "different_event_same_context",
+        "withdrawal", "sensitive_high_risk"
+      ]
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sourceHash": { "$ref": "urn:sgx:classification:v1#/definitions/Hash" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 20971520 },
+        "mimeType": { "enum": ["image/jpeg", "image/png", "image/webp", "text/plain"] },
+        "consentRef": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "origin": { "const": "real_user_provided" }
+      },
+      "required": ["evidenceId", "path", "sourceHash", "byteLength", "mimeType", "consentRef", "origin"]
+    },
+    "Group": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groupId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "partition": { "enum": ["exploration", "t1_validation"] },
+        "leakageGroup": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "envelopePath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sources": { "type": "array", "items": { "$ref": "#/definitions/Source" }, "maxItems": 5000 },
+        "scenarioTags": { "type": "array", "items": { "$ref": "#/definitions/ScenarioTag" }, "minItems": 1, "uniqueItems": true }
+      },
+      "required": ["groupId", "partition", "leakageGroup", "envelopePath", "sources", "scenarioTags"]
+    },
+    "FacetTruth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time": { "$ref": "#/definitions/TruthValues" },
+        "place": { "$ref": "#/definitions/TruthValues" },
+        "event": { "$ref": "#/definitions/TruthValues" },
+        "scene": { "$ref": "#/definitions/TruthValues" },
+        "theme": { "$ref": "#/definitions/TruthValues" }
+      },
+      "required": ["time", "place", "event", "scene", "theme"]
+    },
+    "TruthValues": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 },
+      "maxItems": 32
+    },
+    "Truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "specVersion": { "const": "2.0.0" },
+        "contractVersion": { "const": "classification-t0-truth.1" },
+        "datasetId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "reviewedBy": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "frozenAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "groupId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+              "contents": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5000,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+                    "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+                    "sourceHash": { "$ref": "urn:sgx:classification:v1#/definitions/Hash" },
+                    "expectedStoryKey": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+                    "expectedAction": { "enum": ["auto_organize", "needs_review", "abstain"] },
+                    "riskLevel": { "enum": ["low", "medium", "high"] },
+                    "facets": { "$ref": "#/definitions/FacetTruth" }
+                  },
+                  "required": ["contentId", "evidenceId", "expectedStoryKey", "expectedAction", "riskLevel", "facets"]
+                }
+              }
+            },
+            "required": ["groupId", "contents"]
+          }
+        }
+      },
+      "required": ["specVersion", "contractVersion", "datasetId", "reviewedBy", "frozenAt", "groups"]
+    },
+    "Manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "specVersion": { "const": "2.0.0" },
+        "contractVersion": { "const": "classification-t0-real-media.1" },
+        "datasetId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "status": { "enum": ["draft", "frozen"] },
+        "purpose": { "const": "t0_t1_calibration" },
+        "plannedGroups": { "type": "integer", "minimum": 30, "maximum": 50 },
+        "personMatching": { "const": "disabled" },
+        "rawMediaPolicy": { "const": "outside_git" },
+        "requiredScenarioTags": { "type": "array", "items": { "$ref": "#/definitions/ScenarioTag" }, "uniqueItems": true },
+        "truth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "sourceHash": { "$ref": "urn:sgx:classification:v1#/definitions/Hash" }
+          },
+          "required": ["path", "sourceHash"]
+        },
+        "groups": { "type": "array", "items": { "$ref": "#/definitions/Group" }, "minItems": 1, "maxItems": 50 },
+        "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
+      },
+      "required": ["specVersion", "contractVersion", "datasetId", "status", "purpose", "plannedGroups", "personMatching", "rawMediaPolicy", "requiredScenarioTags", "truth", "groups", "createdAt"]
+    }
+  },
+  "$ref": "#/definitions/Manifest"
+}
