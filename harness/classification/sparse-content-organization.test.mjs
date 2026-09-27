@@ -106,7 +106,7 @@ test('person-only candidate does not become a story edge', () => {
   assert.equal(result.stories.length, 2);
 });
 
-test('explicit user relation wins over a retrieved candidate', () => {
+test('explicit user relation wins over a retrieved candidate without confirming the generated story', () => {
   const value = input(2, [candidate(0, 1)]);
   value.explicitAssociations = [{
     associationId: 'user_link_1',
@@ -123,7 +123,7 @@ test('explicit user relation wins over a retrieved candidate', () => {
   assert.equal(result.associations.length, 1);
   assert.equal(result.associations[0].status, 'user_confirmed');
   assert.equal(result.decisionResults.length, 0);
-  assert.equal(result.stories[0].state, 'user_confirmed');
+  assert.equal(result.stories[0].state, 'ai_candidate');
 });
 
 test('scope, lifecycle, evidence and per-content retrieval limit are enforced', () => {

@@ -260,7 +260,7 @@ function associationId(left: string, right: string): string { return `assoc_${di
 function storyId(contentIds: string[]): string { return `story_${digest(contentIds.sort()).slice(7, 31)}`; }
 function truncate(value: string, max: number): string { return [...value].slice(0, max).join(''); }
 
-function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[], observations: ContentObservation[], explicit: boolean, review: boolean): StoryUnit {
+function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[], observations: ContentObservation[], review: boolean): StoryUnit {
   const memberObservations = observations.filter(observation => members.includes(observation.contentId) && observation.state === 'candidate');
   const event = memberObservations.find(observation => observation.facet === 'event');
   const theme = memberObservations.find(observation => observation.facet === 'theme');
@@ -277,7 +277,7 @@ function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[
     times: unique(memberObservations.filter(observation => observation.facet === 'time').map(observation => observation.rawValue)),
     places: unique(memberObservations.filter(observation => observation.facet === 'place').map(observation => observation.rawValue)),
     themes: unique(memberObservations.filter(observation => observation.facet === 'theme').map(observation => observation.rawValue))
-  }, titleSupports: supports.length ? supports : fallbackSupports, summarySupports: supports.length ? supports : fallbackSupports, state: explicit ? 'user_confirmed' : review ? 'needs_review' : 'ai_candidate' });
+  }, titleSupports: supports.length ? supports : fallbackSupports, summarySupports: supports.length ? supports : fallbackSupports, state: review ? 'needs_review' : 'ai_candidate' });
 }
 
 export function organizeContent(raw: unknown): OrganizationResult {
@@ -308,11 +308,9 @@ export function organizeContent(raw: unknown): OrganizationResult {
     if(status === 'needs_review') reviewItems.push(`NEEDS_REVIEW:${association.associationId}`);
     if(scored.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
   }
-  const explicitByRoot = new Set<string>();
-  for(const explicit of input.explicitAssociations) if(explicit.status === 'user_confirmed' && explicit.toContentId) explicitByRoot.add(union.find(explicit.fromContentId));
   const reviewByRoot = new Set<string>();
   for(const review of associations.filter(association => association.status === 'needs_review')) { reviewByRoot.add(union.find(review.fromContentId)); if(review.toContentId) reviewByRoot.add(union.find(review.toContentId)); }
-  const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations, explicitByRoot.has(union.find(members[0])), reviewByRoot.has(union.find(members[0]))));
+  const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations, reviewByRoot.has(union.find(members[0]))));
   return OrganizationResultSchema.parse({ version: CONTENT_ORGANIZATION_VERSION, scope: input.scope, stories, associations, reviewItems: unique(reviewItems) });
 }
 
@@ -430,10 +428,6 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
     if(scored.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
   }
 
-  const explicitByRoot = new Set<string>();
-  for(const explicit of input.explicitAssociations) {
-    if(explicit.status === 'user_confirmed' && explicit.toContentId) explicitByRoot.add(union.find(explicit.fromContentId));
-  }
   const reviewByRoot = new Set<string>();
   for(const association of associations.filter(item => item.status === 'needs_review')) {
     reviewByRoot.add(union.find(association.fromContentId));
@@ -444,7 +438,6 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
     members,
     active,
     input.observations,
-    explicitByRoot.has(union.find(members[0])),
     reviewByRoot.has(union.find(members[0]))
   ));
   return SparseOrganizationResultSchema.parse({

@@ -37,13 +37,13 @@ test('image, user text and final ASR form one deterministic story card', () => {
   assert.equal(input.contents.find(item => item.contentId === 'text_1').originalText, '周末带家人去北京过生日，大家都来了。');
 });
 
-test('explicit user relation is preserved and prevents a duplicate AI relation', () => {
+test('explicit user relation is preserved without confirming an AI-generated story', () => {
   const input = baseInput();
   input.explicitAssociations = [{ associationId: 'user_link_1', fromContentId: 'photo_1', toContentId: 'text_1', relation: 'same_story', source: 'user_explicit', status: 'user_confirmed', method: 'user_selection.1', evidenceRefs: ['evidence_photo_1', 'evidence_text_1'], createdAt }];
   const result = organizeContent(input);
   assert.ok(result.associations.some(item => item.associationId === 'user_link_1' && item.status === 'user_confirmed'));
   assert.equal(result.associations.filter(item => item.fromContentId === 'photo_1' && item.toContentId === 'text_1').length, 1);
-  assert.equal(result.stories[0].state, 'user_confirmed');
+  assert.equal(result.stories[0].state, 'ai_candidate');
 });
 
 test('association thresholds produce high, review and not-selected bands', () => {
