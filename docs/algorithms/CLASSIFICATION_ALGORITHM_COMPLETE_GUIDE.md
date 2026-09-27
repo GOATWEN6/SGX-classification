@@ -24,7 +24,7 @@
 
 因此，当前 `StoryUnit` 的标题、摘要和关联分数是规则生成的工程候选，不是已经验证的真实 AI 摘要或概率。
 
-## 2. 五张主图
+## 2. 六张主图
 
 ### 2.1 端到端架构与当前接通状态
 
@@ -62,6 +62,14 @@
 
 - [Mermaid 源码](../../figures/sgx-classification-product-memory-handoff.mmd)
 - [独立 Markdown 预览](../../figures/sgx-classification-product-memory-handoff.md)
+
+### 2.6 下一阶段：混合召回、按需 VLM 与渐进自动化
+
+- [完整下一阶段 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)
+- [Mermaid 源码](../../figures/sgx-classification-hybrid-retrieval-adaptive-flow.mmd)
+- [独立 Markdown 预览](../../figures/sgx-classification-hybrid-retrieval-adaptive-flow.md)
+
+该目标架构先用本地 hash、EXIF、OCR 和 image-text embedding 生成少量候选，再让 VLM 只处理歧义关系和组级摘要。现有 `association-rules.1` 的 `0.80/0.55` 会作为可复现实验基线保留，不作为未来生产概率或人工确认门槛。
 
 ## 3. 输入数据到底是什么
 
@@ -572,14 +580,20 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 
 ## 16. 目前需要继续推进的工程顺序
 
-1. 实现真实照片目录到 manifest/truth/approval 草稿的离线批次准备器；
-2. 用户准备 30 张真实照片、约 17 条用户原文、10 条 final ASR，并完成授权和调用前人工真值；
-3. 运行 18 张 exploration，分析每个 facet、unknown/conflict、事件 pair 和失败样本；
-4. 修复后冻结 model、Prompt、taxonomy、规则和正式数值 Gate；
-5. 一次性运行 12 张 holdout；
-6. 实现 Stage A 到 `ContentObservation/StoryUnit` 的适配器；
-7. 接入相册 UI、用户复核、删除传播和 MemoryCandidate；
-8. 再做浏览器 E2E 和小规模真实产品验证。
+用户已经明确要求降低图片两两模型调用、减少人工确认并保证长期泛化，因此执行顺序更新为：
+
+1. 冻结混合召回与渐进自动化契约，保留当前实现作为 baseline；
+2. 实现 Stage A 到 `ContentObservation` 的适配器；
+3. 让内容组织器消费稀疏候选边，移除正常路径的全量两两枚举；
+4. 在隔离环境做 pHash、EXIF、PaddleOCR、SigLIP/OpenCLIP 和 exact/ANN 召回 Spike；
+5. 用真实 exploration 数据验证 Recall@K、成本、调用量、时延和高风险切片；
+6. 实现只处理 ambiguous/merge-impact 的 VLM router 和组级摘要；
+7. 用按家庭/事件隔离的 calibration/holdout 校准 scorer，正式冻结数值 Gate；
+8. 建立版本化 FamilyReferenceStore，使确认随参考增加而减少；
+9. 接入持久 Job、相册 UI、批量复核、删除传播和 MemoryCandidate；
+10. 完成浏览器 E2E 和小规模真实产品验证。
+
+详细任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)。下一次工程提交先完成其中 H0 + H1，不安装模型、不调用付费 API、不接生产数据库。
 
 ## 17. 源码与文档导航
 
@@ -595,11 +609,12 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 |批次执行与报告|[`stage-a-eval.mjs`](../../harness/classification/stage-a-eval.mjs)|
 |可信输入集成 Spec|[`2026-09-23-classification-stage-a-integration-spec.md`](../superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md)|
 |内容组织 Spec|[`2026-09-23-multimodal-content-organization-spec.md`](../superpowers/specs/2026-09-23-multimodal-content-organization-spec.md)|
+|混合召回、按需 VLM 与渐进自动化 Spec|[`2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md`](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)|
 |真实 API 历史实验审计|[`CLASSIFICATION_REAL_VALIDATION_2026-09-24.md`](CLASSIFICATION_REAL_VALIDATION_2026-09-24.md)|
 |真实照片准备规范|[`CLASSIFICATION_REAL_PHOTO_DATASET_REQUIREMENTS.md`](CLASSIFICATION_REAL_PHOTO_DATASET_REQUIREMENTS.md)|
 |实验排障说明|[`CLASSIFICATION_EXPERIMENT_GUIDE.md`](CLASSIFICATION_EXPERIMENT_GUIDE.md)|
 
-## 18. 阅读时最容易误解的六件事
+## 18. 阅读时最容易误解的七件事
 
 1. `0.80/0.55` 是内容组织规则阈值，不是模型置信度或真实准确率门槛。
 2. `unknownFacets.person` 表示既没有人脸也没有文字人物提及，不表示“看到了人但不知道姓名”。
@@ -607,3 +622,4 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 4. `scan/upload` 时间不能当作老照片里故事发生的时间。
 5. Fake、合成数据验收和真实 API 工程探针分别证明不同事情，不能互相替代。
 6. AI 自动关联仍然是候选；用户确认和长期 Memory 是另一层权威状态。
+7. 正常路径不会把整个图库全量两两发给 VLM；当前 StoryUnit 规则层的全量两两枚举也将在下一阶段改为稀疏候选输入。

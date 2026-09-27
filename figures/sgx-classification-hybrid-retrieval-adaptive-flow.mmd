@@ -1,0 +1,70 @@
+flowchart TD
+  subgraph Input[1. 输入与权限]
+    A[图片 / 用户原文 / final ASR]
+    B[Evidence 门禁<br/>scope · 授权 · 生命周期 · SHA-256]
+    A --> B
+  end
+
+  subgraph Local[2. 增量本地特征]
+    C[hash / pHash / EXIF]
+    D[OCR + 文本结构]
+    E[多语 image-text embedding]
+    F[未命名/假名化 face embedding<br/>仍是生物识别模板 · 默认关闭]
+    G[(版本化特征与索引)]
+    B --> C
+    B --> D
+    B --> E
+    B -. 授权后 .-> F
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+  end
+
+  subgraph Retrieval[3. 稀疏候选与评分]
+    H[多路 Blocking + ANN top-K<br/>时间 · 地点 · 近重复 · 语义 · 已确认参考]
+    I{硬 veto?}
+    J[可校准 pair scorer<br/>排序分与决策风险分离]
+    K[自动保持分开<br/>保留审计]
+    G --> H
+    H --> I
+    I -->|是| K
+    I -->|否| J
+  end
+
+  subgraph Adjudication[4. 按需模型与受约束聚类]
+    L{决策风险}
+    M[高确定一致<br/>auto_link_candidate]
+    N[高确定不一致<br/>no edge]
+    O[VLM 只裁决歧义 / 高影响 bridge]
+    P[受约束稀疏图聚类<br/>must-link · cannot-link]
+    J --> L
+    L -->|同组风险低| M
+    L -->|不同组证据强| N
+    L -->|歧义 / OOD / 冲突| O
+    M --> P
+    N --> P
+    O --> P
+    K -->|cannot-link / isolated| P
+  end
+
+  subgraph Product[5. 故事、确认与长期演进]
+    Q[StoryUnit candidate]
+    R[组级标题 / 摘要<br/>结构化证据优先 · 必要时代表图]
+    S[列表页 AI整理<br/>详情页保留用户原文]
+    T{是否为高影响确认}
+    U[一次确认代表组 / 关键关系]
+    V[(FamilyReferenceStore<br/>人物 · 事件 · same/different · 家庭词汇)]
+    W[独立 MemoryCandidate Gate]
+    X[保持 AI candidate<br/>抽样审计]
+    P --> Q --> R --> S --> T
+    T -->|是| U
+    T -->|否| X
+    U --> V
+    U --> W
+    V -. 版本化参考反馈 .-> G
+  end
+
+  Y[撤回 / 删除 / 授权或模型版本变化]
+  Y -. 失效相应特征、边、组和候选 .-> G
+  Y -. 拒收迟到结果 .-> P
