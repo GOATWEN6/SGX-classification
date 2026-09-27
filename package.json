@@ -19,6 +19,7 @@
     "classification:stage-a": "node scripts/classification-stage-a.mjs",
     "classification:prepare-eval": "node harness/classification/prepare-synthetic-v2-eval.mjs",
     "classification:t0-preflight": "node scripts/classification-t0-preflight.mjs",
+    "classification:lab": "next dev -H 127.0.0.1",
     "classification:eval": "node scripts/classification-stage-a.mjs --eval"
   },
   "dependencies": {
