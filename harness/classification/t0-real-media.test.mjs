@@ -160,6 +160,7 @@ test('synthetic 30-group contract fixture exercises real-media preflight without
   assert.deepEqual(result.summary.missingScenarioTags, []);
   const cli = spawnSync(process.execPath, ['scripts/classification-t0-preflight.mjs', '--manifest', fixture.manifestPath], {
     cwd: repositoryRoot,
+    env: { ...process.env, NODE_PATH: '' },
     encoding: 'utf8'
   });
   assert.equal(cli.status, 0, cli.stderr);

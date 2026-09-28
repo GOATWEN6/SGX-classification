@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -15,6 +15,10 @@ if(!manifestPath) {
 
 const build = await mkdtemp(path.join(tmpdir(), 'sgx-classification-t0-'));
 try {
+  // The emitted CommonJS files live outside the repository, so their normal
+  // ancestor lookup cannot reach this project's dependencies. Keep the build
+  // isolated while making the repository dependency tree visible to it.
+  await symlink(path.join(root, 'node_modules'), path.join(build, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const files = (await readdir(path.join(root, 'src/lib/algorithms/classification')))
     .filter(file => file.endsWith('.ts'))
     .map(file => `src/lib/algorithms/classification/${file}`);
