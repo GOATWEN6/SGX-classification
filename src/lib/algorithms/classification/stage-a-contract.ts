@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.11';
+export const PROMPT_VERSION = 'sgx-five-facets.12';
 export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
 export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -68,6 +68,7 @@ export const sameScope=(a:Scope,b:Scope)=>a.householdId===b.householdId&&a.subje
 export function ensure(condition:unknown,code:string):asserts condition {if(!condition)throw new StageError(code);}
 
 const chineseDigit:Record<string,string>={〇:'0',零:'0',一:'1',二:'2',三:'3',四:'4',五:'5',六:'6',七:'7',八:'8',九:'9'};
+const SHORT_YEAR_PIVOT=29;
 function chineseSmallNumber(value:string):string {
   if(value==='十')return '10';
   if(!value.includes('十'))return chineseDigit[value]??value;
@@ -78,7 +79,8 @@ function normalizeTemporalEvidence(value:string):string {
   return value.normalize('NFKC')
     .replace(/[〇零一二三四五六七八九]{2,4}/g,part=>[...part].map(char=>chineseDigit[char]).join(''))
     .replace(/([一二三]?十[一二三四五六七八九]?|[一二三四五六七八九])(?=[月日])/g,chineseSmallNumber)
-    .replace(/([一二三四五六七八九]?十)(?=年代)/g,chineseSmallNumber);
+    .replace(/([一二三四五六七八九]?十)(?=年代)/g,chineseSmallNumber)
+    .replace(/(^|[^\d])(\d{2})年/g,(_match,prefix:string,short:string)=>`${prefix}${Number(short)<=SHORT_YEAR_PIVOT?'20':'19'}${short}年`);
 }
 function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
   if(!['user_text','final_asr'].includes(item.source)||item.evidenceId)return item;

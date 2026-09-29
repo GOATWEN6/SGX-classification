@@ -118,6 +118,10 @@ test('Chinese numeral time quotes ground normalized year, date and decade values
   for(const [quote,value,precision] of cases){const p=photo(`p_cn_${precision}`,quote);const o=observation(p,{time:value,precision});o.times[0].supports[0].quote=quote;
     assert.equal(contract.validateObservation(o,p).times[0].value,value);}
 });
+test('colloquial two-digit Chinese year grounds a four-digit album candidate',()=>{
+  const p=photo('p_short_year','这趟坐火车去看海是九八年夏天。');const o=observation(p,{time:'1998'});
+  o.times[0].supports[0].quote=p.caption;assert.equal(contract.validateObservation(o,p).times[0].value,'1998');
+});
 test('unique literal text support is rebound to its supplied evidence without guessing ambiguous provenance',()=>{
   const p=photo('p_text','');p.textEvidence=[{evidenceId:'text_1',revision:1,sourceHash:p.sourceHash,source:'user_text',text:'这趟坐火车去看海是九八年夏天。'}];
   const o=observation(p,{event:'旅行'});o.events[0].supports=[{photoId:p.photoId,source:'final_asr',quote:'坐火车去看海'}];
@@ -231,7 +235,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.11$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.12$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('real-mode sanitizer keeps valid facets and exposes dropped model assertions for review',async()=>{
