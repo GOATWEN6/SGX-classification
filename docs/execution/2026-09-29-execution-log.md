@@ -87,4 +87,22 @@
 
 一次直接运行 `schema.test.mjs` 因没有设置由总测试脚本生成的 `CLASSIFICATION_BUILD_DIR` 而按设计拒绝；随后通过正式 `npm run test:classification` 入口完成 Schema 加载验证。这不是产品或 Schema 故障。
 
-独立终审在修复真实 lane 身份/授权、`/var/tmp`、跨 run 来源、任意 Git checkout、必需 artifact role 和敏感级别六类缺口后，未发现剩余 P0/P1。E0 核心可以提交。尚未完成的是 Stage A runner 的自动 finalization；在接线前，真实执行清单必须显式运行 registry create + verify。下一项离线主线为 E1 truth/scoring 盲审与 `sgx-scoring-policy.2` 冻结。
+独立终审在修复真实 lane 身份/授权、`/var/tmp`、跨 run 来源、任意 Git checkout、必需 artifact role 和敏感级别六类缺口后，未发现剩余 P0/P1。E0 核心可以提交。尚未完成的是 Stage A runner 的自动 finalization；在接线前，真实执行清单必须显式运行 registry create + verify。该检查点记录的下一项是 E1 truth/scoring 盲审与 `sgx-scoring-policy.2` 冻结；其后续完成状态见下节。
+
+## E1 语义与评分口径冻结
+
+E1 已完成语义契约冻结，供 E2 实现可执行 scorer 使用；本阶段没有实现 scorer，也没有完成 `T0-Synthetic Functional Gate`。冻结产物包括 scoring policy、truth、scoring cases 三份 strict Schema，policy、truth、正反 fixture、盲审 ledger 和逐文件 SHA-256 freeze manifest。新 truth revision 为 `sgx-truth.2.v3-derived-e1-2026-09-29`。
+
+四个争议样例完成 input-only 盲审。g025 的用户说明继续支持 `event:1998-summer`；图片像素中的 `2001-07` 因没有 EXIF 或流程 provenance，被保留为 `role_unknown` 观察并进入时间角色澄清，不再冻结成同角色时间冲突。这是新的 v3-derived truth revision，不会改写历史 r5 truth，也不会把原始 6 次调用中的 g025 `UNSUPPORTED_TIME_PRECISION`、漏 OCR 或其他失败状态改成成功。
+
+E1 的 claim boundary 固定为 `synthetic_functional_only`：它只能证明合成输入上的语义合同、风险分类和冻结流程成立，不能证明真实家庭准确率、真实 OCR 效果、跨家庭泛化或产品收益。旧 r5 和 6 次调用的原始 `/private/tmp` 产物仍然缺失，因此当前不能做历史 r5 exact rescore；只有后续按原 hash 找回原始响应，才能追加独立复算报告。
+
+聚焦验证：
+
+- `node --test harness/classification/semantic-scoring-v2.test.mjs`：6/6 通过；
+- 覆盖三份 Schema、policy/盲审 ledger hash 绑定、七类语义 fixture、固定分母状态、g025 `role_unknown` 防升级和 freeze manifest 文件哈希；
+- 本阶段 `externalCalls=0`、未读取 API 凭据、额外费用 ¥0。
+
+全量分类回归在允许 loopback 的受控环境复跑为 284/284 通过、0 fail、0 cancelled。此前一次运行曾出现 282 pass / 1 fail / 1 cancelled：HTTP expired-cache 用例预期 200、实际 409，随后 CLI shutdown 超时；本次未复现，因此保留为历史间歇性记录，不再列为当前 blocker。
+
+下一项离线主线为 E2：让版本化 scorer 读取已冻结 policy/truth，产出固定分母报告并完成相应回归。E2、E3 仍是计划，不得从 E1 产物存在推断为已完成。

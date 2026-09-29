@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "sgx-semantic-blind-review-ledger.1",
+  "createdAt": "2026-09-29T05:00:00.000Z",
+  "claimBoundary": "new_v3_derived_synthetic_functional_truth_only",
+  "reviewKind": "procedural_output_blind_with_opaque_ids",
+  "sourceDataset": {
+    "datasetId": "sgx-t0-photorealistic-synthetic-v3",
+    "checksumManifestSha256": "sha256:ada5bbd22e744d9fc7ce5ab3d7289b8d83cc29fcc3ac29bfe0a6e18fc1dea429",
+    "checksumEntriesVerified": 198,
+    "checksumEntriesFailed": 0
+  },
+  "packet": {
+    "packetSha256": "sha256:440418fb9ab1e7b94e9bcc8330220fb8ff15ce718c03411f6b9728c5fd334d33",
+    "reviewRulesSha256": "sha256:1b29d67ec472643015b33b04aec7fef432437fe1e9924fb841f314557c16d86a",
+    "assetCount": 9,
+    "assetHashesVerified": 9,
+    "assetHashesFailed": 0,
+    "excludedFromPacket": [
+      "group_ids",
+      "upstream_ids",
+      "scenario_tags",
+      "expected_actions",
+      "risk_labels",
+      "previous_truth",
+      "model_outputs",
+      "provider_responses",
+      "model_reports",
+      "original_audio"
+    ]
+  },
+  "reviewers": [
+    {
+      "reviewerId": "codex-opaque-input-reviewer-2026-09-29",
+      "scope": "all_four_opaque_items",
+      "method": "fork_without_conversation_turns_and_packet_only_read_allowlist",
+      "declaredReads": ["packet.json", "REVIEW_RULES.md", "nine_packet_assets"],
+      "declaredExcluded": ["repository", "memory_files", "truth", "model_outputs", "provider_responses", "reports", "network"]
+    },
+    {
+      "reviewerId": "codex-visible-date-tiebreaker-2026-09-29",
+      "scope": "opaque-river-time-role_only",
+      "method": "fork_without_conversation_turns_and_packet_only_read_allowlist",
+      "declaredReads": ["packet.json", "REVIEW_RULES.md", "opaque-river/photo.jpg", "opaque-river/user_text.txt"],
+      "declaredExcluded": ["repository", "memory_files", "truth", "model_outputs", "provider_responses", "reports", "network"]
+    }
+  ],
+  "independenceLimitations": [
+    "This is not an external human acceptance review.",
+    "The reviewers ran in the same Codex product environment, so process isolation is documented rather than claimed as forensic isolation.",
+    "Opaque identifiers and a packet-only read allowlist prevented direct linkage to prior case-specific model reports.",
+    "The result cannot restore or exactly rescore missing r5 provider responses."
+  ],
+  "unblindingMap": [
+    { "opaqueId": "opaque-lotus", "itemId": "sgx-v3-g007" },
+    { "opaqueId": "opaque-cedar", "itemId": "sgx-v3-g011" },
+    { "opaqueId": "opaque-amber", "itemId": "sgx-v3-g023" },
+    { "opaqueId": "opaque-river", "itemId": "sgx-v3-g025" }
+  ],
+  "decisions": [
+    {
+      "itemId": "sgx-v3-g007",
+      "status": "decided",
+      "summary": "自动保留聚会、室内和 event:2021-05-02；桌面是有视觉依据的 supported extra；家庭关系、庆典、可信 capture 和绝对 upload 时间均无证据。"
+    },
+    {
+      "itemId": "sgx-v3-g011",
+      "status": "decided",
+      "summary": "搬家与室内可保留；2008/2010 是同一 event 时间的未解决冲突；不能传播为 event conflict。"
+    },
+    {
+      "itemId": "sgx-v3-g023",
+      "status": "decided",
+      "summary": "兴趣活动与户外是核心；自然景观是有视觉依据的 supported extra；身份、地点和时间保持未知。"
+    },
+    {
+      "itemId": "sgx-v3-g025",
+      "status": "decided_after_second_review",
+      "summary": "1998 年夏天是用户明确的 event 时间；像素日期 2001-07 是 role_unknown 观察，不能无 provenance 地升级为 event/capture/scan/upload，也不构成可评分冲突；工作流进入时间角色澄清。"
+    }
+  ],
+  "historicalRecordPolicy": {
+    "overwriteHistoricalR5": false,
+    "restoreMissingR5": false,
+    "exactRescoreHistoricalSixCalls": false,
+    "newTruthRevision": "sgx-truth.2.v3-derived-e1-2026-09-29"
+  }
+}

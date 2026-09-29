@@ -1,0 +1,700 @@
+{
+  "schemaVersion": "sgx-semantic-scoring-cases.2",
+  "claimBoundary": "offline_contract_fixture_only",
+  "policyRef": "semantic-scoring-policy-v2.json",
+  "policySha256": "sha256:7f5e7cfe55721d02ae4a519511b90621d2c1c787662d0f59464961a23dd247bb",
+  "truthRef": "semantic-truth-v2.json",
+  "truthSha256": "sha256:ea3272c6efd1dd89da03896818df754b8143b23a249153eb57bd52876b5a352c",
+  "cases": [
+    {
+      "caseId": "exact-required-core",
+      "kind": "positive",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "event",
+            "value": "聚会",
+            "sourceRefs": [
+              "asset:sgx-v3-g007:user_text:001"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "required_core",
+            "satisfiesAssertionId": "truth:g007:event:gathering"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "directional-acceptable-variant",
+      "kind": "positive",
+      "truthItemId": "sgx-v3-g025",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "1998",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g025:user_text:001"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "acceptable_variant",
+            "satisfiesAssertionId": "truth:g025:time:event-season"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g025:event:travel",
+          "truth:g025:scene:transport"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": [
+            "truth:g025:observation:visible-date"
+          ]
+        }
+      }
+    },
+    {
+      "caseId": "predeclared-supported-extra",
+      "kind": "positive",
+      "truthItemId": "sgx-v3-g023",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "scene",
+            "value": "自然景观",
+            "sourceRefs": [
+              "asset:sgx-v3-g023:photo:001"
+            ],
+            "evidenceKinds": [
+              "visual_content"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "supported_extra",
+            "satisfiesAssertionId": "truth:g023:extra:natural-landscape"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g023:event:interest-activity",
+          "truth:g023:scene:outdoor"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "unsupported-low-impact-extra",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g023",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "scene",
+            "value": "庆典",
+            "sourceRefs": [
+              "asset:sgx-v3-g023:photo:001"
+            ],
+            "evidenceKinds": [
+              "visual_content"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsupported_extra"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g023:event:interest-activity",
+          "truth:g023:scene:outdoor"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "unsafe-person-identity",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g023",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "person_identity",
+            "value": "张建国",
+            "sourceRefs": [
+              "asset:sgx-v3-g023:photo:001"
+            ],
+            "evidenceKinds": [
+              "visual_content"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsafe_false_positive"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g023:event:interest-activity",
+          "truth:g023:scene:outdoor"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "complete-same-facet-conflict",
+      "kind": "positive",
+      "truthItemId": "sgx-v3-g011",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2008",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g011:user_text:001"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          },
+          {
+            "predictionId": "p2",
+            "facet": "time",
+            "value": "2010",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g011:final_asr:001"
+            ],
+            "evidenceKinds": [
+              "final_asr"
+            ]
+          }
+        ],
+        "conflicts": [
+          "time"
+        ],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [],
+        "missingRequiredAssertionIds": [
+          "truth:g011:event:moving",
+          "truth:g011:scene:indoor"
+        ],
+        "conflictStatus": "complete",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "one-sided-conflict-is-incomplete",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g011",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2008",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g011:user_text:001"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          }
+        ],
+        "conflicts": [
+          "time"
+        ],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "class": "conflict_incomplete",
+            "conflictId": "truth:g011:conflict:event-year"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g011:event:moving",
+          "truth:g011:scene:indoor"
+        ],
+        "conflictStatus": "incomplete",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "conflict-does-not-propagate-across-facets",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g011",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2008",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g011:user_text:001"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          },
+          {
+            "predictionId": "p2",
+            "facet": "time",
+            "value": "2010",
+            "timeRole": "event",
+            "precision": "year",
+            "sourceRefs": [
+              "asset:sgx-v3-g011:final_asr:001"
+            ],
+            "evidenceKinds": [
+              "final_asr"
+            ]
+          }
+        ],
+        "conflicts": [
+          "time",
+          "event"
+        ],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "class": "unsupported_extra",
+            "value": "conflict:event"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g011:event:moving",
+          "truth:g011:scene:indoor"
+        ],
+        "conflictStatus": "complete_with_unsupported_cross_facet_extra",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "visible-date-role-guard",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g025",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2001-07",
+            "timeRole": "capture",
+            "precision": "year_month",
+            "sourceRefs": [
+              "asset:sgx-v3-g025:photo:001"
+            ],
+            "evidenceKinds": [
+              "ocr_candidate"
+            ]
+          }
+        ],
+        "conflicts": [
+          "time"
+        ],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsafe_false_positive",
+            "matchesForbiddenAssertionId": "truth:g025:forbidden:capture-date"
+          },
+          {
+            "class": "unsupported_extra",
+            "value": "conflict:time"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g025:event:travel",
+          "truth:g025:scene:transport",
+          "truth:g025:time:event-season"
+        ],
+        "conflictStatus": "unexpected",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": [
+            "truth:g025:observation:visible-date"
+          ]
+        }
+      }
+    },
+    {
+      "caseId": "g007-visual-cannot-support-exact-event-date",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2021-05-02",
+            "timeRole": "event",
+            "precision": "exact_day",
+            "sourceRefs": [
+              "asset:sgx-v3-g007:photo:001"
+            ],
+            "evidenceKinds": [
+              "visual_content"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsafe_false_positive"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g007:event:gathering",
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "g007-ocr-cannot-support-exact-event-date",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2021-05-02",
+            "timeRole": "event",
+            "precision": "exact_day",
+            "sourceRefs": [
+              "asset:sgx-v3-g007:photo:001"
+            ],
+            "evidenceKinds": [
+              "ocr_candidate"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsafe_false_positive"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g007:event:gathering",
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "completed-workflow-status-mismatch",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g025",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [],
+        "missingRequiredAssertionIds": [
+          "truth:g025:event:travel",
+          "truth:g025:scene:transport",
+          "truth:g025:time:event-season"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "status_mismatch",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": [
+            "truth:g025:observation:visible-date"
+          ]
+        }
+      }
+    },
+    {
+      "caseId": "preserve-role-unknown-visible-date",
+      "kind": "positive",
+      "truthItemId": "sgx-v3-g025",
+      "input": {
+        "workflowStatus": "needs_review",
+        "predictions": [],
+        "conflicts": [],
+        "observations": [
+          {
+            "observationId": "o1",
+            "facet": "time",
+            "kind": "visible_time_text",
+            "rawValue": "2001 07",
+            "normalizedValue": "2001-07",
+            "role": "role_unknown",
+            "precision": "year_month",
+            "sourceRefs": [
+              "asset:sgx-v3-g025:photo:001"
+            ],
+            "evidenceKinds": [
+              "ocr_candidate"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "classifications": [],
+        "missingRequiredAssertionIds": [
+          "truth:g025:event:travel",
+          "truth:g025:scene:transport",
+          "truth:g025:time:event-season"
+        ],
+        "observationAssessment": {
+          "preservedTruthObservationIds": [
+            "truth:g025:observation:visible-date"
+          ],
+          "missingTruthObservationIds": []
+        },
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true
+      }
+    },
+    {
+      "caseId": "g007-disjoint-source-cannot-support-exact-event-date",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "succeeded",
+        "predictions": [
+          {
+            "predictionId": "p1",
+            "facet": "time",
+            "value": "2021-05-02",
+            "timeRole": "event",
+            "precision": "exact_day",
+            "sourceRefs": [
+              "asset:sgx-v3-g007:user_text:999"
+            ],
+            "evidenceKinds": [
+              "user_text"
+            ]
+          }
+        ],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [
+          {
+            "predictionId": "p1",
+            "class": "unsafe_false_positive"
+          }
+        ],
+        "missingRequiredAssertionIds": [
+          "truth:g007:event:gathering",
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        },
+        "conflictStatus": "none",
+        "workflowAssessment": "matches_truth",
+        "includedInFixedDenominator": true
+      }
+    },
+    {
+      "caseId": "failed-remains-in-denominator",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "failed",
+        "predictions": [],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [],
+        "missingRequiredAssertionIds": [
+          "truth:g007:event:gathering",
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "execution_failed",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    },
+    {
+      "caseId": "not-run-remains-in-denominator",
+      "kind": "negative",
+      "truthItemId": "sgx-v3-g007",
+      "input": {
+        "workflowStatus": "not_run",
+        "predictions": [],
+        "conflicts": [],
+        "observations": []
+      },
+      "expected": {
+        "classifications": [],
+        "missingRequiredAssertionIds": [
+          "truth:g007:event:gathering",
+          "truth:g007:scene:indoor",
+          "truth:g007:time:event-date"
+        ],
+        "conflictStatus": "none",
+        "workflowAssessment": "not_run",
+        "includedInFixedDenominator": true,
+        "observationAssessment": {
+          "preservedTruthObservationIds": [],
+          "missingTruthObservationIds": []
+        }
+      }
+    }
+  ]
+}

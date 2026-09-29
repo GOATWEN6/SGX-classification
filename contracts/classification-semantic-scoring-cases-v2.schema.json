@@ -1,0 +1,340 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgx.local/contracts/classification-semantic-scoring-cases-v2.schema.json",
+  "title": "SGX classification semantic scoring cases v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "claimBoundary", "policyRef", "policySha256", "truthRef", "truthSha256", "cases"],
+  "properties": {
+    "schemaVersion": { "const": "sgx-semantic-scoring-cases.2" },
+    "claimBoundary": { "const": "offline_contract_fixture_only" },
+    "policyRef": { "const": "semantic-scoring-policy-v2.json" },
+    "policySha256": { "$ref": "#/definitions/sha256" },
+    "truthRef": { "const": "semantic-truth-v2.json" },
+    "truthSha256": { "$ref": "#/definitions/sha256" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/testCase" }
+    }
+  },
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,192}$"
+    },
+    "facet": {
+      "enum": [
+        "person_identity",
+        "person_cluster",
+        "relationship",
+        "time",
+        "place",
+        "event",
+        "scene",
+        "theme",
+        "quality",
+        "sensitive_fact",
+        "memory_fact"
+      ]
+    },
+    "timePrecision": {
+      "enum": ["exact_day", "year_month", "year", "season", "decade", "relative"]
+    },
+    "prediction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predictionId", "facet", "value", "sourceRefs", "evidenceKinds"],
+      "properties": {
+        "predictionId": { "$ref": "#/definitions/id" },
+        "facet": { "$ref": "#/definitions/facet" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "timeRole": { "enum": ["event", "capture", "scan", "upload"] },
+        "precision": { "$ref": "#/definitions/timePrecision" },
+        "sourceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        },
+        "evidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "user_text",
+              "final_asr",
+              "visual_content",
+              "ocr_candidate",
+              "trusted_original_exif",
+              "scan_system_event",
+              "server_upload_event"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "facet": { "const": "time" } } },
+          "then": { "required": ["timeRole", "precision"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["timeRole"] },
+                { "required": ["precision"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "roleUnknownObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observationId",
+        "facet",
+        "kind",
+        "rawValue",
+        "normalizedValue",
+        "role",
+        "precision",
+        "sourceRefs",
+        "evidenceKinds"
+      ],
+      "properties": {
+        "observationId": { "$ref": "#/definitions/id" },
+        "facet": { "const": "time" },
+        "kind": { "const": "visible_time_text" },
+        "rawValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "normalizedValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "role": { "const": "role_unknown" },
+        "precision": { "$ref": "#/definitions/timePrecision" },
+        "sourceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        },
+        "evidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": { "const": "ocr_candidate" }
+        }
+      }
+    },
+    "observationAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preservedTruthObservationIds", "missingTruthObservationIds"],
+      "properties": {
+        "preservedTruthObservationIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/id" }
+        },
+        "missingTruthObservationIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/id" }
+        }
+      }
+    },
+    "classification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["predictionId", "class", "satisfiesAssertionId"],
+          "properties": {
+            "predictionId": { "$ref": "#/definitions/id" },
+            "class": { "const": "required_core" },
+            "satisfiesAssertionId": { "$ref": "#/definitions/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["predictionId", "class", "satisfiesAssertionId"],
+          "properties": {
+            "predictionId": { "$ref": "#/definitions/id" },
+            "class": { "const": "acceptable_variant" },
+            "satisfiesAssertionId": { "$ref": "#/definitions/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["predictionId", "class", "satisfiesAssertionId"],
+          "properties": {
+            "predictionId": { "$ref": "#/definitions/id" },
+            "class": { "const": "supported_extra" },
+            "satisfiesAssertionId": { "$ref": "#/definitions/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class", "satisfiesAssertionId"],
+          "properties": {
+            "class": { "const": "missing_required" },
+            "satisfiesAssertionId": { "$ref": "#/definitions/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class"],
+          "properties": {
+            "predictionId": { "$ref": "#/definitions/id" },
+            "class": { "const": "unsupported_extra" },
+            "matchesForbiddenAssertionId": { "$ref": "#/definitions/id" },
+            "value": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          "anyOf": [
+            { "required": ["predictionId"] },
+            { "required": ["value"] }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["predictionId", "class"],
+          "properties": {
+            "predictionId": { "$ref": "#/definitions/id" },
+            "class": { "const": "unsafe_false_positive" },
+            "matchesForbiddenAssertionId": { "$ref": "#/definitions/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class", "conflictId"],
+          "properties": {
+            "class": { "const": "conflict_incomplete" },
+            "conflictId": { "$ref": "#/definitions/id" }
+          }
+        }
+      ]
+    },
+    "testCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "kind", "truthItemId", "input", "expected"],
+      "properties": {
+        "caseId": { "$ref": "#/definitions/id" },
+        "kind": { "enum": ["positive", "negative"] },
+        "truthItemId": { "$ref": "#/definitions/id" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workflowStatus", "predictions", "conflicts", "observations"],
+          "properties": {
+            "workflowStatus": { "enum": ["succeeded", "needs_review", "failed", "not_run"] },
+            "predictions": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/definitions/prediction" }
+            },
+            "conflicts": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["time", "place", "event", "scene"] }
+            },
+            "observations": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/definitions/roleUnknownObservation" }
+            }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classifications", "missingRequiredAssertionIds", "observationAssessment", "conflictStatus", "workflowAssessment", "includedInFixedDenominator"],
+          "properties": {
+            "classifications": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/definitions/classification" }
+            },
+            "missingRequiredAssertionIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/definitions/id" }
+            },
+            "observationAssessment": { "$ref": "#/definitions/observationAssessment" },
+            "conflictStatus": {
+              "enum": ["none", "complete", "incomplete", "unexpected", "complete_with_unsupported_cross_facet_extra"]
+            },
+            "workflowAssessment": { "enum": ["matches_truth", "status_mismatch", "execution_failed", "not_run"] },
+            "includedInFixedDenominator": { "const": true }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "input": {
+                "properties": { "workflowStatus": { "const": "failed" } },
+                "required": ["workflowStatus"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected": {
+                "properties": { "workflowAssessment": { "const": "execution_failed" } }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "input": {
+                "properties": { "workflowStatus": { "const": "not_run" } },
+                "required": ["workflowStatus"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected": {
+                "properties": { "workflowAssessment": { "const": "not_run" } }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "input": {
+                "properties": { "workflowStatus": { "enum": ["succeeded", "needs_review"] } },
+                "required": ["workflowStatus"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected": {
+                "properties": {
+                  "workflowAssessment": { "enum": ["matches_truth", "status_mismatch"] }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

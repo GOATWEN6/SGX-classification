@@ -1,0 +1,449 @@
+{
+  "schemaVersion": "sgx-truth.2",
+  "truthId": "sgx-truth.2.v3-derived-e1-2026-09-29",
+  "createdAt": "2026-09-29T12:05:00.000Z",
+  "dataset": {
+    "datasetId": "sgx-t0-photorealistic-synthetic-v3",
+    "datasetRevision": "v3-derived-semantic-review-2026-09-29",
+    "checksumManifestSha256": "sha256:ada5bbd22e744d9fc7ce5ab3d7289b8d83cc29fcc3ac29bfe0a6e18fc1dea429",
+    "claimBoundary": "synthetic_functional_only"
+  },
+  "taxonomyVersion": "classification-taxonomy.synthetic-v3.1",
+  "scoringPolicy": {
+    "policyId": "sgx-scoring-policy.2.2026-09-29",
+    "sha256": "sha256:7f5e7cfe55721d02ae4a519511b90621d2c1c787662d0f59464961a23dd247bb"
+  },
+  "blindReview": {
+    "reviewerIds": [
+      "codex-opaque-input-reviewer-2026-09-29",
+      "codex-visible-date-tiebreaker-2026-09-29"
+    ],
+    "reviewedAt": "2026-09-29T05:00:00.000Z",
+    "method": "procedural_output_blind_input_only",
+    "ledgerPath": "docs/algorithms/evidence/CLASSIFICATION_SEMANTIC_V2_BLIND_REVIEW_2026-09-29.json",
+    "ledgerSha256": "sha256:2a9dea48f73f0c2bce002759bcb5a8435591d25a2ee5714e3c32aa18eab39516",
+    "packetSha256": "sha256:440418fb9ab1e7b94e9bcc8330220fb8ff15ce718c03411f6b9728c5fd334d33",
+    "reviewRulesSha256": "sha256:1b29d67ec472643015b33b04aec7fef432437fe1e9924fb841f314557c16d86a",
+    "excludedArtifactTypes": ["model_output", "provider_response", "model_report", "previous_truth"],
+    "independenceBoundary": "fresh_reviewer_for_synthetic_functional_truth_not_external_human_acceptance"
+  },
+  "items": [
+    {
+      "itemId": "sgx-v3-g007",
+      "sourceInputRef": {
+        "path": "inputs/sgx-v3-g007.json",
+        "sha256": "sha256:5f424614ba29e4f49a63859ad1005b3efa712fb8cef4b5cf3adc921f92bb859e"
+      },
+      "decisionStatus": "decided",
+      "evaluation": {
+        "closedFacets": ["time", "place", "event", "scene"],
+        "excludedFacets": [
+          { "facet": "person_cluster", "reason": "当前 E1 不评估跨照片人物聚类效果。" },
+          { "facet": "theme", "reason": "当前 Stage A 没有可计分的 theme 输出。" },
+          { "facet": "quality", "reason": "当前 Stage A 没有可计分的 quality 输出。" }
+        ]
+      },
+      "requiredCore": [
+        {
+          "assertionId": "truth:g007:event:gathering",
+          "facet": "event",
+          "value": "聚会",
+          "aliases": ["小聚"],
+          "sourceRefs": ["asset:sgx-v3-g007:photo:001", "asset:sgx-v3-g007:user_text:001"],
+          "targetAssetIds": ["asset:sgx-v3-g007:photo:001"],
+          "authority": "user_explicit",
+          "rationale": "用户明确说明小聚，图片显示多人围桌用餐；没有证据把它升级为家庭或庆典。"
+        },
+        {
+          "assertionId": "truth:g007:scene:indoor",
+          "facet": "scene",
+          "value": "室内",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g007:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g007:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "画面直接支持室内场景。"
+        },
+        {
+          "assertionId": "truth:g007:time:event-date",
+          "facet": "time",
+          "value": "2021-05-02",
+          "aliases": ["二〇二一年五月二日"],
+          "sourceRefs": ["asset:sgx-v3-g007:user_text:001", "asset:sgx-v3-g007:final_asr:001"],
+          "targetAssetIds": ["asset:sgx-v3-g007:photo:001"],
+          "authority": "user_explicit",
+          "timeRole": "event",
+          "precision": "exact_day",
+          "rationale": "用户文字明确给出故事事件日期；口述的拍摄语义不能把它升级为可信 capture。"
+        }
+      ],
+      "acceptableVariants": [],
+      "supportedExtras": [
+        {
+          "assertionId": "truth:g007:extra:tabletop",
+          "facet": "scene",
+          "value": "桌面",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g007:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g007:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "餐桌、碗筷和多道菜在画面中清晰可见。"
+        }
+      ],
+      "observations": [],
+      "forbiddenAssertions": [
+        {
+          "assertionId": "truth:g007:forbidden:family-gathering",
+          "facet": "event",
+          "displayValue": "家庭聚会",
+          "match": { "kind": "exact_value", "value": "家庭聚会" },
+          "riskClass": "unsupported_extra",
+          "rationale": "没有用户关系说明，不能仅从合照推断家庭属性。"
+        },
+        {
+          "assertionId": "truth:g007:forbidden:birthday",
+          "facet": "event",
+          "displayValue": "生日",
+          "match": { "kind": "exact_value", "value": "生日" },
+          "riskClass": "unsupported_extra",
+          "rationale": "输入没有生日或庆典证据。"
+        },
+        {
+          "assertionId": "truth:g007:forbidden:capture-date",
+          "facet": "time",
+          "displayValue": "capture:2021-05-02",
+          "match": { "kind": "exact_value", "value": "2021-05-02", "timeRole": "capture", "precision": "exact_day" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "缺少可信原始 EXIF，不能把口述日期认证为 capture。"
+        }
+      ],
+      "conflicts": [],
+      "unknownFacets": ["person_identity", "relationship", "place"],
+      "expectedWorkflowStatus": "succeeded",
+      "reviewNotes": [
+        "相对上传时间“今天”没有参考日期，不能生成绝对 upload 时间。",
+        "可以自动整理低风险事件、场景和 event 时间；身份与关系保持未知。"
+      ]
+    },
+    {
+      "itemId": "sgx-v3-g011",
+      "sourceInputRef": {
+        "path": "inputs/sgx-v3-g011.json",
+        "sha256": "sha256:311906a91953a8c1bc727b1f6cd093b9a9f57d6d65de9ff4924777a48cc971ee"
+      },
+      "decisionStatus": "decided",
+      "evaluation": {
+        "closedFacets": ["time", "place", "event", "scene"],
+        "excludedFacets": [
+          { "facet": "person_cluster", "reason": "当前 E1 不评估跨照片人物聚类效果。" },
+          { "facet": "theme", "reason": "当前 Stage A 没有可计分的 theme 输出。" },
+          { "facet": "quality", "reason": "当前 Stage A 没有可计分的 quality 输出。" }
+        ]
+      },
+      "requiredCore": [
+        {
+          "assertionId": "truth:g011:event:moving",
+          "facet": "event",
+          "value": "搬家",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g011:photo:001", "asset:sgx-v3-g011:user_text:001", "asset:sgx-v3-g011:final_asr:001"],
+          "targetAssetIds": ["asset:sgx-v3-g011:photo:001"],
+          "authority": "user_explicit",
+          "rationale": "文字和画面共同支持搬家或搬运家具事件。"
+        },
+        {
+          "assertionId": "truth:g011:scene:indoor",
+          "facet": "scene",
+          "value": "室内",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g011:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g011:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "画面直接支持室内场景。"
+        }
+      ],
+      "acceptableVariants": [],
+      "supportedExtras": [],
+      "observations": [],
+      "forbiddenAssertions": [
+        {
+          "assertionId": "truth:g011:forbidden:event-conflict",
+          "facet": "event",
+          "displayValue": "conflict:event",
+          "match": { "kind": "unexpected_conflict" },
+          "riskClass": "unsupported_extra",
+          "rationale": "事件类型一致，只有年份存在冲突，不能跨 facet 传播。"
+        },
+        {
+          "assertionId": "truth:g011:forbidden:relationship",
+          "facet": "relationship",
+          "displayValue": "任何未经确认的具体关系",
+          "match": { "kind": "any_unmatched_in_facet" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "画面与文字都没有明确关系证据。"
+        }
+      ],
+      "conflicts": [
+        {
+          "conflictId": "truth:g011:conflict:event-year",
+          "facet": "time",
+          "candidates": [
+            {
+              "value": "2008",
+              "sourceRefs": ["asset:sgx-v3-g011:user_text:001"],
+              "authority": "user_explicit",
+              "timeRole": "event",
+              "precision": "year",
+              "status": "asserted"
+            },
+            {
+              "value": "2010",
+              "sourceRefs": ["asset:sgx-v3-g011:final_asr:001"],
+              "authority": "final_asr",
+              "timeRole": "event",
+              "precision": "year",
+              "status": "asserted"
+            }
+          ],
+          "resolution": "unresolved",
+          "rationale": "两个用户来源对同一次搬家给出不兼容年份，当前政策没有自动覆盖优先级。"
+        }
+      ],
+      "unknownFacets": ["person_identity", "relationship", "place"],
+      "expectedWorkflowStatus": "needs_review",
+      "reviewNotes": [
+        "年份冲突需要确认，但搬家和室内等低风险结果可以继续保留。",
+        "不得把 time conflict 扩散为 event conflict。"
+      ]
+    },
+    {
+      "itemId": "sgx-v3-g023",
+      "sourceInputRef": {
+        "path": "inputs/sgx-v3-g023.json",
+        "sha256": "sha256:c7edd50313b2edb753466e57d275b3ab9f4c796c8462914a81231623002f9864"
+      },
+      "decisionStatus": "decided",
+      "evaluation": {
+        "closedFacets": ["time", "place", "event", "scene"],
+        "excludedFacets": [
+          { "facet": "person_cluster", "reason": "当前 E1 不评估跨照片人物聚类效果。" },
+          { "facet": "theme", "reason": "当前 Stage A 没有可计分的 theme 输出。" },
+          { "facet": "quality", "reason": "当前 Stage A 没有可计分的 quality 输出。" }
+        ]
+      },
+      "requiredCore": [
+        {
+          "assertionId": "truth:g023:event:interest-activity",
+          "facet": "event",
+          "value": "兴趣活动",
+          "aliases": ["户外锻炼"],
+          "sourceRefs": ["asset:sgx-v3-g023:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g023:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "画面直接支持缓慢套路式户外锻炼，不需要断言具体流派。"
+        },
+        {
+          "assertionId": "truth:g023:scene:outdoor",
+          "facet": "scene",
+          "value": "户外",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g023:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g023:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "树木、步道和日光直接支持户外场景。"
+        }
+      ],
+      "acceptableVariants": [
+        {
+          "variantId": "truth:g023:variant:ordinary-daily",
+          "satisfiesAssertionId": "truth:g023:event:interest-activity",
+          "facet": "event",
+          "values": ["普通日常"],
+          "rationale": "这是更保守但仍可用于自动整理的上位表达，不得反向把普通日常都推成兴趣活动。"
+        }
+      ],
+      "supportedExtras": [
+        {
+          "assertionId": "truth:g023:extra:natural-landscape",
+          "facet": "scene",
+          "value": "自然景观",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g023:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g023:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "树木、绿地和日光清晰可见，作为附加场景有输入支持。"
+        }
+      ],
+      "observations": [],
+      "forbiddenAssertions": [
+        {
+          "assertionId": "truth:g023:forbidden:identity",
+          "facet": "person_identity",
+          "displayValue": "太极老师或任意具体身份",
+          "match": { "kind": "any_unmatched_in_facet" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "纯图片只能支持匿名人物和动作，不能推断身份或职业。"
+        },
+        {
+          "assertionId": "truth:g023:forbidden:place",
+          "facet": "place",
+          "displayValue": "任意具体公园或城市",
+          "match": { "kind": "any_unmatched_in_facet" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "画面没有可识别地标或地点文字。"
+        },
+        {
+          "assertionId": "truth:g023:forbidden:time",
+          "facet": "time",
+          "displayValue": "任意无依据的时间",
+          "match": { "kind": "any_unmatched_in_facet" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "画面没有可信时间来源。"
+        }
+      ],
+      "conflicts": [],
+      "unknownFacets": ["person_identity", "relationship", "time", "place"],
+      "expectedWorkflowStatus": "succeeded",
+      "reviewNotes": [
+        "动作可描述为太极式练习，但不能断言具体流派、职业或健康目的。",
+        "纯图片足以完成低风险活动和场景自动整理。"
+      ]
+    },
+    {
+      "itemId": "sgx-v3-g025",
+      "sourceInputRef": {
+        "path": "inputs/sgx-v3-g025.json",
+        "sha256": "sha256:dd206672311905a41d07ff08ca4ba513d06ce0696150b76bdbcb6d6321b12044"
+      },
+      "decisionStatus": "decided",
+      "evaluation": {
+        "closedFacets": ["time", "place", "event", "scene"],
+        "excludedFacets": [
+          { "facet": "person_cluster", "reason": "当前 E1 不评估跨照片人物聚类效果。" },
+          { "facet": "theme", "reason": "当前 Stage A 没有可计分的 theme 输出。" },
+          { "facet": "quality", "reason": "当前 Stage A 没有可计分的 quality 输出。" }
+        ]
+      },
+      "requiredCore": [
+        {
+          "assertionId": "truth:g025:event:travel",
+          "facet": "event",
+          "value": "旅行",
+          "aliases": ["坐火车去看海"],
+          "sourceRefs": ["asset:sgx-v3-g025:photo:001", "asset:sgx-v3-g025:user_text:001"],
+          "targetAssetIds": ["asset:sgx-v3-g025:photo:001"],
+          "authority": "user_explicit",
+          "rationale": "用户说明和火车站画面共同支持旅行事件。"
+        },
+        {
+          "assertionId": "truth:g025:scene:transport",
+          "facet": "scene",
+          "value": "交通",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g025:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g025:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "列车、站台和行李直接支持交通场景。"
+        },
+        {
+          "assertionId": "truth:g025:time:event-season",
+          "facet": "time",
+          "value": "1998-summer",
+          "aliases": ["九八年夏天"],
+          "sourceRefs": ["asset:sgx-v3-g025:user_text:001"],
+          "targetAssetIds": ["asset:sgx-v3-g025:photo:001"],
+          "authority": "user_explicit",
+          "timeRole": "event",
+          "precision": "season",
+          "rationale": "用户明确描述该旅行发生在九八年夏天。"
+        }
+      ],
+      "acceptableVariants": [
+        {
+          "variantId": "truth:g025:variant:event-year",
+          "satisfiesAssertionId": "truth:g025:time:event-season",
+          "facet": "time",
+          "values": ["1998"],
+          "timeRole": "event",
+          "precision": "year",
+          "rationale": "当前 Stage A 只支持年份粒度，保守降级到 1998 年可以满足事件时间核心。"
+        }
+      ],
+      "supportedExtras": [
+        {
+          "assertionId": "truth:g025:extra:outdoor",
+          "facet": "scene",
+          "value": "户外",
+          "aliases": [],
+          "sourceRefs": ["asset:sgx-v3-g025:photo:001"],
+          "targetAssetIds": ["asset:sgx-v3-g025:photo:001"],
+          "authority": "visual_direct",
+          "rationale": "站台为清晰可见的户外环境。"
+        }
+      ],
+      "observations": [
+        {
+          "observationId": "truth:g025:observation:visible-date",
+          "facet": "time",
+          "kind": "visible_time_text",
+          "rawValue": "2001 07",
+          "normalizedValue": "2001-07",
+          "role": "role_unknown",
+          "precision": "year_month",
+          "sourceRefs": ["asset:sgx-v3-g025:photo:001"],
+          "handling": "preserve_and_request_role_clarification"
+        }
+      ],
+      "forbiddenAssertions": [
+        {
+          "assertionId": "truth:g025:forbidden:capture-date",
+          "facet": "time",
+          "displayValue": "capture:2001-07",
+          "match": { "kind": "exact_value", "value": "2001-07", "timeRole": "capture", "precision": "year_month" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "像素日期戳不是可信原始 EXIF。"
+        },
+        {
+          "assertionId": "truth:g025:forbidden:event-date",
+          "facet": "time",
+          "displayValue": "event:2001-07",
+          "match": { "kind": "exact_value", "value": "2001-07", "timeRole": "event", "precision": "year_month" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "当前没有证据把可见日期角色确定为该旅行的 event 时间。"
+        },
+        {
+          "assertionId": "truth:g025:forbidden:scan-date",
+          "facet": "time",
+          "displayValue": "scan:2001-07",
+          "match": { "kind": "exact_value", "value": "2001-07", "timeRole": "scan", "precision": "year_month" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "没有扫描流程 provenance。"
+        },
+        {
+          "assertionId": "truth:g025:forbidden:upload-date",
+          "facet": "time",
+          "displayValue": "upload:2001-07",
+          "match": { "kind": "exact_value", "value": "2001-07", "timeRole": "upload", "precision": "year_month" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "没有上传系统 provenance。"
+        },
+        {
+          "assertionId": "truth:g025:forbidden:place",
+          "facet": "place",
+          "displayValue": "任意具体站名、城市或海边目的地",
+          "match": { "kind": "any_unmatched_in_facet" },
+          "riskClass": "unsafe_false_positive",
+          "rationale": "图片与文字都没有给出可验证的具体地点。"
+        }
+      ],
+      "conflicts": [],
+      "unknownFacets": ["person_identity", "relationship", "place"],
+      "expectedWorkflowStatus": "needs_review",
+      "reviewNotes": [
+        "1998-summer 是用户明确 event 时间；2001-07 只是一条 role_unknown 视觉观察。",
+        "两者当前不构成可评分同角色冲突，但在合并时间线前需要角色澄清。",
+        "旧 r5 把两者写成 time conflict 的口径由本次新 revision 更正；历史记录不覆盖。"
+      ]
+    }
+  ]
+}

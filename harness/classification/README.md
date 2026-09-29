@@ -17,6 +17,46 @@ npm run classification:fake-http
 npm run classification:t0-preflight -- --manifest /受控目录/manifest.json
 ```
 
+## E1 semantic scoring v2
+
+E1 新增三份 strict draft-07 Schema：
+
+- [`classification-scoring-policy-v2.schema.json`](../../contracts/classification-scoring-policy-v2.schema.json)
+  冻结七类语义结果、匹配顺序、固定分母、安全 Gate、时间角色和冲突规则；
+- [`classification-truth-v2.schema.json`](../../contracts/classification-truth-v2.schema.json)
+  约束 input-only 盲审真值、输入哈希、policy/盲审 ledger 绑定以及逐样例来源；
+- [`classification-semantic-scoring-cases-v2.schema.json`](../../contracts/classification-semantic-scoring-cases-v2.schema.json)
+  封闭 case 输入和期望字段，要求显式 `evidenceKinds`、time role/precision、workflow assessment、固定分母
+  以及 policy/truth bytes hash。
+
+配套 fixture 为：
+
+- [`semantic-scoring-policy-v2.json`](fixtures/semantic-scoring-policy-v2.json)：冻结 policy；
+- [`semantic-truth-v2.json`](fixtures/semantic-truth-v2.json)：`g007/g011/g023/g025` 的 synthetic
+  functional truth；
+- [`semantic-scoring-v2-cases.json`](fixtures/semantic-scoring-v2-cases.json)：覆盖七类语义、完整与
+  不完整冲突以及 `failed/not_run` 固定分母的正反例期望。
+
+只运行 E1 focused test：
+
+```sh
+node --test harness/classification/semantic-scoring-v2.test.mjs
+```
+
+`npm run test:classification` 也会自动包含该测试。focused test 的 6 个检查覆盖三份 strict Schema、
+fixture、policy/truth/盲审 ledger 哈希绑定、引用完整性、七类语义、`failed/not_run` 固定分母、
+`g025` 时间角色保护与 freeze manifest；它不执行真实模型，也不实现或验证 E2 scorer 的模型效果。
+
+本轮不产生 aggregate score：policy 固定 `aggregateScore=null`，功能 Gate 的
+`numericPassThreshold=null`，只要求按语义类别计数、固定分母、逐 facet 明细和 workflow status。
+旧内容组织 baseline 的 `0.80/0.55` 只用于 `autoMerge/candidate` 路由，不是模型置信度、真实准确率或
+semantic scoring v2 的通过线。`g025` 图片中可见的 `2001-07` 仅是 `role_unknown` observation；
+没有可信 provenance 时不能升级为 `event/capture/scan/upload`，也不能据此制造时间冲突。
+
+policy 与 truth 的 `claimBoundary` 都是 `synthetic_functional_only`，case fixture 进一步标记为
+`offline_contract_fixture_only`。因此它们只能验证合成数据上的结构、功能规则和异常处理；synthetic
+functional truth 不代表真实模型准确率、真实家庭分布表现、产品就绪或用户收益。
+
 ## 实验产物登记（E0）
 
 真实模型探索、离线 replay 和冻结评测必须写入 Git 外的持久私有目录；`/tmp`、`/private/tmp`

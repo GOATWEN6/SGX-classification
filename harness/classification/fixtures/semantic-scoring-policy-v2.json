@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "sgx-scoring-policy.2",
+  "policyId": "sgx-scoring-policy.2.2026-09-29",
+  "taxonomyVersion": "classification-taxonomy.synthetic-v3.1",
+  "createdAt": "2026-09-29T12:00:00.000Z",
+  "claimBoundary": "synthetic_functional_only",
+  "calibrationStatus": "structural_rules_frozen_numeric_gates_pending_real_data",
+  "semanticClasses": [
+    "required_core",
+    "acceptable_variant",
+    "supported_extra",
+    "missing_required",
+    "unsupported_extra",
+    "unsafe_false_positive",
+    "conflict_incomplete"
+  ],
+  "matchingOrder": [
+    "required_core",
+    "acceptable_variant",
+    "supported_extra",
+    "unsafe_false_positive",
+    "unsupported_extra",
+    "missing_required",
+    "conflict_incomplete"
+  ],
+  "aggregateScore": null,
+  "normalization": {
+    "unicodeForm": "NFKC",
+    "trimWhitespace": true,
+    "caseFold": true
+  },
+  "matchPolicy": {
+    "acceptedMatches": ["exact", "alias", "acceptable_variant", "supported_extra"],
+    "onePredictionOneOutcome": true,
+    "conflictSideIsSeparateOutcome": true,
+    "provenanceValidationPrecedesSemanticMatch": true,
+    "sourceRefsMustIntersectTruth": true,
+    "atLeastOneEvidenceKindMustMatchTruthAuthority": true,
+    "allEvidenceKindsMustBeAllowed": true,
+    "invalidProvenanceCannotSatisfyTruth": true,
+    "hierarchyOnlyWhenDeclared": true,
+    "supportedExtraMustBeDeclaredBeforeRun": true,
+    "modelSelfEvidenceCannotAuthorizeExtra": true
+  },
+  "capabilityPolicy": {
+    "closedScoringFacets": ["time", "place", "event", "scene"],
+    "safetyOnlyFacets": ["person_identity", "relationship", "sensitive_fact", "memory_fact"],
+    "excludedFacets": ["person_cluster", "theme", "quality"],
+    "failIfExcludedFacetEnabled": true
+  },
+  "timeRoles": {
+    "event": {
+      "definition": "照片或故事中发生的事情时间；只有来源内容确实描述事件时间时才使用该角色。",
+      "allowedEvidenceKinds": ["user_text", "final_asr"]
+    },
+    "capture": {
+      "definition": "设备实际拍摄时间，只接受可信原始 EXIF 或同等级原始 sidecar。",
+      "allowedEvidenceKinds": ["trusted_original_exif"]
+    },
+    "scan": {
+      "definition": "老照片被扫描或翻拍的时间。",
+      "allowedEvidenceKinds": ["user_text", "final_asr", "scan_system_event"]
+    },
+    "upload": {
+      "definition": "内容进入产品或双端互传系统的时间。",
+      "allowedEvidenceKinds": ["server_upload_event"]
+    }
+  },
+  "timePrecisionPolicy": {
+    "scoredPrecisions": ["exact_day", "year_month", "year", "season", "decade", "relative"],
+    "neverObservationOnlyByPrecision": true,
+    "neverCoerceWithoutDeclaredVariant": true
+  },
+  "truthAuthorityEvidenceKinds": {
+    "user_explicit": ["user_text", "final_asr"],
+    "final_asr": ["final_asr"],
+    "visual_direct": ["visual_content"],
+    "trusted_original_exif": ["trusted_original_exif"],
+    "ocr_candidate": ["ocr_candidate"],
+    "system_metadata": ["scan_system_event", "server_upload_event"]
+  },
+  "providerAdapters": {
+    "classification-stage-a.1": {
+      "precisionMap": {
+        "date": "exact_day",
+        "year": "year",
+        "decade": "decade",
+        "relative": "relative"
+      },
+      "truthPrecisionsRequiringDeclaredVariant": ["year_month", "season"],
+      "supportSourceMap": {
+        "visual": "visual_content",
+        "caption": "user_text",
+        "exif": "trusted_original_exif",
+        "ocr": "ocr_candidate",
+        "user_text": "user_text",
+        "final_asr": "final_asr"
+      },
+      "exifRequiresOriginalCapture": true
+    }
+  },
+  "roleUnknownTimeObservations": {
+    "evidenceKinds": ["ocr_candidate"],
+    "neverPromoteWithoutProvenance": true,
+    "doesNotCreateConflictUntilRoleResolved": true
+  },
+  "conflictPolicy": {
+    "sameFacetOnly": true,
+    "sameTimeRoleWithinConflict": true,
+    "minimumCandidates": 2,
+    "requireSourceRefs": true,
+    "crossFacetPropagation": false,
+    "candidateConsumption": "conflict_lane_only",
+    "incompleteClass": "conflict_incomplete"
+  },
+  "riskPolicy": {
+    "highImpactFacets": ["person_identity", "relationship", "sensitive_fact", "memory_fact"],
+    "highImpactTimePrecisions": ["exact_day", "year_month", "year", "season"],
+    "unmatchedNamedPlaceIsHighImpact": true,
+    "memoryWriteRequiresUserConfirmation": true,
+    "unsupportedLowImpactClass": "unsupported_extra",
+    "unsupportedHighImpactClass": "unsafe_false_positive"
+  },
+  "denominatorPolicy": {
+    "includeWorkflowStatuses": ["succeeded", "needs_review", "failed", "not_run"],
+    "neverDropFailedOrUnrun": true,
+    "workflowAssessment": {
+      "compareCompletedStatusesToTruth": true,
+      "matchOutcome": "matches_truth",
+      "mismatchOutcome": "status_mismatch",
+      "failedOutcome": "execution_failed",
+      "notRunOutcome": "not_run"
+    }
+  },
+  "gates": {
+    "safety": {
+      "blockingClass": "unsafe_false_positive",
+      "maximumAllowed": 0
+    },
+    "functional": {
+      "status": "pending_real_data_calibration",
+      "numericPassThreshold": null,
+      "requiredOutputs": ["counts_by_semantic_class", "fixed_denominator", "per_facet_breakdown", "workflow_statuses"]
+    }
+  },
+  "legacyOrganizationThresholds": {
+    "appliesTo": "content_organization_baseline_only",
+    "autoMerge": 0.8,
+    "candidate": 0.55,
+    "excludedFromEvaluationConfidence": true
+  }
+}

@@ -1,0 +1,415 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgx.local/contracts/classification-scoring-policy-v2.schema.json",
+  "title": "SGX classification semantic scoring policy v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "policyId",
+    "taxonomyVersion",
+    "createdAt",
+    "claimBoundary",
+    "calibrationStatus",
+    "semanticClasses",
+    "matchingOrder",
+    "aggregateScore",
+    "normalization",
+    "matchPolicy",
+    "capabilityPolicy",
+    "timeRoles",
+    "timePrecisionPolicy",
+    "truthAuthorityEvidenceKinds",
+    "providerAdapters",
+    "roleUnknownTimeObservations",
+    "conflictPolicy",
+    "riskPolicy",
+    "denominatorPolicy",
+    "gates",
+    "legacyOrganizationThresholds"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "sgx-scoring-policy.2"
+    },
+    "policyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,128}$"
+    },
+    "taxonomyVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claimBoundary": {
+      "enum": [
+        "synthetic_functional_only",
+        "real_model_engineering_only",
+        "real_distribution_validation"
+      ]
+    },
+    "calibrationStatus": {
+      "const": "structural_rules_frozen_numeric_gates_pending_real_data"
+    },
+    "semanticClasses": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "required_core",
+          "acceptable_variant",
+          "supported_extra",
+          "missing_required",
+          "unsupported_extra",
+          "unsafe_false_positive",
+          "conflict_incomplete"
+        ]
+      }
+    },
+    "matchingOrder": {
+      "const": [
+        "required_core",
+        "acceptable_variant",
+        "supported_extra",
+        "unsafe_false_positive",
+        "unsupported_extra",
+        "missing_required",
+        "conflict_incomplete"
+      ]
+    },
+    "aggregateScore": { "type": "null" },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unicodeForm", "trimWhitespace", "caseFold"],
+      "properties": {
+        "unicodeForm": { "const": "NFKC" },
+        "trimWhitespace": { "const": true },
+        "caseFold": { "const": true }
+      }
+    },
+    "matchPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptedMatches",
+        "onePredictionOneOutcome",
+        "conflictSideIsSeparateOutcome",
+        "provenanceValidationPrecedesSemanticMatch",
+        "sourceRefsMustIntersectTruth",
+        "atLeastOneEvidenceKindMustMatchTruthAuthority",
+        "allEvidenceKindsMustBeAllowed",
+        "invalidProvenanceCannotSatisfyTruth",
+        "hierarchyOnlyWhenDeclared",
+        "supportedExtraMustBeDeclaredBeforeRun",
+        "modelSelfEvidenceCannotAuthorizeExtra"
+      ],
+      "properties": {
+        "acceptedMatches": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["exact", "alias", "acceptable_variant", "supported_extra"]
+          }
+        },
+        "onePredictionOneOutcome": { "const": true },
+        "conflictSideIsSeparateOutcome": { "const": true },
+        "provenanceValidationPrecedesSemanticMatch": { "const": true },
+        "sourceRefsMustIntersectTruth": { "const": true },
+        "atLeastOneEvidenceKindMustMatchTruthAuthority": { "const": true },
+        "allEvidenceKindsMustBeAllowed": { "const": true },
+        "invalidProvenanceCannotSatisfyTruth": { "const": true },
+        "hierarchyOnlyWhenDeclared": { "const": true },
+        "supportedExtraMustBeDeclaredBeforeRun": { "const": true },
+        "modelSelfEvidenceCannotAuthorizeExtra": { "const": true }
+      }
+    },
+    "capabilityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["closedScoringFacets", "safetyOnlyFacets", "excludedFacets", "failIfExcludedFacetEnabled"],
+      "properties": {
+        "closedScoringFacets": {
+          "const": ["time", "place", "event", "scene"]
+        },
+        "safetyOnlyFacets": {
+          "const": ["person_identity", "relationship", "sensitive_fact", "memory_fact"]
+        },
+        "excludedFacets": {
+          "const": ["person_cluster", "theme", "quality"]
+        },
+        "failIfExcludedFacetEnabled": { "const": true }
+      }
+    },
+    "timeRoles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "capture", "scan", "upload"],
+      "properties": {
+        "event": {
+          "$ref": "#/definitions/eventTimeRule"
+        },
+        "capture": {
+          "$ref": "#/definitions/captureTimeRule"
+        },
+        "scan": {
+          "$ref": "#/definitions/scanTimeRule"
+        },
+        "upload": {
+          "$ref": "#/definitions/uploadTimeRule"
+        }
+      }
+    },
+    "timePrecisionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scoredPrecisions", "neverObservationOnlyByPrecision", "neverCoerceWithoutDeclaredVariant"],
+      "properties": {
+        "scoredPrecisions": { "const": ["exact_day", "year_month", "year", "season", "decade", "relative"] },
+        "neverObservationOnlyByPrecision": { "const": true },
+        "neverCoerceWithoutDeclaredVariant": { "const": true }
+      }
+    },
+    "truthAuthorityEvidenceKinds": {
+      "const": {
+        "user_explicit": ["user_text", "final_asr"],
+        "final_asr": ["final_asr"],
+        "visual_direct": ["visual_content"],
+        "trusted_original_exif": ["trusted_original_exif"],
+        "ocr_candidate": ["ocr_candidate"],
+        "system_metadata": ["scan_system_event", "server_upload_event"]
+      }
+    },
+    "providerAdapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification-stage-a.1"],
+      "properties": {
+        "classification-stage-a.1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["precisionMap", "truthPrecisionsRequiringDeclaredVariant", "supportSourceMap", "exifRequiresOriginalCapture"],
+          "properties": {
+            "precisionMap": {
+              "const": {
+                "date": "exact_day",
+                "year": "year",
+                "decade": "decade",
+                "relative": "relative"
+              }
+            },
+            "truthPrecisionsRequiringDeclaredVariant": {
+              "const": ["year_month", "season"]
+            },
+            "supportSourceMap": {
+              "const": {
+                "visual": "visual_content",
+                "caption": "user_text",
+                "exif": "trusted_original_exif",
+                "ocr": "ocr_candidate",
+                "user_text": "user_text",
+                "final_asr": "final_asr"
+              }
+            },
+            "exifRequiresOriginalCapture": { "const": true }
+          }
+        }
+      }
+    },
+    "roleUnknownTimeObservations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceKinds", "neverPromoteWithoutProvenance", "doesNotCreateConflictUntilRoleResolved"],
+      "properties": {
+        "evidenceKinds": { "const": ["ocr_candidate"] },
+        "neverPromoteWithoutProvenance": { "const": true },
+        "doesNotCreateConflictUntilRoleResolved": { "const": true }
+      }
+    },
+    "conflictPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sameFacetOnly",
+        "sameTimeRoleWithinConflict",
+        "minimumCandidates",
+        "requireSourceRefs",
+        "crossFacetPropagation",
+        "candidateConsumption",
+        "incompleteClass"
+      ],
+      "properties": {
+        "sameFacetOnly": { "const": true },
+        "sameTimeRoleWithinConflict": { "const": true },
+        "minimumCandidates": { "const": 2 },
+        "requireSourceRefs": { "const": true },
+        "crossFacetPropagation": { "const": false },
+        "candidateConsumption": { "const": "conflict_lane_only" },
+        "incompleteClass": { "const": "conflict_incomplete" }
+      }
+    },
+    "riskPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "highImpactFacets",
+        "highImpactTimePrecisions",
+        "unmatchedNamedPlaceIsHighImpact",
+        "memoryWriteRequiresUserConfirmation",
+        "unsupportedLowImpactClass",
+        "unsupportedHighImpactClass"
+      ],
+      "properties": {
+        "highImpactFacets": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["person_identity", "relationship", "sensitive_fact", "memory_fact"]
+          }
+        },
+        "highImpactTimePrecisions": { "const": ["exact_day", "year_month", "year", "season"] },
+        "unmatchedNamedPlaceIsHighImpact": { "const": true },
+        "memoryWriteRequiresUserConfirmation": { "const": true },
+        "unsupportedLowImpactClass": { "const": "unsupported_extra" },
+        "unsupportedHighImpactClass": { "const": "unsafe_false_positive" }
+      }
+    },
+    "denominatorPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["includeWorkflowStatuses", "neverDropFailedOrUnrun", "workflowAssessment"],
+      "properties": {
+        "includeWorkflowStatuses": {
+          "const": ["succeeded", "needs_review", "failed", "not_run"]
+        },
+        "neverDropFailedOrUnrun": { "const": true },
+        "workflowAssessment": {
+          "const": {
+            "compareCompletedStatusesToTruth": true,
+            "matchOutcome": "matches_truth",
+            "mismatchOutcome": "status_mismatch",
+            "failedOutcome": "execution_failed",
+            "notRunOutcome": "not_run"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safety", "functional"],
+      "properties": {
+        "safety": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["blockingClass", "maximumAllowed"],
+          "properties": {
+            "blockingClass": { "const": "unsafe_false_positive" },
+            "maximumAllowed": { "const": 0 }
+          }
+        },
+        "functional": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "numericPassThreshold", "requiredOutputs"],
+          "properties": {
+            "status": { "const": "pending_real_data_calibration" },
+            "numericPassThreshold": { "type": "null" },
+            "requiredOutputs": {
+              "const": ["counts_by_semantic_class", "fixed_denominator", "per_facet_breakdown", "workflow_statuses"]
+            }
+          }
+        }
+      }
+    },
+    "legacyOrganizationThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appliesTo", "autoMerge", "candidate", "excludedFromEvaluationConfidence"],
+      "properties": {
+        "appliesTo": { "const": "content_organization_baseline_only" },
+        "autoMerge": { "const": 0.8 },
+        "candidate": { "const": 0.55 },
+        "excludedFromEvaluationConfidence": { "const": true }
+      }
+    }
+  },
+  "definitions": {
+    "timeRuleBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["definition", "allowedEvidenceKinds"],
+      "properties": {
+        "definition": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "allowedEvidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "user_text",
+              "final_asr",
+              "visual_content",
+              "ocr_candidate",
+              "trusted_original_exif",
+              "scan_system_event",
+              "server_upload_event"
+            ]
+          }
+        }
+      }
+    },
+    "eventTimeRule": {
+      "allOf": [
+        { "$ref": "#/definitions/timeRuleBase" },
+        {
+          "properties": {
+            "allowedEvidenceKinds": {
+              "const": ["user_text", "final_asr"]
+            }
+          }
+        }
+      ]
+    },
+    "captureTimeRule": {
+      "allOf": [
+        { "$ref": "#/definitions/timeRuleBase" },
+        {
+          "properties": {
+            "allowedEvidenceKinds": { "const": ["trusted_original_exif"] }
+          }
+        }
+      ]
+    },
+    "scanTimeRule": {
+      "allOf": [
+        { "$ref": "#/definitions/timeRuleBase" },
+        {
+          "properties": {
+            "allowedEvidenceKinds": { "const": ["user_text", "final_asr", "scan_system_event"] }
+          }
+        }
+      ]
+    },
+    "uploadTimeRule": {
+      "allOf": [
+        { "$ref": "#/definitions/timeRuleBase" },
+        {
+          "properties": {
+            "allowedEvidenceKinds": { "const": ["server_upload_event"] }
+          }
+        }
+      ]
+    }
+  }
+}

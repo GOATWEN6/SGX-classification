@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "sgx-semantic-v2-freeze.1",
+  "createdAt": "2026-09-29T12:10:00.000Z",
+  "status": "e1_semantics_frozen_for_e2_implementation",
+  "claimBoundary": "synthetic_functional_contract_only",
+  "sourceDataset": {
+    "datasetId": "sgx-t0-photorealistic-synthetic-v3",
+    "checksumManifestSha256": "sha256:ada5bbd22e744d9fc7ce5ab3d7289b8d83cc29fcc3ac29bfe0a6e18fc1dea429",
+    "checksumsVerified": 198,
+    "checksumsFailed": 0
+  },
+  "artifacts": [
+    {
+      "kind": "spec",
+      "path": "docs/superpowers/specs/2026-09-29-classification-semantic-scoring-v2-spec.md",
+      "sha256": "sha256:9e532ae0e70bb4d63fa45de7ee9eae5d3c0f3f959ccdd82ee69b0d0d3f3e4bf0"
+    },
+    {
+      "kind": "scoring_policy_schema",
+      "path": "contracts/classification-scoring-policy-v2.schema.json",
+      "sha256": "sha256:1425526f5c746ca8d3f2d41d26ae8920a15e2474674bd85aba509f0d03bc5344"
+    },
+    {
+      "kind": "truth_schema",
+      "path": "contracts/classification-truth-v2.schema.json",
+      "sha256": "sha256:b26389adb090815fbd5c81dd5bdfebb2368d6f4fd0d9aa76dba1147efb8c5afc"
+    },
+    {
+      "kind": "scoring_cases_schema",
+      "path": "contracts/classification-semantic-scoring-cases-v2.schema.json",
+      "sha256": "sha256:44d511e7c98d21d929ada9eecbf5b8e3f33b9a9a4b1ae081df3714a2a58585c2"
+    },
+    {
+      "kind": "scoring_policy",
+      "path": "harness/classification/fixtures/semantic-scoring-policy-v2.json",
+      "sha256": "sha256:7f5e7cfe55721d02ae4a519511b90621d2c1c787662d0f59464961a23dd247bb"
+    },
+    {
+      "kind": "truth",
+      "path": "harness/classification/fixtures/semantic-truth-v2.json",
+      "sha256": "sha256:ea3272c6efd1dd89da03896818df754b8143b23a249153eb57bd52876b5a352c"
+    },
+    {
+      "kind": "positive_negative_cases",
+      "path": "harness/classification/fixtures/semantic-scoring-v2-cases.json",
+      "sha256": "sha256:ad25e6e204060ada0effde13c19f64f553d4751446bf0583eaeb7f872cbafd28"
+    },
+    {
+      "kind": "review_ledger",
+      "path": "docs/algorithms/evidence/CLASSIFICATION_SEMANTIC_V2_BLIND_REVIEW_2026-09-29.json",
+      "sha256": "sha256:2a9dea48f73f0c2bce002759bcb5a8435591d25a2ee5714e3c32aa18eab39516"
+    }
+  ],
+  "gates": {
+    "structuralSemanticsFrozen": true,
+    "numericFunctionalThresholdFrozen": false,
+    "unsafeFalsePositiveMaximum": 0,
+    "historicalR5ExactRescoreAvailable": false,
+    "readyForE2ScorerImplementation": true,
+    "readyForRealDistributionClaims": false
+  },
+  "notes": [
+    "The source v3 packet was re-reviewed as a new revision; missing r5 outputs were not reconstructed.",
+    "The visible 2001-07 stamp in g025 is frozen as a role_unknown observation, not a confirmed time conflict.",
+    "Numeric functional pass thresholds remain pending real-data and T1 product calibration."
+  ]
+}

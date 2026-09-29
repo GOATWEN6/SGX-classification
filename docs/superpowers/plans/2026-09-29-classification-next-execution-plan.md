@@ -4,7 +4,7 @@
 > 分支：`codex/classification-contract-v1`  
 > 起点提交：`08a37c6`  
 > 当前 Prompt/Guard：`sgx-five-facets.12`  
-> 状态：可开始执行离线工程部分；新的付费调用尚未授权
+> 状态：E0 已实现、E1 已冻结；E2 scorer 为下一项，新的付费调用尚未授权
 
 > 2026-09-29 审计补充：执行前必须同时遵循 [当前问题总表与修订后的执行边界](../../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)。旧 `/private/tmp` 冻结包、真实运行和 replay 目录当前已不存在，因此不得把“旧 6 例离线重算/保存响应 replay”写成可直接执行步骤；时间角色以现行 Prompt 的 EXIF-only `capture` 规则为准。
 
@@ -25,20 +25,22 @@
 - 已完成 6/6 次 `qwen3.7-flash-2026-07-15` 真实请求，0 自动重试，累计记账 ¥0.045918；批准额度已经用完。
 - 原始结果必须保留：2 succeeded、2 needs_review、2 failed。后续离线修复不能覆盖这些历史状态。
 - g001、g025 的保存响应已在 `.12` 下精确离线重放 2/2 通过；这只证明 Guard 修复有效，没有产生新 API 调用。
-- `npm run test:classification` 在历史受控 loopback 环境记录为 196/196；本次受限沙箱复验为非 HTTP 168/168 通过，另 28 项因 `listen EPERM 127.0.0.1` 未能运行。typecheck、secret scan 和 `git diff --check` 通过。
+- E0 检查点曾在受限沙箱得到非 HTTP 250 pass / HTTP 相关 28 fail（`listen EPERM 127.0.0.1`）；E1 改动后在允许 loopback 的受控环境完成最新全量复跑，结果为 284/284 通过。此前一次 expired-cache 409 与随后 CLI shutdown 超时未复现，保留为历史间歇性记录。
 - `/classification-lab` 当前只支持 `deterministic` Provider；`lab-store.ts` 也明确拒绝其他 Provider 结果。
 - 现有 Stage A Provider、Evidence adapter 和 Stage A→内容组织 adapter 可复用，不再另写一套模型调用链。
 - 旧 r5、两个真实运行和 `.12` replay 的报告仍在 Git，但报告引用的 `/private/tmp` 原始目录当前已经不存在；必须为新批次建立持久证据根，不能从文档反向伪造旧响应。
+- E1 已冻结 `sgx-scoring-policy.2.2026-09-29` 与新 truth revision `sgx-truth.2.v3-derived-e1-2026-09-29`；claim boundary 为 `synthetic_functional_only`。g025 的可见 `2001-07` 保存为 `role_unknown`，不与 `event:1998-summer` 形成同角色冲突。
+- E1 三份 strict Schema 与冻结产物的聚焦测试 6/6、全量分类回归 284/284 通过；没有网络或 API 调用、没有读取凭据、额外费用 ¥0。可执行 scorer、历史 r5 exact rescore 和合成功能 Gate 均未因此完成。
 - Lab 当前幂等键不含 Provider/model/prompt/scorer；同步 POST 也无法在真实调用期间执行取消或撤权。E3 必须先修这两个边界。
 
 ## 3. 执行顺序
 
 ```text
-E0 持久证据 registry 与旧产物缺失记录
+E0 持久证据 registry 与旧产物缺失记录（已实现）
   ↓ Gate 0
-E1 语义与评分口径冻结
+E1 语义与评分口径冻结（已完成）
   ↓ Gate 1
-E2 评分器 v2 与冻结产物
+E2 评分器 v2 与固定分母报告（下一项）
   ↓ Gate 2
 E3 真实 Stage A 实验台 Provider
   ↓ Gate 3（零付费调用）
@@ -49,13 +51,13 @@ E5 14 组 t1_validation 冻结合成功能验收
 E6 全栈 T2 交接包更新
 ```
 
-E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4、E5 只有在各自清单和上限可检查后，才请求一次明确授权。
+E2–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4、E5 只有在各自清单和上限可检查后，才请求一次明确授权。
 
 ## 3.1 E0：先建立持久证据 registry
 
-旧 raw response 与 replay 目录当前缺失。E0 必须记录这一事实，并定义新批次的持久输出根、artifact registry、SHA-256、dataset/model/prompt/scorer/approval/ledger/metrics/provenance 字段。找不到的旧响应不能重造；从源数据重新生成的材料必须使用新 revision 和 digest。
+E0 已实现 registry strict Schema、writer/verifier、CLI 和旧临时产物 missing ledger。旧 raw response 与 replay 目录仍然缺失；找不到的旧响应不能重造，从源数据重新生成的材料必须使用新 revision 和 digest。Stage A runner 自动 finalization 仍留到 E3 接线。
 
-## 4. E1：冻结通用语义和风险口径
+## 4. E1：冻结通用语义和风险口径（已完成）
 
 ### 4.1 要解决的问题
 
@@ -66,7 +68,7 @@ E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 |g007|`聚会` 与 `家庭聚会`、`capture` 与 `event`、`桌面` 与 `庆典`|没有家庭关系证据时，`聚会` 是更安全的核心标签；按现行 Prompt，`capture` 仅接受可信原始 EXIF，用户文字/final ASR 描述某次活动中的拍摄日期按 `event`；有视觉依据的附加场景允许存在|
 |g011|只有年份矛盾，却额外声明 event conflict|冲突必须有两个互相排斥的同维度候选或明确的同维度否定证据；不能由 time conflict 自动传播为 event conflict|
 |g023|核心 `户外` 正确，同时给出 `自然景观`|受控 taxonomy 内且有 Evidence 的附加标签记为 supported extra，不作为严重错误|
-|g025|声明 time conflict，但只输出 1998、漏掉 OCR 2001|冲突输出必须包含足以解释冲突的候选；只声明 conflict 而缺少另一侧证据，记为 conflict incomplete|
+|g025|历史输出声明 time conflict、只保留 1998，并漏掉图片中可见的 2001|用户说明支持 `event:1998-summer`；没有 EXIF/流程 provenance 的像素日期 `2001-07` 保存为 `role_unknown` 观察并请求角色澄清，不自动形成同角色冲突|
 
 ### 4.2 评分结果不再只有“对/错”
 
@@ -90,6 +92,12 @@ E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 - 人物身份、敏感事实和长期 Memory 的确认边界不变。
 - 四个争议样例由只看输入与冻结政策、不看模型输出的盲审流程裁决并留下 ledger；`supported_extra` 必须在运行前预定义，不能由模型自己的 Evidence 引用循环证明。
 
+Gate 1 已完成：`sgx-scoring-policy.2.2026-09-29`、`sgx-truth.2.v3-derived-e1-2026-09-29`、scoring policy/truth/scoring cases 三份 strict Schema、正反 fixtures、盲审 ledger 与 SHA-256 freeze manifest 已冻结。`node --test harness/classification/semantic-scoring-v2.test.mjs` 为 6/6；本阶段没有网络/API 调用、凭据读取或新增费用。
+
+此 Gate 只证明合成输入的语义合同与冻结流程，claim boundary 为 `synthetic_functional_only`。它没有改写 r5 truth、原始 6 次请求的 2 succeeded / 2 needs_review / 2 failed，也没有恢复缺失的 raw response。历史 r5 当前不能 exact rescore；E2 scorer 仍待实现。
+
+全量分类回归是独立门禁，最新受控 loopback 记录为 284/284 通过。此前一次 expired-cache 409 与随后 CLI shutdown 超时未复现，作为历史间歇性问题保留；聚焦 6/6 与全量 284/284 分别记录，不互相替代。
+
 ## 5. E2：实现评分器 v2 并冻结新产物
 
 ### 5.1 实现范围
@@ -100,9 +108,9 @@ E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 - `harness/classification/stage-a-eval.test.mjs`
 - `src/lib/algorithms/classification/synthetic-v3-adapter.ts` 及对应测试
 - `harness/classification/prepare-synthetic-v31.mjs`（仅当源真值或冻结政策确实变化）
-- 新增评分规则 Spec 与最小正反 fixtures
+- 读取并保持 E1 已冻结的评分规则 Spec、policy/truth 和最小正反 fixtures；若语义必须变化，应创建新 revision，而不是在 E2 原地改写冻结文件
 
-采用版本化、向后兼容方式：历史 `sgx-truth.1` 和 r5 报告只读保留；新版本明确采用 `sgx-truth.2` 与 `sgx-scoring-policy.2`，不再二选一。它们分别表达 required/optional/forbidden、角色/冲突/来源/风险，以及 taxonomy/alias/父子层级/错误严重度。不得原地改写历史 truth、manifest、运行目录或失败记录。
+采用版本化、向后兼容方式：历史 `sgx-truth.1` 和 r5 报告只读保留；E2 同时读取 E1 已冻结的 `sgx-truth.2` 与 `sgx-scoring-policy.2`，不再二选一。它们分别表达 required/optional/forbidden、角色/冲突/来源/风险，以及 taxonomy/alias/父子层级/错误严重度。不得原地改写历史 truth、manifest、运行目录、失败记录或 E1 freeze manifest。
 
 回归至少覆盖：
 
@@ -118,7 +126,7 @@ E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 ### 5.2 Gate 2
 
 - 历史 r5 证据完全未覆盖；
-- 使用新建的版本化 fixtures 可以离线验证“核心正确、可接受变体、支持的额外标签、真正错误”；旧 6 例原始产物当前缺失，不得伪称已完成 exact rescore；若后续按 hash 找回，再追加独立复算报告；
+- scorer 使用 E1 版本化 fixtures 离线验证“核心正确、可接受变体、支持的额外标签、真正错误”；旧 6 例原始产物当前缺失，不得伪称已完成 exact rescore；若后续按 hash 找回，再追加独立复算报告；
 - 评分器测试、全量分类回归、typecheck、secret scan、diff check 通过；
 - 冻结 `.12` Prompt、taxonomy、Guard 和 scorer 版本；进入 validation 后不再调参。
 
@@ -243,7 +251,7 @@ E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、�
 - 自动整理项都能追溯到 Evidence；
 - 高风险断言只能进入 `needs_review`，不能静默成为用户确认事实或长期 Memory；
 - 语义差异按 Gate 2 的类别报告，不用旧 `0.80/0.55` 充当准确率阈值。
-- E1 必须另外冻结 required-core、有效拒判和故事分组 invariant 的功能门槛；全量 `no_assertion/needs_review` 不能只因安全项为 0 而通过。
+- E1 已冻结 required-core、固定分母和功能报告字段，但没有拍脑袋设置数值阈值；E2 必须产出有效拒判与故事分组 invariant，具体功能阈值须在 exploration/T1 校准后、查看 validation 前另行版本化冻结。全量 `no_assertion/needs_review` 不能只因安全项为 0 而通过。
 
 这项结果命名为 `T0-Synthetic Functional Gate`，只代表真实模型在合成场景上的冻结功能验收。30–50 组授权真实内容属于独立的 `Real Distribution Gate`，没有真实数据时分母保持 0，不与本 Gate 混称。
 
@@ -272,7 +280,7 @@ E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、�
 
 只有同时满足以下条件，才把当前算法 T0/T1 工作包交给全栈：
 
-- truth/scorer v2 已冻结并有哈希；
+- truth/scoring policy v2 已冻结并有哈希，可执行 scorer 和固定分母报告通过 Gate 2；
 - `.12` Prompt/Guard/taxonomy 不再使用 validation 调参；
 - 真实 Provider 通过服务端接入，浏览器无法获得密钥；
 - 本地页面完成真实模型 `T1-Local Product Alpha` 冒烟及生命周期动作验收；
