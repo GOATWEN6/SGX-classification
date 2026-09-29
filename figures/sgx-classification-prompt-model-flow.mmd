@@ -1,13 +1,13 @@
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, PingFang SC, Microsoft YaHei, sans-serif","primaryColor":"#EFF6FF","primaryTextColor":"#17324D","primaryBorderColor":"#4C78A8","lineColor":"#58718A","secondaryColor":"#FFF4DE","tertiaryColor":"#F8EBF3"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":28,"rankSpacing":38}}}%%
 flowchart TD
-  subgraph P[System Prompt：sgx-five-facets.6]
+  subgraph P[System Prompt 与 Guard：sgx-five-facets.10]
     direction LR
     P1[信任边界<br/>图片 字幕 EXIF 历史观察<br/>全部是不可信数据]
     P2[任务拆分<br/>extract 只输出 observations<br/>relate 只输出 relations]
     P3[五维抽取<br/>person time place event scene]
     P4[证据约束<br/>每个值必须带 supports<br/>来源与原文或视觉观察]
     P5[拒判与冲突<br/>无证据放 unknownFacets<br/>矛盾保留 conflicts]
-    P6[受控词表<br/>13 类事件 / 9 类场景]
+    P6[运行时受控词表<br/>15 类事件 / 15 类场景<br/>Zod enum 强制]
     P7[人物边界<br/>脸框是局部 faceId<br/>不凭视觉猜姓名或关系]
     P8[关系边界<br/>同类活动不等于同一事件<br/>缺数据只能 unknown]
   end
@@ -34,7 +34,7 @@ flowchart TD
     V2[Provider envelope<br/>finish_reason=stop<br/>responseId model usage 完整]
     V3[内容 JSON<br/>只能是一个 JSON object]
     V4[Zod 结构<br/>ExtractSchema 或 RelateSchema]
-    V5[本地语义规则<br/>引用存在 时间有依据<br/>unknown 完整 人脸有 visual]
+    V5[局部安全清洗 + 本地语义规则<br/>丢弃图片指令与视觉猜时间<br/>保留其余有依据维度]
     V6[通过后才成为候选<br/>不是用户确认事实]
   end
 

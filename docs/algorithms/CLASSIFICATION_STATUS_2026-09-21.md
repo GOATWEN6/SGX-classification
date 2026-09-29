@@ -2,6 +2,20 @@
 
 日期：2026-09-21
 
+## 2026-09-29 当前状态（优先于下方历史快照）
+
+- r5 合成冻结版已完成独立只读审计：40/40 groups、208/208 checksum、26/14 分区、33/6/1 路由，digest 为 `sha256:4b70174fcc3d763d3ddd131e525d110dc90f1da5b90a2c1b07487e5a939d0f3e`。
+- 当前 Prompt/Guard 已升级到 `sgx-five-facets.10`。事件和场景 taxonomy 由运行时 `z.enum` 强制，不再只依赖 Prompt。
+- 已批准的真实 Qwen 请求累计 10/10 次全部使用，不能继续付费调用。最后 2 次确认了真实模型、response id、usage 和原始响应留存，费用 ¥0.011952、0 重试、人脸匹配关闭。
+- g015 图片攻击文字和 g023 视觉猜时间已用本地 Guard 修复：仅删除坏断言，安全事件/场景继续保留，并形成明确复核项。
+- 评测任务默认隔离状态；只有显式 `stateSequenceId` 才共享增量状态，避免同 scope 独立样例互相删除。
+- 当前分类全量回归 194/194 通过；typecheck、secret scan 和 diff check 通过。
+- 当前可以进入下一批 r5 exploration 真实模型功能实验；尚未完成 26 组 exploration、14 组独立 validation，也尚未把真实 Stage A Provider 接入本地产品页。
+- 下一批 6-call exploration 已离线准备并通过预检：`/private/tmp/sgx-d4-qwen37-v31-r5-exploration-6call-20260929`，6 tasks / 6 photos / ¥1 cap / 0 retry，外部调用 0；仍需新的批次授权才能执行。
+- 详细证据见 `docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md`。合成数据结果和少量真实模型探针都不能表述为真实家庭准确率或泛化能力。
+
+以下内容是 2026-09-21 至 2026-09-24 的历史审计快照，保留用于追溯；若与本节冲突，以本节和当前代码/产物为准。
+
 ## 2026-09-23 工程推进更新
 
 本轮没有等待新版 PRD，也没有调用真实 API；先冻结并实现了 Stage A 的可信输入适配边界。新增 Spec：`docs/superpowers/specs/2026-09-23-classification-stage-a-integration-spec.md`；新增实现：`src/lib/algorithms/classification/stage-a-adapter.ts`；新增 7 项适配器回归。当前提交为：`8f23d43`（Spec）和 `e8baece`（适配器与来源契约）。

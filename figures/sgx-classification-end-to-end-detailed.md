@@ -37,7 +37,7 @@ flowchart TD
 
   subgraph D[4. 通用内容组织链]
     direction LR
-    D0[缺失的生产适配器<br/>Stage A 输出 → ContentObservation]
+    D0[已实现并测试的适配器<br/>Stage A 输出 → ContentObservation]
     D1[ContentItem + ContentObservation<br/>photo user_text final_asr file work]
     D2[scoreAssociation 规则分<br/>time .25 / place .20 / event .25<br/>person .20 / theme .10]
     D3[AssociationCandidate<br/>ai_auto / needs_review / not_selected]
@@ -75,8 +75,8 @@ flowchart TD
   C5 --> C6
   C6 --> C7
   C7 --> C8
-  C8 -. 尚未生产接通 .-> D0
-  D0 -. 待实现 .-> D1
+  C8 --> D0
+  D0 --> D1
   D1 --> D2
   D2 --> D3
   D3 --> D4
@@ -96,6 +96,6 @@ flowchart TD
   classDef product fill:#EEEAF8,stroke:#6B54A3,color:#33245E,stroke-width:2px;
   class A0,A00,A1,A2,A3,A4,B1,B2,B3,B4,B5,C0,C1,C3,C4,C6,C7,C8,D1,D2,D3,D4 implemented;
   class C2,C5 model;
-  class D0 missing;
+  class D0 implemented;
   class E1,E2,E3,E4,E5,E6 product;
 ```
