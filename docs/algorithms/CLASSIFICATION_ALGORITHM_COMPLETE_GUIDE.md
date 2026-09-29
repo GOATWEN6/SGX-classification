@@ -1,7 +1,7 @@
 # SGX 图文分类与归纳算法：完整架构、Prompt、规则与评分器
 
 > 当前统一阅读入口 · 文档版本：1.2.0 · 更新日期：2026-09-29<br>
-> 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt 版本：`sgx-five-facets.10`<br>
+> 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.12`<br>
 > 全栈接入与运行命令见：[T0/T1 全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)
 
 ## 1. 先看结论
@@ -15,7 +15,7 @@
 |链路|当前状态|主要输入与输出|
 |---|---|---|
 |通用业务契约链|已实现契约、Fake 与校验|`ContentBundle → ClassificationProviderRequest → ClassificationAssertion`|
-|Stage A 真实视觉算法链|已实现；真实 Qwen 已完成 10 次工程探索请求，正式固定分母验证未完成|`TrustedStageACatalog → Observation / Edge / Group`|
+|Stage A 真实视觉算法链|已实现；真实 Qwen 已完成累计 16 次工程探索请求，正式固定分母验证未完成|`TrustedStageACatalog → Observation / Edge / Group`|
 |统一内容与 StoryUnit 组织链|已实现 bounded retrieval、稀疏组织与测试|`ContentItem + ContentObservation + RetrievalCandidate → StoryUnit`|
 |T1 本地产品链|已实现 loopback BFF、实验页与动作审计|`Browser upload → Evidence → Provider base result → LabAction → current view`|
 
@@ -204,7 +204,7 @@ decision: same | different | unknown
 
 ## 5. 当前完整 System Prompt
 
-以下是 `sgx-five-facets.10` 的当前快照。真正运行时的事实源仍是 [`stage-a-provider.ts`](../../src/lib/algorithms/classification/stage-a-provider.ts)。
+以下是 `sgx-five-facets.12` 的当前快照。真正运行时的事实源仍是 [`stage-a-provider.ts`](../../src/lib/algorithms/classification/stage-a-provider.ts)。
 
 <details>
 <summary>展开查看完整 System Prompt</summary>
@@ -571,9 +571,9 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 - 契约、授权、哈希、预算、错误停止和固定分母能够运行；
 - 图片及绑定 `user_text/final_asr` 的 Stage A 代码路径存在；
 - Qwen/GLM Provider adapter、严格 Zod 与语义校验存在；
-- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.10`，累计 10 次真实 API 请求留下了可审计的 response id、usage、原始响应和错误证据；
+- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.12`，累计 16 次真实 API 请求留下了可审计的 response id、usage、原始响应和错误证据；最新 6 次使用冻结合成场景、0 重试且人物匹配关闭；
 - synthetic-v3.1 r5 已按 40 组固定分母冻结，208/208 checksum、26/14 分区和 33/6/1 路由通过独立只读审计；
-- 最后两条真实响应已离线重放，图片内指令污染和视觉臆测时间会被局部删除，其他有依据维度继续保留；
+- 最新失败的 g001/g025 真实响应已在 `.12` 下精确离线重放；历史图片内指令污染和视觉臆测时间仍会被局部删除，其他有依据维度继续保留；
 - 内容组织的规则分、StoryUnit 和用户显式关系有自动化测试。
 
 ### 尚未证明
@@ -600,9 +600,9 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 2. **已完成**：实现 Stage A 到 `ContentObservation` 的适配器；
 3. **已完成**：让新组织器消费稀疏候选边，并提供 bounded exact top-K；
 4. **已完成工程入口**：本地 T1 实验台、动作审计和全栈 adapter 边界；
-5. **当前待办**：获得新的批次授权后，先跑 r5 exploration 的小批真实模型实验，再冻结 `.10` Prompt、taxonomy、Guard 和评分器；
-6. 对 14 组 `t1_validation` 一次性运行固定分母验收，不用 validation 结果继续调参；
-7. 把同一真实 Stage A Provider 接到 `/classification-lab`，完成本地上传、结果、复核、删除和撤权验收；
+5. **当前待办**：独立复核最新 6 例暴露的 truth 口径，再冻结 `.12` Prompt、taxonomy、Guard 和评分器；
+6. 把同一真实 Stage A Provider 接到 `/classification-lab`，完成本地上传、结果、复核、删除和撤权验收；
+7. 获得新批次授权后，对 14 组 `t1_validation` 一次性运行固定分母验收，不用 validation 结果继续调参；
 8. 在隔离环境做 pHash、EXIF、OCR、SigLIP/OpenCLIP 和 exact/ANN 召回 Spike，减少图片两两 VLM 调用；
 9. 实现只处理 ambiguous/merge-impact 的 VLM router 和组级摘要，并用 exploration/holdout 校准 scorer；
 10. 建立版本化 FamilyReferenceStore，再由全栈接入生产 Job、相册 UI、批量复核、物理删除传播和 MemoryCandidate。

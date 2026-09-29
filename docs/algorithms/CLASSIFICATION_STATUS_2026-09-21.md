@@ -5,13 +5,14 @@
 ## 2026-09-29 当前状态（优先于下方历史快照）
 
 - r5 合成冻结版已完成独立只读审计：40/40 groups、208/208 checksum、26/14 分区、33/6/1 路由，digest 为 `sha256:4b70174fcc3d763d3ddd131e525d110dc90f1da5b90a2c1b07487e5a939d0f3e`。
-- 当前 Prompt/Guard 已升级到 `sgx-five-facets.10`。事件和场景 taxonomy 由运行时 `z.enum` 强制，不再只依赖 Prompt。
-- 已批准的真实 Qwen 请求累计 10/10 次全部使用，不能继续付费调用。最后 2 次确认了真实模型、response id、usage 和原始响应留存，费用 ¥0.011952、0 重试、人脸匹配关闭。
+- 当前 Prompt/Guard 已升级到 `sgx-five-facets.12`。事件和场景 taxonomy 由运行时 `z.enum` 强制，不再只依赖 Prompt。
+- 本轮批准的真实 Qwen 请求 6/6 次全部使用，费用 ¥0.045918、0 重试、人物匹配关闭；项目累计真实请求为 16 次。当前没有剩余付费调用授权。
 - g015 图片攻击文字和 g023 视觉猜时间已用本地 Guard 修复：仅删除坏断言，安全事件/场景继续保留，并形成明确复核项。
 - 评测任务默认隔离状态；只有显式 `stateSequenceId` 才共享增量状态，避免同 scope 独立样例互相删除。
-- 当前分类全量回归 194/194 通过；typecheck、secret scan 和 diff check 通过。
-- 当前可以进入下一批 r5 exploration 真实模型功能实验；尚未完成 26 组 exploration、14 组独立 validation，也尚未把真实 Stage A Provider 接入本地产品页。
-- 下一批 6-call exploration 已离线准备并通过预检：`/private/tmp/sgx-d4-qwen37-v31-r5-exploration-6call-20260929`，6 tasks / 6 photos / ¥1 cap / 0 retry，外部调用 0；仍需新的批次授权才能执行。
+- g001 的月份/年份精度组合与 g025 的“九八年”口语年份已修复；两条已保存真实响应在 `.12` 下精确离线重放通过，没有新增 API 调用。
+- 当前分类全量回归 196/196 通过；typecheck、secret scan 和 diff check 通过。
+- 6 例还暴露 g007 truth 过窄、g011 多报 event conflict、g023 多标签口径和 g025 漏 OCR 年份；应先独立复核 truth，再冻结评分器。
+- 下一步是把真实 Stage A Provider 接入本地 `/classification-lab` 并完成 T0 页面联调；14 组独立 validation 尚未运行。
 - 详细证据见 `docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md`。合成数据结果和少量真实模型探针都不能表述为真实家庭准确率或泛化能力。
 
 以下内容是 2026-09-21 至 2026-09-24 的历史审计快照，保留用于追溯；若与本节冲突，以本节和当前代码/产物为准。
