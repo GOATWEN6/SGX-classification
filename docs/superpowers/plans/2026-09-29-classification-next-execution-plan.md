@@ -6,13 +6,15 @@
 > 当前 Prompt/Guard：`sgx-five-facets.12`  
 > 状态：可开始执行离线工程部分；新的付费调用尚未授权
 
+> 2026-09-29 审计补充：执行前必须同时遵循 [当前问题总表与修订后的执行边界](../../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)。旧 `/private/tmp` 冻结包、真实运行和 replay 目录当前已不存在，因此不得把“旧 6 例离线重算/保存响应 replay”写成可直接执行步骤；时间角色以现行 Prompt 的 EXIF-only `capture` 规则为准。
+
 ## 1. 本阶段要得到的结果
 
 本阶段的目标是把“真实模型已经能被 CLI 调用”推进到“真实 Stage A 能从本地分类实验台安全运行，并可用冻结的 validation 批次验收”。完成时应具备：
 
 1. 一套不会把合理同义词、合理附加标签误判为严重错误的版本化 truth 与评分规则；
 2. 一个只在服务端持有凭据的真实 Stage A 实验台 Provider；
-3. 图片、用户文字和 final ASR 从浏览器上传后，经过真实模型、Guard、内容组织和人工动作的完整 T0 页面链；
+3. 图片、用户文字和 final ASR 从浏览器上传后，经过真实模型、Guard、内容组织和人工动作的完整 `T1-Local Product Alpha` 页面链；
 4. 一份可交给全栈工程师继续 T2 的接口、环境变量、错误恢复和已知限制说明；
 5. 在获得新授权后，对 14 组 `t1_validation` 只运行一次冻结验收，不再依据 validation 调 Prompt 或规则。
 
@@ -23,27 +25,35 @@
 - 已完成 6/6 次 `qwen3.7-flash-2026-07-15` 真实请求，0 自动重试，累计记账 ¥0.045918；批准额度已经用完。
 - 原始结果必须保留：2 succeeded、2 needs_review、2 failed。后续离线修复不能覆盖这些历史状态。
 - g001、g025 的保存响应已在 `.12` 下精确离线重放 2/2 通过；这只证明 Guard 修复有效，没有产生新 API 调用。
-- `npm run test:classification` 当前为 196/196；typecheck、secret scan 和 `git diff --check` 通过。
+- `npm run test:classification` 在历史受控 loopback 环境记录为 196/196；本次受限沙箱复验为非 HTTP 168/168 通过，另 28 项因 `listen EPERM 127.0.0.1` 未能运行。typecheck、secret scan 和 `git diff --check` 通过。
 - `/classification-lab` 当前只支持 `deterministic` Provider；`lab-store.ts` 也明确拒绝其他 Provider 结果。
 - 现有 Stage A Provider、Evidence adapter 和 Stage A→内容组织 adapter 可复用，不再另写一套模型调用链。
+- 旧 r5、两个真实运行和 `.12` replay 的报告仍在 Git，但报告引用的 `/private/tmp` 原始目录当前已经不存在；必须为新批次建立持久证据根，不能从文档反向伪造旧响应。
+- Lab 当前幂等键不含 Provider/model/prompt/scorer；同步 POST 也无法在真实调用期间执行取消或撤权。E3 必须先修这两个边界。
 
 ## 3. 执行顺序
 
 ```text
+E0 持久证据 registry 与旧产物缺失记录
+  ↓ Gate 0
 E1 语义与评分口径冻结
   ↓ Gate 1
 E2 评分器 v2 与冻结产物
   ↓ Gate 2
 E3 真实 Stage A 实验台 Provider
   ↓ Gate 3（零付费调用）
-E4 本地页面真实模型 T0 冒烟
+E4 本地页面真实模型 T1-Local Product Alpha 冒烟
   ↓ Gate 4（需要一次新授权）
-E5 14 组 t1_validation 冻结验收
+E5 14 组 t1_validation 冻结合成功能验收
   ↓ Gate 5（需要单独的新授权）
 E6 全栈 T2 交接包更新
 ```
 
-E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4、E5 只有在各自清单和上限可检查后，才请求一次明确授权。
+E0–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4、E5 只有在各自清单和上限可检查后，才请求一次明确授权。
+
+## 3.1 E0：先建立持久证据 registry
+
+旧 raw response 与 replay 目录当前缺失。E0 必须记录这一事实，并定义新批次的持久输出根、artifact registry、SHA-256、dataset/model/prompt/scorer/approval/ledger/metrics/provenance 字段。找不到的旧响应不能重造；从源数据重新生成的材料必须使用新 revision 和 digest。
 
 ## 4. E1：冻结通用语义和风险口径
 
@@ -53,7 +63,7 @@ E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 
 |案例|问题|冻结为通用规则|
 |---|---|---|
-|g007|`聚会` 与 `家庭聚会`、`capture` 与 `event`、`桌面` 与 `庆典`|没有家庭关系证据时，`聚会` 是更安全的核心标签；“照片拍于某日”按拍摄语义处理，明确事件日期才按 event；有视觉依据的附加场景允许存在|
+|g007|`聚会` 与 `家庭聚会`、`capture` 与 `event`、`桌面` 与 `庆典`|没有家庭关系证据时，`聚会` 是更安全的核心标签；按现行 Prompt，`capture` 仅接受可信原始 EXIF，用户文字/final ASR 描述某次活动中的拍摄日期按 `event`；有视觉依据的附加场景允许存在|
 |g011|只有年份矛盾，却额外声明 event conflict|冲突必须有两个互相排斥的同维度候选或明确的同维度否定证据；不能由 time conflict 自动传播为 event conflict|
 |g023|核心 `户外` 正确，同时给出 `自然景观`|受控 taxonomy 内且有 Evidence 的附加标签记为 supported extra，不作为严重错误|
 |g025|声明 time conflict，但只输出 1998、漏掉 OCR 2001|冲突输出必须包含足以解释冲突的候选；只声明 conflict 而缺少另一侧证据，记为 conflict incomplete|
@@ -78,6 +88,7 @@ E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 - 不包含 `if photoId === g007` 一类样例特判；
 - 用户原文、AI 标题、AI 摘要、候选事实和用户确认事实仍然分层；
 - 人物身份、敏感事实和长期 Memory 的确认边界不变。
+- 四个争议样例由只看输入与冻结政策、不看模型输出的盲审流程裁决并留下 ledger；`supported_extra` 必须在运行前预定义，不能由模型自己的 Evidence 引用循环证明。
 
 ## 5. E2：实现评分器 v2 并冻结新产物
 
@@ -87,10 +98,11 @@ E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 
 - `harness/classification/stage-a-evaluation.mjs`
 - `harness/classification/stage-a-eval.test.mjs`
-- `harness/classification/prepare-synthetic-v31.mjs`
+- `src/lib/algorithms/classification/synthetic-v3-adapter.ts` 及对应测试
+- `harness/classification/prepare-synthetic-v31.mjs`（仅当源真值或冻结政策确实变化）
 - 新增评分规则 Spec 与最小正反 fixtures
 
-采用版本化、向后兼容方式：历史 `sgx-truth.1` 和 r5 结果只读保留；新评分口径使用新的版本或带哈希的 scoring policy sidecar，不原地改写 r5 的 truth、manifest、运行目录或失败记录。
+采用版本化、向后兼容方式：历史 `sgx-truth.1` 和 r5 报告只读保留；新版本明确采用 `sgx-truth.2` 与 `sgx-scoring-policy.2`，不再二选一。它们分别表达 required/optional/forbidden、角色/冲突/来源/风险，以及 taxonomy/alias/父子层级/错误严重度。不得原地改写历史 truth、manifest、运行目录或失败记录。
 
 回归至少覆盖：
 
@@ -106,7 +118,7 @@ E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4�
 ### 5.2 Gate 2
 
 - 历史 r5 证据完全未覆盖；
-- 保存的 6 例可以离线重算并给出“核心正确、可接受变体、支持的额外标签、真正错误”的解释；
+- 使用新建的版本化 fixtures 可以离线验证“核心正确、可接受变体、支持的额外标签、真正错误”；旧 6 例原始产物当前缺失，不得伪称已完成 exact rescore；若后续按 hash 找回，再追加独立复算报告；
 - 评分器测试、全量分类回归、typecheck、secret scan、diff check 通过；
 - 冻结 `.12` Prompt、taxonomy、Guard 和 scorer 版本；进入 validation 后不再调参。
 
@@ -166,13 +178,19 @@ Browser multipart upload
 - 默认 0 自动重试；真实模式限制单批图片和最大请求/费用，不能因页面一次上传无限调用；
 - 结果记录真实 `modelVersion`、`promptVersion`、请求数、token、费用和 latency；
 - `lab-store.ts` 用严格 Schema 接受真实 Provider 结果，不能简单移除校验。
+- `contentDigest` 与执行 `runId` 分离；run identity 绑定 Provider、model、prompt、taxonomy、scorer 和 authorization revision，防止真实模式复用 deterministic 旧任务。
+- POST 先创建 pending job，再由受控 runner 启动；Provider 接收 `AbortSignal`，取消/撤权后的晚到结果必须拒收。
+- 页面允许的图片大小与 Provider 上限统一；如生成模型派生图，必须保留原图/派生图 hash 和转换 provenance。
+- `event/capture/scan/upload` 与 precision 必须进入内容组织，不能只留下时间字符串。
 
 ### 6.4 Gate 3：零付费调用验证
 
 - mock transport 覆盖成功、拒判、needs_review、非法输出、限流、超时和取消；
-- 使用已保存的脱敏真实响应做 exact replay，证明页面适配链可消费 `.12` 输出；
+- 使用明确标注的 mock fixtures 证明页面适配链可消费 `.12` 形状；只有在旧脱敏真实响应按 hash 恢复后才追加 exact replay，不能用新造 JSON 冒充真实响应；
 - 覆盖双家庭、多主体、旧授权、删除、撤权和晚到结果；
 - 页面仍可在 `deterministic` 模式回退；
+- 相同输入切换 Provider/model/prompt 时产生新 run，同配置重放保持幂等；
+- 运行中取消、撤权和晚到结果拒收通过两阶段 runner 实测；
 - `npm run test:classification`、`npm run typecheck`、`npm run test:classification:secret`、`npm run build` 和 `git diff --check` 通过；
 - 不发生网络调用、凭据读取或额外费用。
 
@@ -182,7 +200,7 @@ Browser multipart upload
 2. `test(classification): cover real-provider lab boundaries`
 3. `docs(classification): document local provider switching`
 
-## 7. E4：本地页面真实模型 T0 冒烟
+## 7. E4：本地页面真实模型 `T1-Local Product Alpha` 冒烟
 
 E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、图片数量、预计 Stage A extract/relate 请求数、模型、Prompt、最大 token、费用上限、0 重试、停止条件和输出目录。然后一次性请求授权。
 
@@ -203,7 +221,7 @@ E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、�
 - 成本、请求数和时延不超过授权；
 - 失败保留原始记录，不自动覆盖或静默重跑。
 
-## 8. E5：14 组 `t1_validation` 一次性冻结验收
+## 8. E5：14 组 `t1_validation` 一次性冻结合成功能验收
 
 ### 8.1 运行原则
 
@@ -225,6 +243,9 @@ E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、�
 - 自动整理项都能追溯到 Evidence；
 - 高风险断言只能进入 `needs_review`，不能静默成为用户确认事实或长期 Memory；
 - 语义差异按 Gate 2 的类别报告，不用旧 `0.80/0.55` 充当准确率阈值。
+- E1 必须另外冻结 required-core、有效拒判和故事分组 invariant 的功能门槛；全量 `no_assertion/needs_review` 不能只因安全项为 0 而通过。
+
+这项结果命名为 `T0-Synthetic Functional Gate`，只代表真实模型在合成场景上的冻结功能验收。30–50 组授权真实内容属于独立的 `Real Distribution Gate`，没有真实数据时分母保持 0，不与本 Gate 混称。
 
 若 hard Gate 失败，停止并归因；不在 validation 上继续修规则后重跑。修复后需要形成新的冻结版本和新的批准批次。
 
@@ -254,7 +275,7 @@ E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、�
 - truth/scorer v2 已冻结并有哈希；
 - `.12` Prompt/Guard/taxonomy 不再使用 validation 调参；
 - 真实 Provider 通过服务端接入，浏览器无法获得密钥；
-- 本地页面完成真实模型 T0 冒烟及生命周期动作验收；
+- 本地页面完成真实模型 `T1-Local Product Alpha` 冒烟及生命周期动作验收；
 - 14 组 validation 完成一次固定分母运行，或明确记录 hard fail 与阻断原因；
 - 自动化门禁和 secret scan 通过；
 - 文档准确区分合成数据功能证据、真实模型工程证据、真实家庭效果和生产能力；

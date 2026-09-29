@@ -55,7 +55,17 @@
 
 1. 独立复核上述四个语义/真值分歧并冻结评分口径；
 2. 将真实 Stage A Provider 通过服务端 adapter 接入 `/classification-lab`；
-3. 本地完成上传、AI 整理、复核、删除、撤权和失败恢复的 T0 页面验收；
+3. 本地完成上传、AI 整理、复核、删除、撤权和失败恢复的 `T1-Local Product Alpha` 页面验收；
 4. 冻结 `.12` 后，再申请 14 组 `t1_validation` 的一次性调用授权。
 
-上述工作已整理为可执行的分阶段计划：[SGX 自动分类与归纳：下一阶段执行计划](../superpowers/plans/2026-09-29-classification-next-execution-plan.md)。计划明确 E1–E3 为零付费离线工作；只有真实 Provider adapter 通过 mock transport、保存响应重放和安全门禁后，才分别申请 E4 页面真实模型冒烟与 E5 冻结 validation 的授权。
+上述工作已整理为可执行的分阶段计划：[SGX 自动分类与归纳：下一阶段执行计划](../superpowers/plans/2026-09-29-classification-next-execution-plan.md)。后续系统审计发现原计划需要先增加 E0 持久证据 registry，并修正时间角色、幂等身份、运行中取消和评分功能 Gate。当前以 [问题总表与修订执行计划](../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md) 为最新入口。
+
+## 后续系统审计更正
+
+- 现行 `.12` Prompt 规定 `capture` 只能来自可信原始 EXIF；此前把 g007 的用户/ASR“照片拍于”评为更适合 `capture` 的文档判断已更正为 `event`。
+- 文档引用的 r5 冻结包、两个真实运行目录和 exact replay 目录位于 `/private/tmp`，当前均已不存在。旧报告和提交保留，但无法再执行旧响应 exact replay；下一批必须先写入持久受控 artifact 根。
+- Lab 的 run identity 当前未包含 Provider/model/prompt/scorer，同输入切换真实 Provider 会命中旧 deterministic job；同步 POST 也无法在模型运行中执行取消/撤权。这两项已列为 E3 前置设计。
+- 当前受限沙箱复验：`typecheck` 和 secret scan 通过；分类测试非 HTTP 168/168 通过，另 28 项因 `listen EPERM 127.0.0.1` 未能运行。历史受控 loopback 环境的 196/196 记录仍保留，代码改动后需在允许 loopback 的环境重新全量验证。
+- r5 的独立审计 PASS 只表示数据包结构、checksum、分区和路由完整；语义 truth/scorer 审计仍未完成。
+
+下一项实际工作调整为 E0：建立持久 artifact registry 和新批次输出规范；随后进行不看模型输出的 truth/scoring 盲审，再实现 scorer v2 与 Lab Stage A adapter。

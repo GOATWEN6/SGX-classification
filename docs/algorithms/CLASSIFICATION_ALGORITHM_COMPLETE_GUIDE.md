@@ -2,6 +2,7 @@
 
 > 当前统一阅读入口 · 文档版本：1.2.0 · 更新日期：2026-09-29<br>
 > 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.12`<br>
+> 当前问题、原因和修订执行顺序见：[当前问题总表与下一阶段执行计划](CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)<br>
 > 全栈接入与运行命令见：[T0/T1 全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)
 
 ## 1. 先看结论
@@ -15,7 +16,7 @@
 |链路|当前状态|主要输入与输出|
 |---|---|---|
 |通用业务契约链|已实现契约、Fake 与校验|`ContentBundle → ClassificationProviderRequest → ClassificationAssertion`|
-|Stage A 真实视觉算法链|已实现；真实 Qwen 已完成累计 16 次工程探索请求，正式固定分母验证未完成|`TrustedStageACatalog → Observation / Edge / Group`|
+|Stage A 真实视觉算法链|已实现；最新 r5 批次完成 6 次真实 Qwen 工程探索，历史总调用数待按 pipeline/model/batch ledger 统一核对；正式固定分母验证未完成|`TrustedStageACatalog → Observation / Edge / Group`|
 |统一内容与 StoryUnit 组织链|已实现 bounded retrieval、稀疏组织与测试|`ContentItem + ContentObservation + RetrievalCandidate → StoryUnit`|
 |T1 本地产品链|已实现 loopback BFF、实验页与动作审计|`Browser upload → Evidence → Provider base result → LabAction → current view`|
 
@@ -571,7 +572,7 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 - 契约、授权、哈希、预算、错误停止和固定分母能够运行；
 - 图片及绑定 `user_text/final_asr` 的 Stage A 代码路径存在；
 - Qwen/GLM Provider adapter、严格 Zod 与语义校验存在；
-- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.12`，累计 16 次真实 API 请求留下了可审计的 response id、usage、原始响应和错误证据；最新 6 次使用冻结合成场景、0 重试且人物匹配关闭；
+- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.12`；最新 r5 批次完成 6 次真实 API 请求，0 重试且人物匹配关闭。不同历史链路的“累计调用”口径尚未由统一 ledger 核对，不能继续直接写成项目总数；旧 `/private/tmp` 原始产物当前也已不可访问，Git 内只保留汇总报告和提交记录；
 - synthetic-v3.1 r5 已按 40 组固定分母冻结，208/208 checksum、26/14 分区和 33/6/1 路由通过独立只读审计；
 - 最新失败的 g001/g025 真实响应已在 `.12` 下精确离线重放；历史图片内指令污染和视觉臆测时间仍会被局部删除，其他有依据维度继续保留；
 - 内容组织的规则分、StoryUnit 和用户显式关系有自动化测试。

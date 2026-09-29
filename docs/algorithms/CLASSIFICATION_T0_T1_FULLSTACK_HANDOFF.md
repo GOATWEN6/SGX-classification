@@ -104,7 +104,7 @@ flowchart TD
 
 仓库另有真实 Stage A Provider，但它没有接入本地实验台：
 
-- Prompt 版本：`sgx-five-facets.6`；
+- Prompt/Guard 版本：`sgx-five-facets.12`；`.12` 只完成过保存响应的历史离线 replay，尚未获得新的付费调用证据，且原 `/private/tmp` replay 目录当前已不可访问；
 - 系统 Prompt：`src/lib/algorithms/classification/stage-a-provider.ts` 的 `SYSTEM_PROMPT`；
 - 结构与版本：`src/lib/algorithms/classification/stage-a-contract.ts`；
 - 调用方式：图片与不可信 caption/EXIF/文字 Evidence 作为 user content，返回严格 JSON；
@@ -292,7 +292,7 @@ npm run classification:t0-preflight -- \
 
 ## 11. 已验证证据
 
-- `npm run test:classification`：168/168 通过；
+- `npm run test:classification`：历史受控 loopback 环境记录为 196/196；本次受限沙箱复验为非 HTTP 168/168 通过，另 28 项因 `listen EPERM` 未运行，代码改动后必须在允许 loopback 的环境重跑；
 - `npm run typecheck`：通过；
 - `JWT_SECRET=<仅本进程临时值> npm run build`：通过；
 - `npm run test:classification:secret`：通过；
@@ -312,7 +312,7 @@ npm run classification:t0-preflight -- \
 6. 7 天待整理策略只有数据契约，没有 scheduler。
 7. 人物身份匹配关闭；不能从人物组推断姓名或关系。
 8. `0.80/0.55`、retrieval score 和 confidence band 都不是概率或真实准确率。
-9. 30–50 组 T0/T1 真实素材尚未提供，因此真实语义指标和 T1 30 项人工验收尚未完成。
+9. 30–50 个真实内容组尚未提供；真实分布指标为 0 分母。它们属于独立 `Real Distribution Gate`，不能与合成 `T0-Synthetic Functional Gate` 混称。
 10. T0/T1 结果不得替代 T3 跨家庭独立验证或真实老人 Pilot。
 11. 回归中的 30 组数据是运行时生成的 2×2 PNG/文字契约 fixture，只验证 preflight 代码，不能计入真实素材分母。
 
@@ -322,12 +322,12 @@ npm run classification:t0-preflight -- \
 
 1. checkout 本分支并运行第 5 节本地实验台；
 2. 用 2 张非敏感测试图 + 用户说明 + final ASR 完成人工 smoke；
-3. 运行 168 项分类回归、typecheck、build 和 secret scan；
+3. 运行 `npm run test:classification`、typecheck、build 和 secret scan；以当次测试 runner 的固定分母为准，不把旧测试数量写成操作要求；
 4. 阅读 `classification-ingestion-v2.schema.json`、`classification-hybrid.schema.json` 与本文件；
 5. 先实现 store/object/auth adapter，保持 Provider 为 deterministic；
 6. 再实现 queue/worker 与取消、晚到结果拒收；
 7. 用相同 contract 接真实 Provider，禁止浏览器持有 provider key；
-8. 运行 30–50 组 T0/T1 固定分母数据；
+8. 先完成冻结的合成功能 Gate；真实内容可用后，再单独运行 30–50 个 content groups 的 Real Distribution Gate，并分别报告图片、文字、final ASR 和音频数量；
 9. 真实数据 exploration 完成后，在查看独立 holdout 前冻结数值 Gate；
 10. 通过 T2 Gate 后再准备独立跨家庭 T3。
 
