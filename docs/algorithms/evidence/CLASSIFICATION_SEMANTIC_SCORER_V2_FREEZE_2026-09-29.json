@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "sgx-semantic-scorer-v2-freeze.1",
+  "createdAt": "2026-09-29T15:00:03.000Z",
+  "status": "e2_scorer_frozen_for_e3_adapter",
+  "claimBoundary": "synthetic_functional_contract_only",
+  "e1SemanticFreeze": {
+    "path": "docs/algorithms/evidence/CLASSIFICATION_SEMANTIC_V2_FREEZE_2026-09-29.json",
+    "sha256": "sha256:2b422b8fddc516f56c8dc9cd58bfde868cbb83c3c0135521a00e1cdf489a7f66"
+  },
+  "e1Cases": {
+    "path": "harness/classification/fixtures/semantic-scoring-v2-cases.json",
+    "schemaVersion": "sgx-semantic-scoring-cases.2",
+    "sha256": "sha256:ad25e6e204060ada0effde13c19f64f553d4751446bf0583eaeb7f872cbafd28"
+  },
+  "scorer": {
+    "version": "sgx-semantic-scorer.2.0.0",
+    "aggregateScore": null,
+    "functionalGate": "pending_real_data_calibration",
+    "safetyGate": {
+      "oracleFixtureStatus": "not_applicable_oracle_fixture",
+      "blockingClass": "unsafe_false_positive",
+      "maximumAllowed": 0
+    }
+  },
+  "artifacts": [
+    {
+      "kind": "score_report_schema",
+      "path": "contracts/classification-semantic-score-report-v2.schema.json",
+      "sha256": "sha256:546b3b09d4e4aba3a2dd28f0be27bb16407ca390a8ddcbf69a78c2c601245c7c"
+    },
+    {
+      "kind": "runtime_run_and_result_schema",
+      "path": "contracts/classification-semantic-runtime-v2.schema.json",
+      "sha256": "sha256:5d360ac73f412041a415fd6cd847359c6967071fde59f71d833bab2e0175dca0"
+    },
+    {
+      "kind": "pure_scorer",
+      "path": "harness/classification/semantic-scoring-v2.mjs",
+      "sha256": "sha256:9ba32ac1a272d7566038f1dff515aca8ba75198f50c1b29d6b4bd9651eae2053"
+    },
+    {
+      "kind": "implementation_tests",
+      "path": "harness/classification/semantic-scoring-v2-implementation.test.mjs",
+      "sha256": "sha256:e6dbcd1eafbe41cf916048d4e51836e742dfcabc2d09fbdaba1bb6545f48cb71"
+    },
+    {
+      "kind": "offline_cli",
+      "path": "scripts/classification-semantic-score.mjs",
+      "sha256": "sha256:f24f292e3b0ff5aafc646a01c3cd9934aabaf876f2b8f780c07c9cde37f860c0"
+    }
+  ],
+  "validation": {
+    "e1OracleCases": {
+      "planned": 16,
+      "passed": 16,
+      "failed": 0
+    },
+    "focusedImplementationTests": {
+      "planned": 19,
+      "passed": 19,
+      "failed": 0
+    },
+    "strictSchemas": true,
+    "offlineOnly": true,
+    "credentialsRead": false,
+    "externalCalls": 0
+  },
+  "boundaries": {
+    "readyForE3StageAAdapter": true,
+    "readyForRealDistributionClaims": false,
+    "numericFunctionalThresholdFrozen": false,
+    "productionClosedLoopComplete": false
+  },
+  "notes": [
+    "Every prediction receives at most one semantic outcome; valid conflict candidates are consumed by a separate conflict lane.",
+    "role_unknown observations are assessed independently and do not enter the seven assertion class counts.",
+    "Failed and not_run cases remain in the fixed denominator.",
+    "The scorer binds the exact raw E1 cases bytes and rejects duplicate truth credit, terminal-state payloads, ambiguous truth lanes, and unaudited place namedness.",
+    "The E2-only runtime schema leaves E1 frozen fixtures unchanged while machine-validating placeKind and hash-binding single-run results.",
+    "The CLI refuses an existing output directory and performs no network or credential access.",
+    "Oracle fixtures intentionally contain negative outputs, so their safety Gate is not applicable and is never reported as a product pass or failure."
+  ]
+}

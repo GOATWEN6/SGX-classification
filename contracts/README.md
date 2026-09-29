@@ -1,18 +1,23 @@
 # 分类 v1 契约与第一批交付
 
-> 2026-09-29：新增 E1 semantic scoring v2 的三份 strict draft-07 Schema：
+> 2026-09-29：semantic scoring v2 现有五份 strict draft-07 Schema：
 > [`classification-scoring-policy-v2.schema.json`](classification-scoring-policy-v2.schema.json)、
 > [`classification-truth-v2.schema.json`](classification-truth-v2.schema.json) 和
-> [`classification-semantic-scoring-cases-v2.schema.json`](classification-semantic-scoring-cases-v2.schema.json)。
+> [`classification-semantic-scoring-cases-v2.schema.json`](classification-semantic-scoring-cases-v2.schema.json)，以及 E2 新增的
+> [`classification-semantic-score-report-v2.schema.json`](classification-semantic-score-report-v2.schema.json) 和
+> [`classification-semantic-runtime-v2.schema.json`](classification-semantic-runtime-v2.schema.json)。
 > 它们分别冻结七类语义结果及匹配/风险/时间/冲突/固定分母规则，input-only 盲审 synthetic truth
-> 及来源绑定，以及正反评分 case 的输入、期望、证据种类、时间字段和 policy/truth bytes hash。
+> 及来源绑定，正反评分 case 的输入、期望、证据种类、时间字段和 policy/truth bytes hash，以及
+> E2 固定分母报告与单次 runtime request/result。runtime 地点预测必须显式提供
+> `placeKind=named|generic`，避免把普通地点类别和无依据的具体地名混为一类。
 > policy 明确 `aggregateScore=null`，功能 Gate 的数值阈值仍为 `null`；旧内容组织
 > baseline 的 `0.80/0.55` 不是模型置信度、真实准确率或本评测 Gate。`g025` 画面可见的
 > `2001-07` 只能保存为 `role_unknown` observation，在角色澄清前不能升级为
 > `event/capture/scan/upload`，也不单独构成同角色冲突。配套 fixtures 和 focused test 见
 > [`harness/classification/README.md`](../harness/classification/README.md)。当前 policy/truth fixture 的
 > `claimBoundary` 是 `synthetic_functional_only`，case fixture 则是
-> `offline_contract_fixture_only`；它们只能支持合成功能真值、离线契约规则与异常处理检查，不证明
+> `offline_contract_fixture_only`；E2 oracle 报告同样是 `offline_contract_fixture_only`，其 safety Gate
+> 固定为 `not_applicable_oracle_fixture`。这些产物只能支持合成功能真值、离线契约规则与异常处理检查，不证明
 > 真实模型准确率、真实家庭泛化或产品效果。
 
 > 2026-09-29：新增实验产物登记契约

@@ -15,6 +15,7 @@ npm run classification:demo -- conflicted
 npm run classification:demo -- timeout
 npm run classification:fake-http
 npm run classification:t0-preflight -- --manifest /受控目录/manifest.json
+npm run classification:semantic-score -- --policy /绝对路径/policy.json --truth /绝对路径/truth.json --cases /绝对路径/cases.json --out /绝对路径/新目录
 ```
 
 ## E1 semantic scoring v2
@@ -45,7 +46,7 @@ node --test harness/classification/semantic-scoring-v2.test.mjs
 
 `npm run test:classification` 也会自动包含该测试。focused test 的 6 个检查覆盖三份 strict Schema、
 fixture、policy/truth/盲审 ledger 哈希绑定、引用完整性、七类语义、`failed/not_run` 固定分母、
-`g025` 时间角色保护与 freeze manifest；它不执行真实模型，也不实现或验证 E2 scorer 的模型效果。
+`g025` 时间角色保护与 freeze manifest；这个 E1 测试不执行 E2 scorer，也不验证真实模型效果。
 
 本轮不产生 aggregate score：policy 固定 `aggregateScore=null`，功能 Gate 的
 `numericPassThreshold=null`，只要求按语义类别计数、固定分母、逐 facet 明细和 workflow status。
@@ -56,6 +57,30 @@ semantic scoring v2 的通过线。`g025` 图片中可见的 `2001-07` 仅是 `r
 policy 与 truth 的 `claimBoundary` 都是 `synthetic_functional_only`，case fixture 进一步标记为
 `offline_contract_fixture_only`。因此它们只能验证合成数据上的结构、功能规则和异常处理；synthetic
 functional truth 不代表真实模型准确率、真实家庭分布表现、产品就绪或用户收益。
+
+## E2 semantic scorer v2
+
+E2 纯函数评分器位于 [`semantic-scoring-v2.mjs`](semantic-scoring-v2.mjs)，版本为
+`sgx-semantic-scorer.2.0.0`。它读取 E1 冻结 policy/truth，先校验 provenance，再执行七类语义匹配；
+`role_unknown` observation 与 Assertion 七类计数分开，合法冲突候选由冲突通道消费，
+`failed/not_run` 仍保留在固定分母。实现不按 `groupId` 或具体样例 ID 分支。
+
+只运行 E1 + E2 focused tests：
+
+```sh
+node --test harness/classification/semantic-scoring-v2.test.mjs \
+  harness/classification/semantic-scoring-v2-implementation.test.mjs
+```
+
+CLI 的 `--cases` 模式只做冻结 oracle conformance；`--run` 模式接收
+[`classification-semantic-runtime-v2.schema.json`](../../contracts/classification-semantic-runtime-v2.schema.json)
+约束的单次 runtime 输入。地点预测必须显式提供 `placeKind=named|generic`，终态 `failed/not_run`
+不得携带可计分输出。两种模式均绑定输入原始 bytes、policy、truth 和 scorer hash，并拒绝覆盖已有目录。
+
+冻结的 16 个 oracle cases 全部由评分器实际执行。它们包含故意错误输出，因此报告 safety Gate 是
+`not_applicable_oracle_fixture`，不是产品安全通过或失败。报告保持 `aggregateScore=null`，功能数字阈值
+仍为 `pending_real_data_calibration`。CLI 不读取密钥、不联网、不调用模型；它不执行旧 r5 exact rescore，
+也不证明真实准确率、泛化能力或产品闭环。
 
 ## 实验产物登记（E0）
 

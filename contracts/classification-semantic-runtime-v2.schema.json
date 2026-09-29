@@ -1,0 +1,252 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgx.local/contracts/classification-semantic-runtime-v2.schema.json",
+  "title": "SGX classification semantic runtime run and result v2",
+  "oneOf": [
+    { "$ref": "#/definitions/runtimeRun" },
+    { "$ref": "#/definitions/runtimeResult" }
+  ],
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,192}$"
+    },
+    "facet": {
+      "enum": [
+        "person_identity",
+        "person_cluster",
+        "relationship",
+        "time",
+        "place",
+        "event",
+        "scene",
+        "theme",
+        "quality",
+        "sensitive_fact",
+        "memory_fact"
+      ]
+    },
+    "timePrecision": {
+      "enum": ["exact_day", "year_month", "year", "season", "decade", "relative"]
+    },
+    "evidenceKind": {
+      "enum": [
+        "user_text",
+        "final_asr",
+        "visual_content",
+        "ocr_candidate",
+        "trusted_original_exif",
+        "scan_system_event",
+        "server_upload_event"
+      ]
+    },
+    "sourceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "prediction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predictionId", "facet", "value", "sourceRefs", "evidenceKinds"],
+      "properties": {
+        "predictionId": { "$ref": "#/definitions/id" },
+        "facet": { "$ref": "#/definitions/facet" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "timeRole": { "enum": ["event", "capture", "scan", "upload"] },
+        "precision": { "$ref": "#/definitions/timePrecision" },
+        "placeKind": { "enum": ["named", "generic"] },
+        "sourceRefs": { "$ref": "#/definitions/sourceRefs" },
+        "evidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/evidenceKind" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "facet": { "const": "time" } },
+            "required": ["facet"]
+          },
+          "then": { "required": ["timeRole", "precision"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["timeRole"] },
+                { "required": ["precision"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "facet": { "const": "place" } },
+            "required": ["facet"]
+          },
+          "then": { "required": ["placeKind"] },
+          "else": { "not": { "required": ["placeKind"] } }
+        }
+      ]
+    },
+    "roleUnknownObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observationId",
+        "facet",
+        "kind",
+        "rawValue",
+        "normalizedValue",
+        "role",
+        "precision",
+        "sourceRefs",
+        "evidenceKinds"
+      ],
+      "properties": {
+        "observationId": { "$ref": "#/definitions/id" },
+        "facet": { "const": "time" },
+        "kind": { "const": "visible_time_text" },
+        "rawValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "normalizedValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "role": { "const": "role_unknown" },
+        "precision": { "$ref": "#/definitions/timePrecision" },
+        "sourceRefs": { "$ref": "#/definitions/sourceRefs" },
+        "evidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": { "const": "ocr_candidate" }
+        }
+      }
+    },
+    "runtimeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowStatus", "predictions", "conflicts", "observations"],
+      "properties": {
+        "workflowStatus": { "enum": ["succeeded", "needs_review", "failed", "not_run"] },
+        "predictions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/prediction" }
+        },
+        "conflicts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["time", "place", "event", "scene"] }
+        },
+        "observations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/roleUnknownObservation" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "workflowStatus": { "enum": ["failed", "not_run"] } },
+            "required": ["workflowStatus"]
+          },
+          "then": {
+            "properties": {
+              "predictions": { "maxItems": 0 },
+              "conflicts": { "maxItems": 0 },
+              "observations": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "runtimeRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "runId",
+        "claimBoundary",
+        "policySha256",
+        "truthSha256",
+        "truthItemId",
+        "input"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "sgx-semantic-runtime-run.2" },
+        "runId": { "$ref": "#/definitions/id" },
+        "claimBoundary": { "const": "offline_runtime_input_only" },
+        "policySha256": { "$ref": "#/definitions/sha256" },
+        "truthSha256": { "$ref": "#/definitions/sha256" },
+        "truthItemId": { "$ref": "#/definitions/id" },
+        "input": { "$ref": "#/definitions/runtimeInput" }
+      }
+    },
+    "policyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "sha256"],
+      "properties": {
+        "policyId": { "$ref": "#/definitions/id" },
+        "sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "truthRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truthId", "sha256"],
+      "properties": {
+        "truthId": { "$ref": "#/definitions/id" },
+        "sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "scorerRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sourceSha256"],
+      "properties": {
+        "version": { "const": "sgx-semantic-scorer.2.0.0" },
+        "sourceSha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "runtimeRunRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "schemaVersion", "sha256"],
+      "properties": {
+        "runId": { "$ref": "#/definitions/id" },
+        "schemaVersion": { "const": "sgx-semantic-runtime-run.2" },
+        "sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "runtimeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "claimBoundary",
+        "runRef",
+        "policyRef",
+        "truthRef",
+        "scorerRef",
+        "result"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "sgx-semantic-runtime-result.2" },
+        "claimBoundary": { "const": "offline_runtime_input_only" },
+        "runRef": { "$ref": "#/definitions/runtimeRunRef" },
+        "policyRef": { "$ref": "#/definitions/policyRef" },
+        "truthRef": { "$ref": "#/definitions/truthRef" },
+        "scorerRef": { "$ref": "#/definitions/scorerRef" },
+        "result": {
+          "$ref": "https://sgx.local/contracts/classification-semantic-score-report-v2.schema.json#/definitions/caseReport"
+        }
+      }
+    }
+  }
+}

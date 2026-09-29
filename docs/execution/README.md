@@ -4,6 +4,6 @@
 
 |日期|主题|状态|
 |---|---|---|
-|[2026-09-29](2026-09-29-execution-log.md)|Qwen 6 例真实模型探索、时间 Guard 修复、E0 产物 registry、E1 语义冻结与后续执行计划|历史 6/6 调用完成；E0 已实现，E1 已冻结为 `synthetic_functional_only`（聚焦 6/6、全量 284/284、无新 API/费用），E2 scorer 为下一项、E3 待执行；旧 r5 不可 exact rescore|
+|[2026-09-29](2026-09-29-execution-log.md)|Qwen 6 例真实模型探索、时间 Guard 修复、E0 产物 registry、E1 语义冻结、E2 评分器与后续执行计划|历史 6/6 调用完成；E0 已实现，E1 已冻结，E2 `sgx-semantic-scorer.2.0.0` 已实现（focused 25/25、全量 303/303、无新 API/费用），E3 Stage A/Lab adapter 为下一项；旧 r5 不可 exact rescore，E2 不代表准确率或产品效果|
 |[2026-09-28](2026-09-28-execution-log.md)|合成多模态 v3 独立审计、T0 工具修复与真实模型/公开数据路线|T0-S 可准备；公开真实摄影与家庭真实数据待补|
 |[2026-09-27](2026-09-27-execution-log.md)|图文分类混合召回、T0/T1 实现与全栈交接|当日 deterministic Lab 工程里程碑完成；最终 T0/T1 交付未完成|

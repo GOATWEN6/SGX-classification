@@ -68,7 +68,7 @@
 - 当前受限沙箱复验：`typecheck` 和 secret scan 通过；分类测试非 HTTP 168/168 通过，另 28 项因 `listen EPERM 127.0.0.1` 未能运行。历史受控 loopback 环境的 196/196 记录仍保留，代码改动后需在允许 loopback 的环境重新全量验证。
 - r5 的独立审计 PASS 只表示数据包结构、checksum、分区和路由完整；语义 truth/scorer 审计仍未完成。
 
-下一项实际工作调整为 E0：建立持久 artifact registry 和新批次输出规范；随后进行不看模型输出的 truth/scoring 盲审，再实现 scorer v2 与 Lab Stage A adapter。
+该审计检查点把下一项调整为 E0：建立持久 artifact registry 和新批次输出规范；随后进行不看模型输出的 truth/scoring 盲审，再实现 scorer v2 与 Lab Stage A adapter。后续完成状态见下方 E0–E2 记录。
 
 ## E0 持久产物登记实现
 
@@ -105,4 +105,24 @@ E1 的 claim boundary 固定为 `synthetic_functional_only`：它只能证明合
 
 全量分类回归在允许 loopback 的受控环境复跑为 284/284 通过、0 fail、0 cancelled。此前一次运行曾出现 282 pass / 1 fail / 1 cancelled：HTTP expired-cache 用例预期 200、实际 409，随后 CLI shutdown 超时；本次未复现，因此保留为历史间歇性记录，不再列为当前 blocker。
 
-下一项离线主线为 E2：让版本化 scorer 读取已冻结 policy/truth，产出固定分母报告并完成相应回归。E2、E3 仍是计划，不得从 E1 产物存在推断为已完成。
+该 E1 检查点的下一项离线主线为 E2：让版本化 scorer 读取已冻结 policy/truth，产出固定分母报告并完成相应回归。当时 E2、E3 仍是计划；E2 的后续完成状态见下一节。
+
+## E2 版本化语义评分器
+
+E2 已实现 `sgx-semantic-scorer.2.0.0`。评分器读取 E1 冻结的 policy、truth 和原始 bytes hash，先校验 provenance，再执行七类语义评分；`role_unknown` observation、同维度冲突完整性、workflow mismatch 以及 `failed/not_run` 固定分母均有独立处理。实现没有 `groupId` 或 g007/g011/g023/g025 的运行时特判。
+
+新增两份 strict Schema：批量 oracle 报告 Schema 和 E2 runtime request/result Schema。CLI 使用互斥模式：`--cases` 只验证冻结 oracle fixture，`--run` 对 Stage A/E3 提供单次 runtime 评分；runtime 地点候选必须显式携带 `placeKind=named|generic`。两种模式都绑定 policy、truth、scorer 和输入原始 bytes SHA-256，拒绝覆盖已有目录，不读取凭据、不联网、不调用模型。
+
+独立 QA 首轮发现并已修复：别名重复 credit、终态携带正向输出、cases 未绑定原始哈希、truth 跨 lane 歧义与重复 ID、地点风险缺少可执行 namedness。复审还补齐了权限稳定错误码、malformed library input fail closed 和 policy 风险类别精确校验。
+
+验证结果：
+
+- E1 + E2 focused：25/25 通过，其中 E1 6/6、E2 implementation 19/19；
+- 16/16 个冻结 oracle case 均由评分器实际执行并与预期一致；
+- `npm run test:classification`：303/303 通过；
+- `npm run typecheck`、secret scan、语法检查和 `git diff --check`：通过；
+- E2 freeze 对 E1 freeze、E1 cases 和 5 个 E2 artifact 的原始 bytes SHA-256 绑定通过。
+
+E2 只证明冻结合成 fixture 上的评分合同可执行。Oracle fixture 刻意包含错误输出，因此 safety Gate 为 `not_applicable_oracle_fixture`，不能解释为产品安全通过或失败。`aggregateScore` 仍为 `null`，功能数字阈值继续等待真实数据校准；旧 r5 raw response 已缺失，E2 没有伪造历史 exact rescore。
+
+下一项是 E3：先实现纯 Stage A → Lab composition adapter，再实现两阶段 runner/CAS/cancel，最后接 real provider factory。E3 Source Gate 已确认复用现有 `ClassificationEngine`、`ApiVisionProvider`、`AbortSignal` 和文件 store，不在本阶段新增数据库、Redis 或队列依赖。
