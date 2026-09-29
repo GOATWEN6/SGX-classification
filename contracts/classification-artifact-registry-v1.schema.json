@@ -1,0 +1,349 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-artifact-registry:v1",
+  "title": "SGX classification evaluation artifact registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "VersionValue": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "RequiredVersionValue": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "Hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "Identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pipeline": { "$ref": "#/definitions/RequiredVersionValue" },
+        "datasetId": { "$ref": "#/definitions/RequiredVersionValue" },
+        "batchId": { "$ref": "#/definitions/VersionValue" },
+        "runId": { "$ref": "#/definitions/RequiredVersionValue" },
+        "provider": { "$ref": "#/definitions/VersionValue" },
+        "model": { "$ref": "#/definitions/VersionValue" },
+        "promptVersion": { "$ref": "#/definitions/VersionValue" },
+        "guardVersion": { "$ref": "#/definitions/VersionValue" },
+        "taxonomyVersion": { "$ref": "#/definitions/VersionValue" },
+        "truthVersion": { "$ref": "#/definitions/RequiredVersionValue" },
+        "scoringPolicyVersion": { "$ref": "#/definitions/RequiredVersionValue" }
+      },
+      "required": [
+        "pipeline", "datasetId", "batchId", "runId", "provider", "model",
+        "promptVersion", "guardVersion", "taxonomyVersion", "truthVersion",
+        "scoringPolicyVersion"
+      ]
+    },
+    "Caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxRequests": { "type": "integer", "minimum": 0 },
+        "maxInputTokens": { "type": "integer", "minimum": 0 },
+        "maxOutputTokens": { "type": "integer", "minimum": 0 },
+        "maxCostCny": { "type": "number", "minimum": 0 },
+        "maxDurationSeconds": { "type": "integer", "minimum": 1 },
+        "maxRetries": { "const": 0 }
+      },
+      "required": [
+        "maxRequests", "maxInputTokens", "maxOutputTokens", "maxCostCny",
+        "maxDurationSeconds", "maxRetries"
+      ]
+    },
+    "Authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approvalHash": { "$ref": "#/definitions/Hash" },
+        "evidenceRefHash": { "$ref": "#/definitions/Hash" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "caps": { "$ref": "#/definitions/Caps" }
+      },
+      "required": ["approvalHash", "evidenceRefHash", "expiresAt", "caps"]
+    },
+    "SourceRegistryRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registryId": { "$ref": "#/definitions/Id" },
+        "registryHash": { "$ref": "#/definitions/Hash" },
+        "artifactIds": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Id" },
+          "minItems": 1,
+          "maxItems": 10000,
+          "uniqueItems": true
+        }
+      },
+      "required": ["registryId", "registryHash", "artifactIds"]
+    },
+    "Artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": { "$ref": "#/definitions/Id" },
+        "kind": {
+          "enum": [
+            "dataset_manifest", "truth", "scoring_policy", "checksum_manifest",
+            "media_manifest", "preflight", "approval_reference", "provider_response",
+            "request_ledger", "metrics", "report", "source_response_reference",
+            "replay_result", "missing_evidence_ledger", "error_ledger", "derived_input",
+            "result", "blocked_record"
+          ]
+        },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*[\\u0000\\r\\n])(?!.*//)(?!\\.\\.?$)(?!\\.\\.?/)(?!.*\\/\\.\\.?(?:\\/|$)).+$"
+        },
+        "sha256": { "$ref": "#/definitions/Hash" },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sensitivity": {
+          "enum": ["metadata_only", "private", "restricted"]
+        },
+        "provenanceArtifactIds": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Id" },
+          "uniqueItems": true,
+          "maxItems": 10000
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "artifactId", "kind", "relativePath", "sha256", "byteLength",
+        "sensitivity", "provenanceArtifactIds", "createdAt"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "provider_response" } }
+          },
+          "then": {
+            "properties": { "sensitivity": { "const": "restricted" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "not": { "enum": ["provider_response", "error_ledger"] } }
+            }
+          },
+          "then": {
+            "properties": { "byteLength": { "minimum": 1 } }
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "version": { "const": "sgx-artifact-registry.1" },
+    "registryId": { "$ref": "#/definitions/Id" },
+    "revision": { "const": 1 },
+    "claimBoundary": {
+      "enum": [
+        "synthetic_fixture",
+        "real_model_on_synthetic",
+        "real_user_authorized",
+        "mock_transport",
+        "offline_replay",
+        "summary_only_missing"
+      ]
+    },
+    "outputRoot": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "identity": { "$ref": "#/definitions/Identity" },
+    "authorization": {
+      "oneOf": [
+        { "$ref": "#/definitions/Authorization" },
+        { "type": "null" }
+      ]
+    },
+    "sourceRegistryRefs": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/SourceRegistryRef" },
+      "maxItems": 10000
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Artifact" },
+      "minItems": 1,
+      "maxItems": 10000
+    }
+  },
+  "required": [
+    "version", "registryId", "revision", "claimBoundary", "outputRoot",
+    "createdAt", "identity", "authorization", "sourceRegistryRefs", "artifacts"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "claimBoundary": {
+            "enum": ["real_model_on_synthetic", "real_user_authorized", "offline_replay"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "provider": { "$ref": "#/definitions/RequiredVersionValue" },
+              "model": { "$ref": "#/definitions/RequiredVersionValue" },
+              "promptVersion": { "$ref": "#/definitions/RequiredVersionValue" },
+              "guardVersion": { "$ref": "#/definitions/RequiredVersionValue" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "claimBoundary": { "const": "real_user_authorized" } } },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "if": {
+                "properties": {
+                  "kind": { "not": { "enum": ["scoring_policy", "checksum_manifest"] } }
+                }
+              },
+              "then": {
+                "properties": { "sensitivity": { "enum": ["private", "restricted"] } }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "claimBoundary": {
+            "enum": ["real_model_on_synthetic", "real_user_authorized"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "authorization": { "$ref": "#/definitions/Authorization" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claimBoundary": { "const": "offline_replay" } }
+      },
+      "then": {
+        "properties": { "sourceRegistryRefs": { "minItems": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "claimBoundary": { "const": "synthetic_fixture" } } },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "allOf": [
+              { "contains": { "properties": { "kind": { "const": "dataset_manifest" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "truth" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "scoring_policy" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "checksum_manifest" } }, "required": ["kind"] } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "claimBoundary": { "enum": ["real_model_on_synthetic", "real_user_authorized"] }
+        }
+      },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "allOf": [
+              { "contains": { "properties": { "kind": { "const": "dataset_manifest" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "truth" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "scoring_policy" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "preflight" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "approval_reference" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "provider_response" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "request_ledger" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "metrics" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "report" } }, "required": ["kind"] } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "claimBoundary": { "const": "mock_transport" } } },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "allOf": [
+              { "contains": { "properties": { "kind": { "const": "dataset_manifest" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "truth" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "scoring_policy" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "request_ledger" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "metrics" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "report" } }, "required": ["kind"] } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "claimBoundary": { "const": "offline_replay" } } },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "allOf": [
+              { "contains": { "properties": { "kind": { "const": "truth" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "scoring_policy" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "source_response_reference" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "replay_result" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "request_ledger" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "metrics" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "report" } }, "required": ["kind"] } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "claimBoundary": { "const": "summary_only_missing" } } },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "allOf": [
+              { "contains": { "properties": { "kind": { "const": "missing_evidence_ledger" } }, "required": ["kind"] } },
+              { "contains": { "properties": { "kind": { "const": "report" } }, "required": ["kind"] } }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

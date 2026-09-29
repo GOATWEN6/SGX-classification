@@ -69,3 +69,22 @@
 - r5 的独立审计 PASS 只表示数据包结构、checksum、分区和路由完整；语义 truth/scorer 审计仍未完成。
 
 下一项实际工作调整为 E0：建立持久 artifact registry 和新批次输出规范；随后进行不看模型输出的 truth/scoring 盲审，再实现 scorer v2 与 Lab Stage A adapter。
+
+## E0 持久产物登记实现
+
+已新增 `sgx-artifact-registry.1` strict Schema、离线 writer/verifier、CLI 和旧临时产物缺失 ledger。正式 CLI 默认拒绝 `/tmp`、`/private/tmp`、Git 工作树、宽权限目录、路径逃逸、符号链接、硬链接、未登记文件和 registry 覆盖；registry 只保存路径、字节数、SHA-256、版本身份、授权摘要与 provenance，不复制媒体、用户正文、raw response 或凭据。
+
+四个已经不可访问的历史 `/private/tmp` 目录均登记为 `summary_only + do_not_reconstruct`，没有从 Markdown 汇总伪造 raw response、digest 或 usage ledger。
+
+验证结果：
+
+- artifact registry 聚焦测试：82/82 通过；
+- `npm run typecheck`：通过；
+- `npm run test:classification:secret`：通过；
+- CLI `--help` 与三个 `.mjs` 语法检查：通过；
+- `git diff --check`：通过；
+- `npm run test:classification`：250 pass / 28 fail；28 项均为当前沙箱禁止 `127.0.0.1` 监听的已知 `EPERM`，未发现额外逻辑失败。
+
+一次直接运行 `schema.test.mjs` 因没有设置由总测试脚本生成的 `CLASSIFICATION_BUILD_DIR` 而按设计拒绝；随后通过正式 `npm run test:classification` 入口完成 Schema 加载验证。这不是产品或 Schema 故障。
+
+独立终审在修复真实 lane 身份/授权、`/var/tmp`、跨 run 来源、任意 Git checkout、必需 artifact role 和敏感级别六类缺口后，未发现剩余 P0/P1。E0 核心可以提交。尚未完成的是 Stage A runner 的自动 finalization；在接线前，真实执行清单必须显式运行 registry create + verify。下一项离线主线为 E1 truth/scoring 盲审与 `sgx-scoring-policy.2` 冻结。

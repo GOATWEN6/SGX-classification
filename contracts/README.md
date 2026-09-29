@@ -1,5 +1,13 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-09-29：新增实验产物登记契约
+> [`classification-artifact-registry-v1.schema.json`](classification-artifact-registry-v1.schema.json)。
+> 它只保存 Git 外持久运行目录中的文件路径、字节数、SHA-256、版本身份、授权摘要和
+> provenance，不嵌入媒体、用户原文、模型 raw response、approval 正文或凭据。真实模型 lane
+> 强制绑定模型身份和授权摘要；offline replay 强制通过 `sourceRegistryRefs` 锚定父 registry。
+> 离线 writer/verifier 位于 `harness/classification/artifact-registry.mjs`；该契约证明文件
+> 完整性和证据边界，不证明模型准确率或产品效果。
+
 > 2026-09-27：新增 T0/T1 真实素材离线冻结契约
 > [`classification-t0-real-media-v2.schema.json`](classification-t0-real-media-v2.schema.json)，
 > 固定 `specVersion=2.0.0`、30–50 组分母、真实用户授权来源、exploration / T1 validation

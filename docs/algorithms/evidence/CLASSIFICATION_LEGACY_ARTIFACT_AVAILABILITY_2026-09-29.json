@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "sgx-legacy-artifact-availability.1",
+  "observedMissingOn": "2026-09-29",
+  "evidenceCommit": "301629e",
+  "availabilityMeaning": "summary_only means Git-tracked reports remain, while the original artifact directory was not found during the 2026-09-29 audit.",
+  "entries": [
+    {
+      "legacyEvidenceId": "sgx-v31-r5-dataset-freeze",
+      "artifactKind": "dataset_freeze",
+      "lastKnownPath": "/private/tmp/sgx-t0-photorealistic-synthetic-v3.1-spec-3.1.0-r5-final",
+      "availability": "summary_only",
+      "knownDigest": null,
+      "expectedArtifacts": [
+        "manifest",
+        "truth",
+        "checksum_manifest",
+        "ready_marker",
+        "media"
+      ],
+      "evidenceDoc": "docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md",
+      "recoveryStatus": "not_found",
+      "recoveryPolicy": "do_not_reconstruct"
+    },
+    {
+      "legacyEvidenceId": "sgx-v31-r5-real-run-first",
+      "artifactKind": "real_model_run",
+      "lastKnownPath": "/private/tmp/sgx-d4-qwen37-v31-r5-exploration6-real-run-20260929",
+      "availability": "summary_only",
+      "knownDigest": null,
+      "expectedArtifacts": [
+        "manifest",
+        "approval_reference",
+        "preflight",
+        "provider_responses",
+        "result",
+        "ledger",
+        "metrics",
+        "report"
+      ],
+      "evidenceDoc": "docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md",
+      "recoveryStatus": "not_found",
+      "recoveryPolicy": "do_not_reconstruct"
+    },
+    {
+      "legacyEvidenceId": "sgx-v31-r5-real-run-remaining-five",
+      "artifactKind": "real_model_run",
+      "lastKnownPath": "/private/tmp/sgx-d4-qwen37-v31-r5-remaining5-real-run-20260929",
+      "availability": "summary_only",
+      "knownDigest": null,
+      "expectedArtifacts": [
+        "manifest",
+        "approval_reference",
+        "preflight",
+        "provider_responses",
+        "result",
+        "ledger",
+        "metrics",
+        "report"
+      ],
+      "evidenceDoc": "docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md",
+      "recoveryStatus": "not_found",
+      "recoveryPolicy": "do_not_reconstruct"
+    },
+    {
+      "legacyEvidenceId": "sgx-v31-r5-exact-offline-replay-v12",
+      "artifactKind": "offline_replay",
+      "lastKnownPath": "/private/tmp/sgx-d4-qwen37-v31-r5-exact-offline-replay-v12-20260929",
+      "availability": "summary_only",
+      "knownDigest": null,
+      "expectedArtifacts": [
+        "manifest",
+        "source_response_reference",
+        "result",
+        "ledger",
+        "metrics",
+        "report"
+      ],
+      "evidenceDoc": "docs/algorithms/CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md",
+      "recoveryStatus": "not_found",
+      "recoveryPolicy": "do_not_reconstruct"
+    }
+  ]
+}

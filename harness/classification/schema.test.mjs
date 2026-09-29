@@ -180,5 +180,5 @@ test('all standalone JSON Schema entry points resolve locally for external consu
   const schemas = await Promise.all(files.map(async f => JSON.parse(await readFile(new URL(f, directory), 'utf8'))));
   for (const schema of schemas) ajv.addSchema(schema);
   for (const schema of schemas) assert.equal(typeof ajv.getSchema(schema.$id), 'function', schema.$id);
-  assert.equal(schemas.length, 14);
+  assert.equal(schemas.length, 15);
 });

@@ -17,6 +17,35 @@ npm run classification:fake-http
 npm run classification:t0-preflight -- --manifest /受控目录/manifest.json
 ```
 
+## 实验产物登记（E0）
+
+真实模型探索、离线 replay 和冻结评测必须写入 Git 外的持久私有目录；`/tmp`、`/private/tmp`
+和仓库内部目录会被正式 CLI 拒绝。先在运行目录外准备一份 definition，再创建和校验 registry：
+
+```sh
+npm run classification:artifacts -- create \
+  --definition /持久私有目录/registry-definition.json
+
+npm run classification:artifacts -- verify \
+  --registry /持久私有目录/<run-id>/artifact-registry.json \
+  --expected-hash sha256:<创建命令返回的哈希>
+```
+
+definition 的 `outputRoot` 指向单次 run 目录；`artifacts[]` 必须列出该目录内除
+`artifact-registry.json` 以外的全部文件。definition 本身应放在 run 目录外，除非也把它明确登记为
+artifact。writer/verifier 只在本地计算路径、字节数、SHA-256、版本身份、授权摘要和 provenance；
+不会读取凭据、联网、调用模型或复制 payload。完整字段、权限和 evidence lane 见
+[`2026-09-29-classification-artifact-registry-spec.md`](../../docs/superpowers/specs/2026-09-29-classification-artifact-registry-spec.md)。
+真实模型 lane 必须填写模型身份和授权摘要；离线 replay 必须用 `sourceRegistryRefs` 锚定父 registry 的
+ID、bytes hash 和来源 artifact，不能把无来源的手工结果标记为 replay。
+CLI 会检查 `outputRoot` 的全部父目录，任何 Git repo 或 worktree 内的目录都会被拒绝；每种 lane
+还必须包含规范列出的 manifest、truth、scorer、ledger、metrics、report 等证据角色。真实执行未发出
+请求时，`provider_response` 可为空文件，但 ledger 必须记录 0 请求、0 费用和停止原因。
+`provider_response` 永远是 `restricted`；真实用户 lane 的证据文件除纯规则与 checksum 外至少是
+`private`，不能由调用方降级为 `metadata_only`。
+
+这项检查只证明实验文件完整、来源可追溯。它不证明模型准确率、真实家庭泛化能力或页面产品闭环。
+
 `classification:t0-preflight` 只读取本地受控目录，不读取密钥、不联网、不调用模型。真实素材目录结构、
 真值字段和 30–50 组覆盖要求见
 [`CLASSIFICATION_T0_REAL_MEDIA_KIT.md`](../../docs/algorithms/CLASSIFICATION_T0_REAL_MEDIA_KIT.md)。
