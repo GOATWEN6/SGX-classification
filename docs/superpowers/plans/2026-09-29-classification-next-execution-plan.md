@@ -4,7 +4,7 @@
 > 分支：`codex/classification-contract-v1`  
 > 起点提交：`08a37c6`  
 > 当前 Prompt/Guard：`sgx-five-facets.12`  
-> 状态：E0 已实现、E1 已冻结、E2 scorer 已实现并通过独立复审；E3a composition adapter 为下一项，新的付费调用尚未授权
+> 状态：E0 已实现、E1 已冻结、E2 scorer 已实现并通过独立复审；E3a Spec 已冻结，composition adapter 实现为下一项；新的付费调用尚未授权
 
 > 2026-09-29 审计补充：执行前必须同时遵循 [当前问题总表与修订后的执行边界](../../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)。旧 `/private/tmp` 冻结包、真实运行和 replay 目录当前已不存在，因此不得把“旧 6 例离线重算/保存响应 replay”写成可直接执行步骤；时间角色以现行 Prompt 的 EXIF-only `capture` 规则为准。
 
@@ -150,7 +150,7 @@ Source Gate 结论为 `PASS_WITH_CONDITIONS`：复用现有 `ApiVisionProvider`�
 
 E3 分三个小提交推进：
 
-1. **E3a composition adapter**：纯函数完成 Evidence/photo/content ID 映射、单图与批次说明分流、time role/precision、多个 Evidence supports 和 runtime `placeKind`；不接网络、凭据、API、store 或 UI。
+1. **E3a composition adapter**：Spec 已冻结；纯函数完成 Evidence/photo/content ID 映射、单图与批次说明分流、time role/precision、多个 Evidence supports 和版本化 `placeKind`；不接网络、凭据、API、store 或 UI。
 2. **E3b execution lifecycle**：content digest 与 run identity 分离、pending→processing 两阶段 runner、per-job revision/CAS、AbortSignal、取消/撤权/晚到结果拒收。
 3. **E3c provider factory**：服务端真实 Provider、授权 preflight、usage 与 artifact registry、媒体派生图和 EXIF provenance。
 

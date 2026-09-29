@@ -126,3 +126,12 @@ E2 已实现 `sgx-semantic-scorer.2.0.0`。评分器读取 E1 冻结的 policy�
 E2 只证明冻结合成 fixture 上的评分合同可执行。Oracle fixture 刻意包含错误输出，因此 safety Gate 为 `not_applicable_oracle_fixture`，不能解释为产品安全通过或失败。`aggregateScore` 仍为 `null`，功能数字阈值继续等待真实数据校准；旧 r5 raw response 已缺失，E2 没有伪造历史 exact rescore。
 
 下一项是 E3：先实现纯 Stage A → Lab composition adapter，再实现两阶段 runner/CAS/cancel，最后接 real provider factory。E3 Source Gate 已确认复用现有 `ClassificationEngine`、`ApiVisionProvider`、`AbortSignal` 和文件 store，不在本阶段新增数据库、Redis 或队列依赖。
+
+## E3a Composition Adapter 设计冻结
+
+E3a 已冻结为 batch-isolated Lab 的纯契约适配层，Spec 见
+[`2026-09-29-classification-lab-stage-a-composition-spec.md`](../superpowers/specs/2026-09-29-classification-lab-stage-a-composition-spec.md)。它显式区分 `contentId / evidenceId / photoId`，仅把用户明确绑定到单图的文字或 final ASR 送入该图的 Stage A 上下文；多图、批次和 AI 候选绑定继续作为独立内容与候选关系保存。
+
+设计复审先发现 6 个 P1：授权上下文不足、本批 Envelope 与完整历史目录混淆、纯文字 compose 接口矛盾、EXIF-only `capture` 与底层 Guard 不完全一致、`placeKind` 缺版本化政策、user-origin correction authority 可能丢失。修订后再补齐完整 authorization digest 与机器可验证的 unresolved time sidecar，最终复审为 P0=0、P1=0。
+
+该设计不读取密钥、不联网、不调用模型，也不声称验证跨批历史归组。下一项是按测试矩阵实现 E3a；E3b 才处理两阶段 runner、CAS、取消和晚到结果，E3c 才接真实 Provider。

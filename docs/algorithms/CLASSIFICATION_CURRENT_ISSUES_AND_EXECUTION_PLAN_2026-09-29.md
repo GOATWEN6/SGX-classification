@@ -402,7 +402,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 
 **证据边界**：旧 r5 完全不覆盖；failed/not_run 留在分母；oracle safety Gate 为 N/A，`aggregateScore=null`，不能称准确率或产品安全通过。旧真实响应当前缺失，不伪造“6 例离线重算”；若原始产物后续按 hash 恢复，再追加独立复算报告。
 
-**提交边界**：`feat(classification): add semantic scorer v2`。
+**提交结果**：`49f01dc feat(classification): add semantic scorer v2`。
 
 ### E3：接入 Stage A Lab Provider
 
@@ -410,7 +410,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 
 分为三个可单独回退的子阶段：
 
-- **E3a composition adapter**：先解决 Evidence/photo/content 三类 ID 映射、单图与批次 Evidence 分流、time role/precision 保留、多 Evidence supports 校验和 runtime `placeKind`；输出纯 `StageALabPlan`，不改 API/store/UI；
+- **E3a composition adapter**：Spec 已冻结，见 [`2026-09-29-classification-lab-stage-a-composition-spec.md`](../superpowers/specs/2026-09-29-classification-lab-stage-a-composition-spec.md)；先解决 Evidence/photo/content 三类 ID 映射、单图与批次 Evidence 分流、time role/precision 保留、多 Evidence supports 校验和版本化 `placeKind`；输出纯 `StageALabPlan`，不改 API/store/UI；
 - **E3b execution lifecycle**：content digest 与 run identity、两阶段 job runner、snapshot store、AbortSignal、取消/撤权/晚到结果 CAS；
 - **E3c real provider factory**：真实 Provider、机器可校验执行授权、usage、媒体派生图/EXIF provenance、结构化时间路由和配置说明。
 
