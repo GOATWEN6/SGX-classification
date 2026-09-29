@@ -128,6 +128,10 @@ test('partial month date is conservatively downgraded to grounded year',()=>{
   const p=photo('p_month','');const o=observation(p);o.times=[{value:'2001-07',precision:'date',role:'capture',supports:[{photoId:p.photoId,source:'visual',quote:"右下角时间戳显示 '2001 07'"}]}];
   const time=contract.validateObservation(o,p).times[0];assert.equal(time.value,'2001');assert.equal(time.precision,'year');assert.equal(time.supports[0].source,'ocr');
 });
+test('year precision carrying a grounded month is conservatively reduced to year',()=>{
+  const p=photo('p_year_month','1984年9月');const o=observation(p,{time:'1984-09',precision:'year'});
+  const time=contract.validateObservation(o,p).times[0];assert.equal(time.value,'1984');assert.equal(time.precision,'year');
+});
 test('explicit image text time support is locally tagged as OCR without accepting visual-era guesses',()=>{
   const p=photo('p_ocr','');const o=observation(p);o.times=[{value:'2023',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'visual',quote:'图片右下角叠加文字显示“2023 退休纪念”'}]}];o.unknownFacets=[];
   const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].supports[0].source,'ocr');assert.ok(!normalized.unknownFacets.includes('time'));
@@ -227,7 +231,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.10$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.11$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('real-mode sanitizer keeps valid facets and exposes dropped model assertions for review',async()=>{

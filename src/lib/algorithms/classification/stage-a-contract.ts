@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.10';
+export const PROMPT_VERSION = 'sgx-five-facets.11';
 export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
 export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -138,17 +138,18 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
   const normalized={...parsed,people:bind(parsed.people),mentions:bind(parsed.mentions),places:bind(parsed.places),events:bind(parsed.events),scenes:bind(parsed.scenes)};
   const times=bind(parsed.times).map(time=>{
     const value=normalizeTemporalEvidence(time.value).trim();
-    const normalizedValue=time.precision==='year'?value.replace(/^(\d{4})年$/,'$1'):
+    const partialYearMonth=value.match(/^(\d{4})(?:-(?:0[1-9]|1[0-2])|年(?:[1-9]|1[0-2])月)$/);
+    const normalizedValue=partialYearMonth?partialYearMonth[1]:time.precision==='year'?value.replace(/^(\d{4})年$/,'$1'):
       time.precision==='decade'?value.replace(/^(\d{3}0)年代$/,'$1s'):value;
     const ocrToken=normalizedValue.match(/^\d{4}/)?.[0];
     const supports=time.supports.map(item=>item.source==='visual'&&ocrToken&&item.quote.includes(ocrToken)&&
       /文字|字样|显示|印有|写着|标注|叠加|横幅|海报|text|reads|printed|shows|banner/i.test(item.quote)?{...item,source:'ocr' as const}:item);
+    if(partialYearMonth)return {...time,value:normalizedValue,precision:'year' as const,supports};
     if(time.precision==='year')return {...time,value:normalizedValue,supports};
     if(time.precision==='date'){
       const match=value.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
       if(match)return {...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`,supports};
-      const partial=value.match(/^(\d{4})(?:-(?:0[1-9]|1[0-2])|年(?:[1-9]|1[0-2])月)$/);
-      return partial?{...time,value:partial[1],precision:'year' as const,supports}:{...time,value,supports};
+      return {...time,value,supports};
     }
     if(time.precision==='decade')return {...time,value:normalizedValue,supports};
     return {...time,value,supports};
