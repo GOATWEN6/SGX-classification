@@ -18,7 +18,7 @@
 1. **E0 已实现**：为后续实验建立非临时、可校验的受控证据目录；
 2. **E1 已冻结，E2 已实现**：统一时间角色和 truth/scoring policy v2，并由版本化 scorer 消费冻结数据；
 3. **E3a 已完成**：把 Ingestion/Evidence 安全组合成 Stage A 输入并映射回内容组织；
-4. **E3b 下一项**：修复 Provider 版本不参与幂等键、同步运行无法中途取消的问题；
+4. **E3b 当前项**：Spec 已冻结，正在用测试优先方式实现 Provider/模型/Prompt/scorer 参与 run identity、两阶段执行、CAS、取消/撤权和隐私读取门禁；
 5. **E3c**：把现有 Stage A Provider 作为服务端 Provider factory 接入 `/classification-lab`；
 6. 用 mock transport 完成零费用页面闭环，再申请一次小规模真实页面冒烟。
 
@@ -415,7 +415,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 分为三个可单独回退的子阶段：
 
 - **E3a composition adapter（已完成）**：见 [`2026-09-29-classification-lab-stage-a-composition-spec.md`](../superpowers/specs/2026-09-29-classification-lab-stage-a-composition-spec.md)；已完成 Evidence/photo/content 三类 ID 映射、单图与批次 Evidence 分流、time role/precision、多 Evidence supports、版本化 `placeKind`、Correction allowlist、文字原文支持校验、Provider/context hash、严格 Edge/Group 和 merged retrieval validation；输出纯 `StageALabPlan`，不改 API/store/UI；
-- **E3b execution lifecycle**：content digest 与 run identity、两阶段 job runner、snapshot store、AbortSignal、取消/撤权/晚到结果 CAS；
+- **E3b execution lifecycle（Spec 已冻结）**：见 [`2026-09-30-classification-lab-execution-lifecycle-spec.md`](../superpowers/specs/2026-09-30-classification-lab-execution-lifecycle-spec.md)；采用独立 v2 root 与 v1/v2 并行迁移，冻结 content/run identity、numeric CAS、live trusted guard、strict product redaction、purpose gate、privacy event ledger、取消/撤权/删除/timeout 和晚到结果拒收；代码进入测试优先实现；
 - **E3c real provider factory**：真实 Provider、机器可校验执行授权、usage、媒体派生图/EXIF provenance、结构化时间路由和配置说明。
 
 保存真实响应 replay 只有在原始产物按 hash 恢复后执行；当前以明确标注的 mock fixtures 验证离线链。
@@ -425,7 +425,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 
 **E3a Gate 结果**：受控 loopback 全量分类回归 328/328；typecheck、secret scan 和
 `git diff --check` 通过；没有网络/API 调用、凭据读取或费用。该结果仅证明离线集成契约，不证明
-真实模型准确率、页面产品闭环或生产就绪。E3b 是当前下一项，E3c 仍未完成。
+真实模型准确率、页面产品闭环或生产就绪。E3b 设计已冻结、实现仍在进行；E3c 仍未完成。
 
 ### E4：本地页面真实模型 `T1-Local Product Alpha` 冒烟
 
@@ -454,7 +454,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
   → E1 盲审时间语义/评分 policy/truth（已冻结）
   → E2 scorer v2 + 固定分母报告（已实现）
   → E3a Lab Stage A composition adapter（已完成，零外部调用）
-  → E3b execution lifecycle（下一项，零外部调用）
+  → E3b execution lifecycle（Spec 已冻结，测试优先实现，零外部调用）
   → E3c real provider factory
   → 申请 E4 精确授权
   → E4 页面真实模型 T1-Local Product Alpha

@@ -4,7 +4,7 @@
 > 分支：`codex/classification-contract-v1`  
 > 起点提交：`08a37c6`  
 > 当前 Prompt/Guard：`sgx-five-facets.12`  
-> 状态：E0–E2 已完成；E3a composition adapter 已实现并通过离线集成验证；E3b execution lifecycle 为下一项；新的付费调用尚未授权
+> 状态：E0–E2 已完成；E3a composition adapter 已实现；E3b execution lifecycle Spec 已冻结，进入测试优先实现；新的付费调用尚未授权
 
 > 2026-09-29 审计补充：执行前必须同时遵循 [当前问题总表与修订后的执行边界](../../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)。旧 `/private/tmp` 冻结包、真实运行和 replay 目录当前已不存在，因此不得把“旧 6 例离线重算/保存响应 replay”写成可直接执行步骤；时间角色以现行 Prompt 的 EXIF-only `capture` 规则为准。
 
@@ -152,12 +152,12 @@ Source Gate 结论为 `PASS_WITH_CONDITIONS`：复用现有 `ApiVisionProvider`�
 E3 分三个小提交推进：
 
 1. **E3a composition adapter（已完成）**：纯函数完成 Evidence/photo/content ID 映射、单图与批次说明分流、time role/precision、多个 Evidence supports、版本化 `placeKind`、Correction allowlist、文字原文支持校验、Provider/context hash 与严格 Edge/Group 校验；不接网络、凭据、API、store 或 UI。
-2. **E3b execution lifecycle**：content digest 与 run identity 分离、pending→processing 两阶段 runner、per-job revision/CAS、AbortSignal、取消/撤权/晚到结果拒收。
+2. **E3b execution lifecycle（Spec 已冻结）**：见 [`2026-09-30-classification-lab-execution-lifecycle-spec.md`](../specs/2026-09-30-classification-lab-execution-lifecycle-spec.md)。实现采用 v1/v2 并行与独立 v2 存储根，完成 content/run identity、pending→processing runner、numeric CAS、live trusted guard、strict product/redacted view、取消/撤权/删除/timeout、晚到结果拒收和无自动重试恢复；当前进入测试优先实现。
 3. **E3c provider factory**：服务端真实 Provider、授权 preflight、usage 与 artifact registry、媒体派生图和 EXIF provenance。
 
 E3a 验证结果：受控 loopback 全量分类回归 328/328，typecheck、secret scan 和 `git diff --check`
 均通过；`externalCalls=0`、未读取凭据、额外费用 ¥0。该 Gate 只覆盖 batch-isolated Lab 的离线
-集成契约。E3b 仍需实现 run identity、两阶段状态转换与并发拒收；E3c 仍需实现真实 Provider factory。
+集成契约。E3b Spec 已冻结但代码仍需实现 run identity、两阶段状态转换与并发/隐私拒收；E3c 仍需实现真实 Provider factory。
 
 ### 6.1 服务端数据流
 

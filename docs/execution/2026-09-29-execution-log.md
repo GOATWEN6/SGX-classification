@@ -171,3 +171,13 @@ Memory，也未接 API、store 或 UI。
 这组证据只证明离线集成契约成立，不证明真实模型准确率、真实家庭泛化、页面产品闭环或生产就绪。
 下一项为 E3b：冻结并实现两阶段 runner、run identity、revision/CAS、AbortSignal、取消/撤权和晚到结果
 拒收；E3c 才接真实 Provider factory。
+
+## E3b Execution Lifecycle 设计冻结（2026-09-30）
+
+E3b Spec 已形成：[`2026-09-30-classification-lab-execution-lifecycle-spec.md`](../superpowers/specs/2026-09-30-classification-lab-execution-lifecycle-spec.md)。本阶段先保留现有 v1 同步 Lab 页面，新增独立 v2 存储根和 create/run/read API；E3c 再切 HTTP 202、runner 与页面 polling，避免半迁移打断现有实验台。
+
+设计冻结了：content/run identity 与相对时间语义锚、完整执行 profile、numeric revision/CAS、单进程单 runner 声明、pending→processing→terminal 状态机、可信 live guard、strict product/redacted view、required purpose、durable cancel/revoke/delete/timeout、晚到结果拒收、无自动重试恢复，以及 `result + resultDigest + metrics` 原子不可变。
+
+两轮独立审查重点修复了 Job 自证授权、撤权后原文/Observation 泄露、单 Evidence 删除与整批脱敏冲突、v1/v2 物理根冲突、终态 action 时间不变量、截断 ID 复用和文件 rename 被误称为跨进程 CAS 等风险。设计没有调用模型、网络或凭据，也没有产生费用。
+
+下一动作是先写 E3b 生命周期失败回归，再实现 v2 identity/Schema、同进程共享 mutex/CAS、runner、live guard、隐私投影与恢复。E3c 真实 Provider factory、HTTP/UI 接线和任何付费调用仍不在本提交。
