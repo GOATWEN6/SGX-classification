@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
-export const PROMPT_VERSION = 'sgx-five-facets.6';
+export const PROMPT_VERSION = 'sgx-five-facets.10';
+export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
+export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const ScopeSchema = z.object({ householdId:id, subjectId:id }).strict();
@@ -20,8 +22,8 @@ export const ObservationSchema = z.object({ photoId:id,
   times:z.array(z.object({value:z.string().min(1).max(128), precision:z.enum(['date','year','decade','relative']),
     role:z.enum(['event','capture','scan','upload']), supports}).strict()).max(8),
   places:z.array(z.object({label:z.string().min(1).max(128),canonical:z.string().max(128).optional(),supports}).strict()).max(8),
-  events:z.array(z.object({type:z.string().min(1).max(128),instanceHint:z.string().max(256).optional(),supports}).strict()).max(8),
-  scenes:z.array(z.object({label:z.string().min(1).max(128),supports}).strict()).max(12),
+  events:z.array(z.object({type:z.enum(EVENT_LABELS),instanceHint:z.string().max(256).optional(),supports}).strict()).max(8),
+  scenes:z.array(z.object({label:z.enum(SCENE_LABELS),supports}).strict()).max(12),
   unknownFacets:z.array(FacetSchema).max(5), conflicts:z.array(FacetSchema).max(5)
 }).strict();
 export const EndpointSchema = z.object({photoId:id,faceId:id.optional()}).strict();
@@ -65,6 +67,59 @@ export const pairKey=(kind:string,a:Endpoint,b:Endpoint)=>stable([kind,...[endpo
 export const sameScope=(a:Scope,b:Scope)=>a.householdId===b.householdId&&a.subjectId===b.subjectId;
 export function ensure(condition:unknown,code:string):asserts condition {if(!condition)throw new StageError(code);}
 
+const chineseDigit:Record<string,string>={〇:'0',零:'0',一:'1',二:'2',三:'3',四:'4',五:'5',六:'6',七:'7',八:'8',九:'9'};
+function chineseSmallNumber(value:string):string {
+  if(value==='十')return '10';
+  if(!value.includes('十'))return chineseDigit[value]??value;
+  const [left,right]=value.split('十');
+  return String(Number(left?chineseDigit[left]:1)*10+Number(right?chineseDigit[right]:0));
+}
+function normalizeTemporalEvidence(value:string):string {
+  return value.normalize('NFKC')
+    .replace(/[〇零一二三四五六七八九]{2,4}/g,part=>[...part].map(char=>chineseDigit[char]).join(''))
+    .replace(/([一二三]?十[一二三四五六七八九]?|[一二三四五六七八九])(?=[月日])/g,chineseSmallNumber)
+    .replace(/([一二三四五六七八九]?十)(?=年代)/g,chineseSmallNumber);
+}
+function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
+  if(!['user_text','final_asr'].includes(item.source)||item.evidenceId)return item;
+  const matches=(photo.textEvidence??[]).filter(e=>e.text.includes(item.quote));
+  return matches.length===1?{...item,source:matches[0].source,evidenceId:matches[0].evidenceId}:item;
+}
+
+const untrustedInstruction=/\bignore\s+(?:all\s+)?(?:previous\s+)?(?:rules|instructions)\b|\bsystem\s+prompt\b|\b(?:event|place|person|scene|time)\s*=|忽略.{0,8}(?:规则|指令)|(?:人物|地点|事件|场景|时间)\s*(?:=|：|写成|设为)/i;
+const instructionOnly=(supports:Support[])=>supports.length>0&&supports.every(item=>
+  (item.source==='ocr'||item.source==='visual')&&untrustedInstruction.test(item.quote));
+
+/**
+ * Drops a narrow set of unsupported optional model assertions before strict validation.
+ * The caller must surface reviewItems; retained assertions still pass validateObservation.
+ */
+export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate:Observation;reviewItems:string[]} {
+  const parsed=ObservationSchema.parse(raw);
+  const reviewItems:string[]=[];
+  const dropped=new Set<z.infer<typeof FacetSchema>>();
+  const filterInstruction=<T extends {supports:Support[]}>(facet:z.infer<typeof FacetSchema>,items:T[]):T[]=>items.filter(item=>{
+    if(!instructionOnly(item.supports))return true;
+    dropped.add(facet);reviewItems.push(`UNTRUSTED_INSTRUCTION_DROPPED:${photo.photoId}:${facet}`);return false;
+  });
+  const times=filterInstruction('time',parsed.times).filter(time=>{
+    if(!time.supports.every(item=>item.source==='visual'))return true;
+    dropped.add('time');reviewItems.push(`UNSUPPORTED_VISUAL_TIME_DROPPED:${photo.photoId}`);return false;
+  });
+  const candidate:Observation={
+    ...parsed,
+    places:filterInstruction('place',parsed.places),
+    events:filterInstruction('event',parsed.events),
+    scenes:filterInstruction('scene',parsed.scenes),
+    times,
+    unknownFacets:[],
+    conflicts:parsed.conflicts.filter(facet=>!dropped.has(facet))
+  };
+  const nonempty={person:candidate.people.length+candidate.mentions.length,time:candidate.times.length,place:candidate.places.length,event:candidate.events.length,scene:candidate.scenes.length};
+  candidate.unknownFacets=FacetSchema.options.filter(facet=>!nonempty[facet]);
+  return {candidate,reviewItems:[...new Set(reviewItems)]};
+}
+
 export function validateSupports(items:Support[], photos:Photo[]) {
   for(const s of items){const p=photos.find(p=>p.photoId===s.photoId);if(!p)throw new StageError('FOREIGN_SOURCE');
     if(s.source==='caption'&&!p.caption.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
@@ -79,8 +134,10 @@ export function validateSupports(items:Support[], photos:Photo[]) {
 }
 export function validateObservation(raw:unknown, photo:Photo):Observation {
   const parsed=ObservationSchema.parse(raw);
-  const times=parsed.times.map(time=>{
-    const value=time.value.normalize('NFKC').trim();
+  const bind=<T extends {supports:Support[]}>(items:T[]):T[]=>items.map(item=>({...item,supports:item.supports.map(s=>bindUniqueTextEvidence(s,photo))}));
+  const normalized={...parsed,people:bind(parsed.people),mentions:bind(parsed.mentions),places:bind(parsed.places),events:bind(parsed.events),scenes:bind(parsed.scenes)};
+  const times=bind(parsed.times).map(time=>{
+    const value=normalizeTemporalEvidence(time.value).trim();
     const normalizedValue=time.precision==='year'?value.replace(/^(\d{4})年$/,'$1'):
       time.precision==='decade'?value.replace(/^(\d{3}0)年代$/,'$1s'):value;
     const ocrToken=normalizedValue.match(/^\d{4}/)?.[0];
@@ -89,14 +146,16 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
     if(time.precision==='year')return {...time,value:normalizedValue,supports};
     if(time.precision==='date'){
       const match=value.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
-      return match?{...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`,supports}:{...time,value,supports};
+      if(match)return {...time,value:`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`,supports};
+      const partial=value.match(/^(\d{4})(?:-(?:0[1-9]|1[0-2])|年(?:[1-9]|1[0-2])月)$/);
+      return partial?{...time,value:partial[1],precision:'year' as const,supports}:{...time,value,supports};
     }
     if(time.precision==='decade')return {...time,value:normalizedValue,supports};
     return {...time,value,supports};
   });
-  const nonempty={person:parsed.people.length+parsed.mentions.length,time:times.length,place:parsed.places.length,event:parsed.events.length,scene:parsed.scenes.length};
+  const nonempty={person:normalized.people.length+normalized.mentions.length,time:times.length,place:normalized.places.length,event:normalized.events.length,scene:normalized.scenes.length};
   // unknownFacets is a deterministic projection of the accepted arrays, not a model judgement.
-  const o:Observation={...parsed,times,unknownFacets:FacetSchema.options.filter(f=>!nonempty[f])};
+  const o:Observation={...normalized,times,unknownFacets:FacetSchema.options.filter(f=>!nonempty[f])};
   if(o.photoId!==photo.photoId)throw new StageError('FOREIGN_PHOTO');
   if(new Set(o.people.map(p=>p.faceId)).size!==o.people.length)throw new StageError('DUPLICATE_FACE');
   const all=[...o.people,...o.mentions,...o.times,...o.places,...o.events,...o.scenes];
@@ -112,9 +171,10 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
       const year=time.value.slice(0,4);
       const grounded=time.supports.some(s=>{
         if(s.source==='visual')return false;
-        if(time.precision==='year')return s.quote.includes(year);
-        if(time.precision==='decade')return s.quote.includes(year)||s.quote.includes(`${year.slice(2,3)}0年代`);
-        const [y,m,d]=time.value.split('-');return s.quote.includes(time.value)||s.quote.includes(`${y}年${Number(m)}月${Number(d)}日`);
+        const quote=normalizeTemporalEvidence(s.quote);
+        if(time.precision==='year')return quote.includes(year);
+        if(time.precision==='decade')return quote.includes(year)||quote.includes(`${year.slice(2)}年代`);
+        const [y,m,d]=time.value.split('-');return quote.includes(time.value)||quote.includes(`${y}年${Number(m)}月${Number(d)}日`);
       });
       if(!grounded)throw new StageError('UNSUPPORTED_TIME_PRECISION');
     }

@@ -1,5 +1,5 @@
 import { CachedObservation, Edge, Group, candidates, reconcile, validateRelation,resolveReferences } from './stage-a-association';
-import { Budget, ExtractSchema, Photo, RelateSchema, RequestSchema, Scope, STAGE_A_VERSION, StageDiagnostic, StageError, digest, pairKey, photoHash, sameScope, validateObservation } from './stage-a-contract';
+import { Budget, ExtractSchema, Photo, RelateSchema, RequestSchema, Scope, STAGE_A_VERSION, StageDiagnostic, StageError, digest, pairKey, photoHash, sameScope, sanitizeObservationCandidate, validateObservation } from './stage-a-contract';
 import { CallRecord, TaskBudget, VisionProvider } from './stage-a-provider';
 export interface AuthorizationSnapshot {scope:Scope;authorizationRevision:string;allowedPhotoIds:string[];allowPersonMatching:boolean;
   photoVersions:Record<string,string>;contextRevision:string;reviewContextHash:string;active:boolean;}
@@ -11,7 +11,7 @@ export class MemorySnapshotStore implements SnapshotStore {
   get(key:string){const v=this.data.get(key);return v?structuredClone(v):undefined;}
   compareAndSet(key:string,expected:number,value:AlgorithmSnapshot){if((this.data.get(key)?.revision??0)!==expected)return false;this.data.set(key,structuredClone(value));return true;}
 }
-export interface StageResult {contractVersion:string;runId:string;scope:Scope;workflowStatus:'succeeded'|'needs_review'|'failed'|'cancelled';
+export interface StageResult {contractVersion:string;providerVersion:string;runId:string;scope:Scope;workflowStatus:'succeeded'|'needs_review'|'failed'|'cancelled';
   evidenceStatus:'mock_transport'|'real_api'|'not_run';semanticValidation:'not_evaluated';snapshot?:AlgorithmSnapshot;organizationPolicy?:{facts:'supported_nonconflicted_candidates';groups:'exploratory_ai_candidates';calibrated:false};
   changedPhotoIds:string[];invalidatedPhotoIds:string[];retiredGroupIds:string[];candidateTraces:ReturnType<typeof candidates>['traces'];
   reviewItems:string[];errors:{stage:string;photoIds:string[];code:string;diagnostic?:StageDiagnostic}[];usage:{requests:number;images:number;inputTokens:number;outputTokens:number;costCny:number;latencyMs:number;records:CallRecord[]};}
@@ -21,9 +21,10 @@ export class ClassificationEngine {
   constructor(private readonly provider:VisionProvider|undefined,private readonly store:SnapshotStore=new MemorySnapshotStore()){}
   async process(input:unknown,getAuthorization:()=>AuthorizationSnapshot,signal?:AbortSignal):Promise<StageResult>{
     const r=RequestSchema.parse(input);const started=Date.now();const key=digest(r.scope);const budget=new TaskBudget(r.budget);
-    const result:StageResult={contractVersion:STAGE_A_VERSION,runId:r.runId,scope:r.scope,workflowStatus:'failed',evidenceStatus:'not_run',semanticValidation:'not_evaluated',
+    const version=this.provider?.version??'unconfigured';
+    const result:StageResult={contractVersion:STAGE_A_VERSION,providerVersion:version,runId:r.runId,scope:r.scope,workflowStatus:'failed',evidenceStatus:'not_run',semanticValidation:'not_evaluated',
       organizationPolicy:{facts:'supported_nonconflicted_candidates',groups:'exploratory_ai_candidates',calibrated:false},changedPhotoIds:[],invalidatedPhotoIds:[],retiredGroupIds:[],candidateTraces:[],reviewItems:[],errors:[],usage:{requests:0,images:0,inputTokens:0,outputTokens:0,costCny:0,latencyMs:0,records:budget.records}};
-    const version=this.provider?.version??'unconfigured';const initialAuthorization=getAuthorization();const authFingerprint=digest(initialAuthorization);
+    const initialAuthorization=getAuthorization();const authFingerprint=digest(initialAuthorization);
     const token=Symbol(r.runId);
     let generationStarted=false;
     const fresh=()=>{
@@ -73,20 +74,25 @@ export class ClassificationEngine {
         fresh();if(!this.provider)throw new StageError('MODEL_NOT_CONFIGURED');result.evidenceStatus=this.provider.mode;
         const value=await budget.run(this.provider,{stage,photos,context,checkAuthorization:fresh},signal);fresh();return value;
       };
+      let stopFurtherCalls=false;
+      const candidateReviewItems:string[]=[];
+      const fatalCodes=new Set(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED']);
       for(const photoId of changed){const photo=current.get(photoId)!;
         try{
           const raw=ExtractSchema.parse(await call('extract',[photo],{requestedPhotoIds:[photoId]}));
           if(raw.observations.length!==1)throw new StageError('OBSERVATION_COVERAGE');
-          observations[photoId]={inputHash:photoHash(photo),version,value:validateObservation(raw.observations[0],photo)};
+          const sanitized=sanitizeObservationCandidate(raw.observations[0],photo);
+          candidateReviewItems.push(...sanitized.reviewItems);
+          observations[photoId]={inputHash:photoHash(photo),version,value:validateObservation(sanitized.candidate,photo)};
         }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';
           result.errors.push({stage:'extract',photoIds:[photoId],code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
-          if(this.provider?.mode==='real_api')throw error instanceof StageError?error:new StageError(code);
-          if(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED'].includes(code))throw new StageError(code);
+          if(fatalCodes.has(code))throw error instanceof StageError?error:new StageError(code);
+          if(this.provider?.mode==='real_api'){stopFurtherCalls=true;break;}
         }
       }
       const validReferences=resolveReferences(active,observations,r.references);
       const selected=candidates([...impacted],active,observations,validReferences,r.budget.candidatesPerPhoto);result.candidateTraces=selected.traces;
-      for(const pair of selected.pairs){
+      if(!stopFurtherCalls)for(const pair of selected.pairs){
         const photos=pair.map(id=>current.get(id)!);
         const oldPair=edges.filter(e=>[e.left.photoId,e.right.photoId].sort().join('/')===pair.join('/'));
         if(oldPair.length&&!pair.some(p=>changed.includes(p))&&!refChanged&&!correctionChanged)continue;
@@ -102,16 +108,19 @@ export class ClassificationEngine {
           if(!initialAuthorization.allowPersonMatching&&validated.some(e=>e.kind==='person'))throw new StageError('PERSON_MATCHING_NOT_AUTHORIZED');
           edges.push(...validated);
         }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';result.errors.push({stage:'relate',photoIds:pair,code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
-          if(this.provider?.mode==='real_api')throw error instanceof StageError?error:new StageError(code);
-          if(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED'].includes(code))throw new StageError(code);}
+          if(fatalCodes.has(code))throw error instanceof StageError?error:new StageError(code);
+          if(this.provider?.mode==='real_api'){stopFurtherCalls=true;break;}}
+      }
+      if(this.provider?.mode==='real_api'&&!Object.keys(observations).length&&result.errors.length){
+        const first=result.errors[0];throw new StageError(first.code,first.diagnostic);
       }
       fresh();
       const reconciled=reconcile(active,observations,edges,r.corrections,r.references,previous?.groups??[],key);
-      result.reviewItems=[...reconciled.issues,...edges.filter(e=>e.decision==='unknown').map(e=>`UNKNOWN_RELATION:${pairKey(e.kind,e.left,e.right)}`),
+      result.reviewItems=[...candidateReviewItems,...reconciled.issues,...edges.filter(e=>e.decision==='unknown').map(e=>`UNKNOWN_RELATION:${pairKey(e.kind,e.left,e.right)}`),
         ...Object.values(observations).flatMap(o=>o.value.conflicts.map(f=>`CONFLICT:${o.value.photoId}:${f}`)),
         ...selected.traces.filter(t=>t.coverage==='truncated').map(t=>`CANDIDATE_TRUNCATED:${t.photoId}`)];
       const snapshot:AlgorithmSnapshot={scope:r.scope,revision:(previous?.revision??0)+1,version,authorizationRevision:r.authorizationRevision,contextHash,
-        observations,edges,groups:reconciled.groups,referencesHash:digest(r.references),correctionsHash:digest(r.corrections),reviewItems:result.reviewItems,candidateTraces:result.candidateTraces,pendingPhotoIds:[...new Set(result.errors.flatMap(e=>e.photoIds))],workflowStatus:result.errors.length||result.reviewItems.length?'needs_review':'succeeded'};
+        observations,edges,groups:reconciled.groups,referencesHash:digest(r.references),correctionsHash:digest(r.corrections),reviewItems:result.reviewItems,candidateTraces:result.candidateTraces,pendingPhotoIds:[...new Set([...active.filter(photo=>!observations[photo.photoId]).map(photo=>photo.photoId),...result.errors.flatMap(e=>e.photoIds)])],workflowStatus:result.errors.length||result.reviewItems.length?'needs_review':'succeeded'};
       // Incomplete runs can be re-entered to retry gaps; successful observations still cache by input hash.
       if(result.errors.length)snapshot.contextHash=`incomplete:${contextHash}`;
       if(!Object.keys(observations).length&&result.errors.length)snapshot.workflowStatus='failed';
