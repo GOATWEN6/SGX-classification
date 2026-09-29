@@ -18,7 +18,7 @@ export const ManifestSchema=z.object({version:z.literal('sgx-eval.1'),batchId:id
   caps,truth:z.object({path:z.string().min(1),sha256:sha}).strict(),
   photos:z.array(z.object({photo:contract.PhotoSchema,path:z.string().min(1),split:z.enum(['reference','exploration','holdout']),leakageGroup:id,
     externalConsentRef:z.string().min(1),personConsentRef:z.string().optional()}).strict()).min(1),
-  tasks:z.array(z.object({taskId:id,request:contract.RequestSchema,evaluatePhotoIds:z.array(id).min(1),expectedUnchangedPhotoIds:z.array(id).default([]),
+  tasks:z.array(z.object({taskId:id,stateSequenceId:id.optional(),request:contract.RequestSchema,evaluatePhotoIds:z.array(id).min(1),expectedUnchangedPhotoIds:z.array(id).default([]),
     evaluation:evaluationPolicy.optional()}).strict()).min(1).max(100)
 }).strict();
 const region=z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),width:z.number().positive().max(1),height:z.number().positive().max(1)}).strict()
@@ -61,7 +61,7 @@ export async function preflight(manifestPath){
   // Event instances are independent split units, even if someone assigned different leakageGroup names.
   const eventSplits=new Map();
   for(const p of allTruth.filter(p=>p.eventInstance)){const split=gallery.get(p.photoId).split;const old=eventSplits.get(p.eventInstance);ensure(!old||old===split,'EVENT_SPLIT_LEAKAGE');eventSplits.set(p.eventInstance,split);}
-  let upperRequests=0,imageOccurrences=0,outputTokenReservation=0;const usedIds=new Set();
+  let upperRequests=0,imageOccurrences=0,outputTokenReservation=0;const usedIds=new Set();const priorSequenceTasks=new Map();
   for(const task of manifest.tasks){
     const r=task.request;const active=r.photos.filter(p=>p.active);const activeIds=new Set(active.map(p=>p.photoId));unique(r.photos.map(p=>p.photoId),'DUPLICATE_TASK_PHOTO');
     for(const p of r.photos){const item=gallery.get(p.photoId);ensure(item&&p.sourceHash===item.photo.sourceHash&&p.sourceRef===item.photo.sourceRef&&p.mimeType===item.photo.mimeType,'UNAPPROVED_PHOTO');
@@ -70,6 +70,16 @@ export async function preflight(manifestPath){
     for(const ref of r.references)ensure(gallery.get(ref.endpoint.photoId)?.split==='reference','NON_REFERENCE_IDENTITY_INPUT');
     for(const photoId of task.evaluatePhotoIds)ensure(activeIds.has(photoId)&&gallery.get(photoId).split===manifest.partition,'INVALID_EVALUATION_PHOTO');
     for(const photoId of task.expectedUnchangedPhotoIds)ensure(activeIds.has(photoId),'INVALID_UNCHANGED_PHOTO');
+    const priorSequenceTask=task.stateSequenceId?priorSequenceTasks.get(task.stateSequenceId):undefined;
+    if(task.expectedUnchangedPhotoIds.length){ensure(task.stateSequenceId,'STATE_SEQUENCE_REQUIRED');ensure(priorSequenceTask,'STATE_SEQUENCE_PREVIOUS_REQUIRED');}
+    if(task.stateSequenceId){
+      if(priorSequenceTask){
+        ensure(contract.sameScope(priorSequenceTask.request.scope,r.scope),'STATE_SEQUENCE_SCOPE_MISMATCH');
+        const currentIds=new Set(r.photos.map(p=>p.photoId));
+        for(const photo of priorSequenceTask.request.photos)ensure(currentIds.has(photo.photoId),'STATE_SEQUENCE_REQUIRES_COMPLETE_CATALOG');
+      }
+      priorSequenceTasks.set(task.stateSequenceId,task);
+    }
     const pairs=Math.min(active.length*(active.length-1)/2,active.length*r.budget.candidatesPerPhoto);
     const calls=r.trigger==='view'?0:active.length+pairs;upperRequests+=calls;imageOccurrences+=r.trigger==='view'?0:active.length+2*pairs;
     if(r.trigger!=='view')outputTokenReservation+=active.length*(r.budget.stageOutputTokens?.extract??r.budget.maxOutputPerRequest)+pairs*(r.budget.stageOutputTokens?.relate??r.budget.maxOutputPerRequest);

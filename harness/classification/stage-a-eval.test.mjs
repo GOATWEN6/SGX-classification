@@ -112,6 +112,32 @@ test('incremental tasks score against the evidence available at that task, witho
   f.truth.taskOverrides=[{taskId:'early',photos:early}];const earlyScore=scoreTask({...f.manifest.tasks[0],taskId:'early'},undefined,f.truth);
   const lateScore=scoreTask({...f.manifest.tasks[0],taskId:'late'},undefined,f.truth);assert.equal(earlyScore.facets.time.expected,0);assert.equal(lateScore.facets.time.expected,2);
 });
+test('incremental unchanged checks require an explicit state sequence and complete photo catalog',async t=>{
+  const f=await fixture(t);f.manifest.tasks[0].expectedUnchangedPhotoIds=['a'];await f.save();
+  await assert.rejects(preflight(f.manifestPath),/STATE_SEQUENCE_REQUIRED/);
+  f.manifest.tasks[0].stateSequenceId='sequence_a';await f.save();await assert.rejects(preflight(f.manifestPath),/STATE_SEQUENCE_PREVIOUS_REQUIRED/);
+  f.manifest.tasks[0].expectedUnchangedPhotoIds=[];
+  f.manifest.tasks.push({...structuredClone(f.manifest.tasks[0]),taskId:'later',request:{...structuredClone(f.s.req),runId:'run_later',photos:[f.s.req.photos[1]]},evaluatePhotoIds:['b'],expectedUnchangedPhotoIds:['b']});
+  await f.save();await assert.rejects(preflight(f.manifestPath),/STATE_SEQUENCE_REQUIRES_COMPLETE_CATALOG/);
+});
+test('independent tasks with the same product scope use isolated evaluation state',async t=>{
+  const f=await fixture(t);const [a,b]=f.manifest.tasks[0].request.photos;
+  f.manifest.tasks=[
+    {...structuredClone(f.manifest.tasks[0]),taskId:'only_a',request:{...structuredClone(f.s.req),runId:'run_only_a',photos:[a]},evaluatePhotoIds:['a']},
+    {...structuredClone(f.manifest.tasks[0]),taskId:'only_b',request:{...structuredClone(f.s.req),runId:'run_only_b',authorizationRevision:'auth2',photos:[b]},evaluatePhotoIds:['b']}
+  ];
+  await f.save();const prepared=await preflight(f.manifestPath);const approval={version:'sgx-eval-approval.1',batchId:prepared.manifest.batchId,manifestHash:prepared.manifestHash,
+    approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',expiresAt:new Date(Date.now()+60000).toISOString(),provider:prepared.manifest.provider,model:prepared.manifest.model,
+    photoIds:prepared.usedPhotoIds,caps:prepared.manifest.caps,allowExternalImages:true,allowPersonMatching:false};
+  const approvalPath=path.join(f.root,'isolated-approval.json');await writeFile(approvalPath,JSON.stringify(approval));const loader=path.join(f.root,'isolated-stub.cjs');
+  await writeFile(loader,`global.fetch=()=>{throw new Error('NETWORK_FORBIDDEN_IN_TEST');};
+    const {ApiVisionProvider}=require(process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification/stage-a-provider.js');
+    ApiVisionProvider.prototype.invoke=async function(call){const p=call.photos[0];return {value:{observations:[{photoId:p.photoId,people:[],mentions:[],times:[],places:[],events:[],scenes:[{label:'室内',supports:[{photoId:p.photoId,source:'visual',quote:'controlled local observation'}]}],unknownFacets:['person','time','place','event'],conflicts:[]}]},usage:{inputTokens:100,outputTokens:50},responseId:'local_'+p.photoId,model:'qwen3.5-flash-2026-02-23'};};`);
+  const out=path.join(f.root,'isolated-results');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
+    '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,0,child.stderr);const second=JSON.parse(await readFile(path.join(out,'result-only_b.json'),'utf8'));
+  assert.deepEqual(second.invalidatedPhotoIds,[]);assert.deepEqual(Object.keys(second.snapshot.observations),['b']);
+});
 for(const [name,usage] of [['input',{inputTokens:50000,outputTokens:100}],['output',{inputTokens:100,outputTokens:2049}]]){
   test(`real-mode batch CLI stops remaining tasks on ${name} reservation overrun (local invoke stub only)`,async t=>{
     const f=await fixture(t);f.manifest.tasks.push({...structuredClone(f.manifest.tasks[0]),taskId:'later',request:{...structuredClone(f.s.req),runId:'run_later',trigger:'view'}});await f.save();

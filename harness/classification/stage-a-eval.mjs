@@ -41,7 +41,7 @@ if(args.includes('--help')||!manifestPath||!out){
         resolver:async photo=>{liveApproval();const item=m.photos.find(p=>p.photo.photoId===photo.photoId&&p.photo.sourceHash===photo.sourceHash);
           if(!item)throw new contract.StageError('CALL_NOT_AUTHORIZED');return {bytes:await readFile(path.resolve(batch.root,item.path)),mimeType:photo.mimeType};},
         record:entry=>appendFileSync(path.join(out,'provider-responses.jsonl'),JSON.stringify({taskId:activeTaskId,...entry})+'\n',{mode:0o600})});
-      const engine=new ClassificationEngine(provider);const previousByScope=new Map();
+      const enginesBySequence=new Map();const previousBySequence=new Map();
       try{
         for(const task of m.tasks){
           activeTaskId=task.taskId;const remaining={maxRequests:m.caps.maxRequests-totals.requests,maxInputTokens:m.caps.maxInputTokens-totals.inputTokens,
@@ -53,6 +53,9 @@ if(args.includes('--help')||!manifestPath||!out){
             const auth={scope:r.scope,authorizationRevision:r.authorizationRevision,active:true,allowPersonMatching:approval.allowPersonMatching,
               allowedPhotoIds:r.photos.filter(p=>p.active).map(p=>p.photoId),photoVersions:Object.fromEntries(r.photos.filter(p=>p.active).map(p=>[p.photoId,contract.photoHash(p)])),
               contextRevision:task.taskId,reviewContextHash:contract.digest([r.references,r.corrections])};
+            const engine=task.stateSequenceId
+              ?(enginesBySequence.get(task.stateSequenceId)??(()=>{const value=new ClassificationEngine(provider);enginesBySequence.set(task.stateSequenceId,value);return value;})())
+              :new ClassificationEngine(provider);
             result=await engine.process(r,()=>{try{liveApproval();return auth;}catch{return {...auth,active:false};}},controller.signal);
             for(const k of Object.keys(totals))totals[k]+=result.usage[k];
             await save(`result-${task.taskId}.json`,result);
@@ -60,9 +63,9 @@ if(args.includes('--help')||!manifestPath||!out){
             if(result.errors.length)stopped=result.errors[0].code;
             if(result.usage.records.some(c=>c.returnedModel&&c.returnedModel!==m.model))stopped='MODEL_VERSION_MISMATCH';
           }
-          const key=contract.digest(task.request.scope);const score=scoreTask(task,result,batch.truth,previousByScope.get(key));scores.push(score);
+          const score=scoreTask(task,result,batch.truth,task.stateSequenceId?previousBySequence.get(task.stateSequenceId):undefined);scores.push(score);
           if(!stopped&&(score.identities.wrongCandidate||score.personPairs.falseMerge||score.eventPairs.falseMerge||score.unchangedObservationChecks.some(c=>!c.pass)))stopped='SEMANTIC_REVIEW_REQUIRED';
-          if(result?.snapshot)previousByScope.set(key,result);
+          if(result?.snapshot&&task.stateSequenceId)previousBySequence.set(task.stateSequenceId,result);
           ledger.push({taskId:task.taskId,status:result?.workflowStatus??'not_run',reason:!result?stopped:undefined,usage:result?.usage??null});
           await save('ledger.json',{plannedTasks:m.tasks.length,completedEntries:ledger.length,stopped,totals,tasks:ledger});await save('metrics.json',scores);
         }
