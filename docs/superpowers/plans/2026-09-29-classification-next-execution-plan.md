@@ -1,0 +1,272 @@
+# SGX 自动分类与归纳：下一阶段执行计划
+
+> 日期：2026-09-29  
+> 分支：`codex/classification-contract-v1`  
+> 起点提交：`08a37c6`  
+> 当前 Prompt/Guard：`sgx-five-facets.12`  
+> 状态：可开始执行离线工程部分；新的付费调用尚未授权
+
+## 1. 本阶段要得到的结果
+
+本阶段的目标是把“真实模型已经能被 CLI 调用”推进到“真实 Stage A 能从本地分类实验台安全运行，并可用冻结的 validation 批次验收”。完成时应具备：
+
+1. 一套不会把合理同义词、合理附加标签误判为严重错误的版本化 truth 与评分规则；
+2. 一个只在服务端持有凭据的真实 Stage A 实验台 Provider；
+3. 图片、用户文字和 final ASR 从浏览器上传后，经过真实模型、Guard、内容组织和人工动作的完整 T0 页面链；
+4. 一份可交给全栈工程师继续 T2 的接口、环境变量、错误恢复和已知限制说明；
+5. 在获得新授权后，对 14 组 `t1_validation` 只运行一次冻结验收，不再依据 validation 调 Prompt 或规则。
+
+本阶段不搭建生产数据库、ORM、Redis、消息队列、对象存储或正式账号鉴权；这些属于全栈 T2。也不做人脸身份匹配，不把合成素材结果写成真实家庭准确率。
+
+## 2. 当前起点和不可覆盖的证据
+
+- 已完成 6/6 次 `qwen3.7-flash-2026-07-15` 真实请求，0 自动重试，累计记账 ¥0.045918；批准额度已经用完。
+- 原始结果必须保留：2 succeeded、2 needs_review、2 failed。后续离线修复不能覆盖这些历史状态。
+- g001、g025 的保存响应已在 `.12` 下精确离线重放 2/2 通过；这只证明 Guard 修复有效，没有产生新 API 调用。
+- `npm run test:classification` 当前为 196/196；typecheck、secret scan 和 `git diff --check` 通过。
+- `/classification-lab` 当前只支持 `deterministic` Provider；`lab-store.ts` 也明确拒绝其他 Provider 结果。
+- 现有 Stage A Provider、Evidence adapter 和 Stage A→内容组织 adapter 可复用，不再另写一套模型调用链。
+
+## 3. 执行顺序
+
+```text
+E1 语义与评分口径冻结
+  ↓ Gate 1
+E2 评分器 v2 与冻结产物
+  ↓ Gate 2
+E3 真实 Stage A 实验台 Provider
+  ↓ Gate 3（零付费调用）
+E4 本地页面真实模型 T0 冒烟
+  ↓ Gate 4（需要一次新授权）
+E5 14 组 t1_validation 冻结验收
+  ↓ Gate 5（需要单独的新授权）
+E6 全栈 T2 交接包更新
+```
+
+E1–E3 可以立即执行，不读取密钥、不联网、不产生费用。E4、E5 只有在各自清单和上限可检查后，才请求一次明确授权。
+
+## 4. E1：冻结通用语义和风险口径
+
+### 4.1 要解决的问题
+
+6 例探索暴露的四个分歧不能靠针对样例写特例解决：
+
+|案例|问题|冻结为通用规则|
+|---|---|---|
+|g007|`聚会` 与 `家庭聚会`、`capture` 与 `event`、`桌面` 与 `庆典`|没有家庭关系证据时，`聚会` 是更安全的核心标签；“照片拍于某日”按拍摄语义处理，明确事件日期才按 event；有视觉依据的附加场景允许存在|
+|g011|只有年份矛盾，却额外声明 event conflict|冲突必须有两个互相排斥的同维度候选或明确的同维度否定证据；不能由 time conflict 自动传播为 event conflict|
+|g023|核心 `户外` 正确，同时给出 `自然景观`|受控 taxonomy 内且有 Evidence 的附加标签记为 supported extra，不作为严重错误|
+|g025|声明 time conflict，但只输出 1998、漏掉 OCR 2001|冲突输出必须包含足以解释冲突的候选；只声明 conflict 而缺少另一侧证据，记为 conflict incomplete|
+
+### 4.2 评分结果不再只有“对/错”
+
+每个维度至少区分：
+
+- `required_core`：缺失会影响主要分类或故事归纳；
+- `acceptable_variant`：粒度更保守但语义成立；
+- `supported_extra`：有 Evidence 的额外受控标签；
+- `missing_required`：应有但漏掉；
+- `unsupported_extra`：没有足够 Evidence 的额外断言；
+- `unsafe_false_positive`：人物身份、关系、敏感事实、具体时间地点等高影响无依据断言；
+- `conflict_incomplete`：声明冲突但未保留冲突双方或对应证据。
+
+这些是评测标签，不是产品中要求用户确认的概率阈值。旧 `0.80/0.55` 继续只作为内容组织 baseline。
+
+### 4.3 Gate 1
+
+- 规则能解释四个现有分歧，也能用于未见样例；
+- 不包含 `if photoId === g007` 一类样例特判；
+- 用户原文、AI 标题、AI 摘要、候选事实和用户确认事实仍然分层；
+- 人物身份、敏感事实和长期 Memory 的确认边界不变。
+
+## 5. E2：实现评分器 v2 并冻结新产物
+
+### 5.1 实现范围
+
+主要修改：
+
+- `harness/classification/stage-a-evaluation.mjs`
+- `harness/classification/stage-a-eval.test.mjs`
+- `harness/classification/prepare-synthetic-v31.mjs`
+- 新增评分规则 Spec 与最小正反 fixtures
+
+采用版本化、向后兼容方式：历史 `sgx-truth.1` 和 r5 结果只读保留；新评分口径使用新的版本或带哈希的 scoring policy sidecar，不原地改写 r5 的 truth、manifest、运行目录或失败记录。
+
+回归至少覆盖：
+
+1. event 父子粒度与保守标签；
+2. time role 的语义区分；
+3. supported extra 不被计为严重错误；
+4. unsupported extra 仍被惩罚；
+5. 冲突不跨维度传播；
+6. conflict incomplete 可被识别；
+7. failed、not_run 和 needs_review 仍留在固定分母；
+8. scoring policy、truth、manifest 和素材均有 SHA-256 绑定。
+
+### 5.2 Gate 2
+
+- 历史 r5 证据完全未覆盖；
+- 保存的 6 例可以离线重算并给出“核心正确、可接受变体、支持的额外标签、真正错误”的解释；
+- 评分器测试、全量分类回归、typecheck、secret scan、diff check 通过；
+- 冻结 `.12` Prompt、taxonomy、Guard 和 scorer 版本；进入 validation 后不再调参。
+
+建议提交边界：
+
+1. `docs(classification): freeze truth and scoring v2 semantics`
+2. `test(evaluation): add versioned semantic scorer`
+3. `evaluation: freeze post-exploration scoring artifacts`
+
+## 6. E3：把真实 Stage A 接入本地实验台
+
+### 6.1 服务端数据流
+
+```text
+Browser multipart upload
+→ Next.js /api/classification-lab
+→ IngestionEnvelope + Evidence + Binding
+→ Lab Stage A adapter
+→ ApiVisionProvider（Qwen/GLM，服务端）
+→ Stage A Guard / cache / authorization recheck
+→ adaptStageAForOrganization
+→ sparse retrieval + StoryUnit organization
+→ file-backed local lab store
+→ 页面展示 AI 标签、故事、证据、费用、时延和复核项
+```
+
+实现优先复用：
+
+- `ApiVisionProvider`
+- `adaptTrustedStageACatalog`
+- `ClassificationEngine`
+- `adaptStageAForOrganization`
+- `organizeSparseContent`
+
+不使用通用聊天 `OpenAICompatibleProvider` 代替 Stage A，因为它缺少图片哈希、授权目录、预算、原始响应审计和分类语义 Guard。
+
+### 6.2 多模态绑定规则
+
+- 明确绑定到一张图片的 `user_text/final_asr` 可以进入该图的 Stage A 证据；
+- 指向多张图片或未指定单图的说明继续作为独立或批次级 Evidence；第一版不复制成每张图片的确定事实；
+- Stage A 可以提出说明与图片的候选关联，内容组织器可以消费候选，但只有用户动作能升级为确认关系；
+- 纯文本和纯 final ASR 仍由文本抽取与内容组织路径处理，不为调用视觉模型而制造空图片。
+
+### 6.3 Provider 模式与安全边界
+
+`CLASSIFICATION_LAB_PROVIDER` 扩展为：
+
+- `deterministic`：现有离线基线；
+- `stage_a_mock`：真实适配器 + 本地 mock transport；
+- `stage_a_real`：真实适配器 + 已批准的服务端 API。
+
+`stage_a_real` 必须满足：
+
+- 浏览器响应、页面源码、job.json、日志和 Git 中均无 API key；
+- Keychain 只在启动服务时注入当前进程，不要求用户重复输入，不写 `.env`；
+- 缺模型、缺授权、授权过期、图片哈希变化、撤权、删除、限流、超时和非法输出都有稳定错误码；
+- 默认 0 自动重试；真实模式限制单批图片和最大请求/费用，不能因页面一次上传无限调用；
+- 结果记录真实 `modelVersion`、`promptVersion`、请求数、token、费用和 latency；
+- `lab-store.ts` 用严格 Schema 接受真实 Provider 结果，不能简单移除校验。
+
+### 6.4 Gate 3：零付费调用验证
+
+- mock transport 覆盖成功、拒判、needs_review、非法输出、限流、超时和取消；
+- 使用已保存的脱敏真实响应做 exact replay，证明页面适配链可消费 `.12` 输出；
+- 覆盖双家庭、多主体、旧授权、删除、撤权和晚到结果；
+- 页面仍可在 `deterministic` 模式回退；
+- `npm run test:classification`、`npm run typecheck`、`npm run test:classification:secret`、`npm run build` 和 `git diff --check` 通过；
+- 不发生网络调用、凭据读取或额外费用。
+
+建议提交边界：
+
+1. `feat(classification): add stage-a lab provider adapter`
+2. `test(classification): cover real-provider lab boundaries`
+3. `docs(classification): document local provider switching`
+
+## 7. E4：本地页面真实模型 T0 冒烟
+
+E3 通过后，先生成一个可检查的冒烟清单，写明：素材 ID、图片数量、预计 Stage A extract/relate 请求数、模型、Prompt、最大 token、费用上限、0 重试、停止条件和输出目录。然后一次性请求授权。
+
+建议只覆盖三个互补场景，而不是重复跑同一类图片：
+
+1. 单图 + 用户文字：检查五维抽取与 Evidence；
+2. 两图 + 批次说明或 final ASR：检查候选关联、StoryUnit 和不擅自绑定；
+3. 冲突或图片内提示词：检查 `needs_review`、局部隔离和安全降级。
+
+实际批准单位必须是“API 请求数”，不能把“3 个页面场景”直接当成“3 次请求”。先由离线 preflight 计算 extract/relate 的最坏请求上限。
+
+### Gate 4
+
+- 浏览器上传到结果展示走的是真实 Stage A Provider；
+- 三类场景均有固定状态和可追溯 Evidence，页面无未处理异常；
+- 接受、移出、拆分、合并、拒绝、删除、撤权和失败恢复至少各验收一次；
+- 删除或撤权后旧结果不可继续用于展示、搜索候选或后续组织；
+- 成本、请求数和时延不超过授权；
+- 失败保留原始记录，不自动覆盖或静默重跑。
+
+## 8. E5：14 组 `t1_validation` 一次性冻结验收
+
+### 8.1 运行原则
+
+- 使用 Gate 2 已冻结的 Prompt/Guard/taxonomy/scorer；
+- validation truth 在运行前冻结并绑定 hash；
+- validation 不用于继续调 Prompt、规则或评分口径；
+- 0 自动重试，所有 failed/not_run 保持在固定分母；
+- 不做人脸匹配；
+- 运行前另行提交 exact manifest、最大 API 请求数和费用上限供用户批准。
+
+### 8.2 功能验收 Gate
+
+合成 validation 用来判断工程和功能完整性，采用严重性 Gate：
+
+- `unsafe_false_positive = 0`；
+- 跨家庭、跨主体、撤回内容和旧授权被使用的次数均为 0；
+- 图片内提示词改变业务分类的次数为 0；
+- 14/14 任务均有最终状态和原始证据，不能从分母中消失；
+- 自动整理项都能追溯到 Evidence；
+- 高风险断言只能进入 `needs_review`，不能静默成为用户确认事实或长期 Memory；
+- 语义差异按 Gate 2 的类别报告，不用旧 `0.80/0.55` 充当准确率阈值。
+
+若 hard Gate 失败，停止并归因；不在 validation 上继续修规则后重跑。修复后需要形成新的冻结版本和新的批准批次。
+
+## 9. E6：全栈交付
+
+更新以下权威入口：
+
+- `docs/algorithms/CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md`
+- `docs/algorithms/CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md`
+- `docs/algorithms/CLASSIFICATION_STATUS_2026-09-21.md`
+- 当日 `docs/execution/` 记录
+
+交付包必须让全栈工程师能回答：
+
+1. 浏览器调用哪个 endpoint、上传什么字段；
+2. Fake、mock transport 和真实 Provider 如何切换；
+3. 哪些配置是普通配置，哪个值只能来自 secret storage；
+4. Job、Evidence、候选、确认、删除和撤权的状态如何流转；
+5. T2 需要替换哪些 adapter：文件存储、对象存储、队列、鉴权和物理删除；
+6. 哪些结果可以用于相册搜索，哪些只能作为候选，哪些才允许进入长期 Memory；
+7. 如何复现自动化检查和人工页面验收。
+
+## 10. 完成定义
+
+只有同时满足以下条件，才把当前算法 T0/T1 工作包交给全栈：
+
+- truth/scorer v2 已冻结并有哈希；
+- `.12` Prompt/Guard/taxonomy 不再使用 validation 调参；
+- 真实 Provider 通过服务端接入，浏览器无法获得密钥；
+- 本地页面完成真实模型 T0 冒烟及生命周期动作验收；
+- 14 组 validation 完成一次固定分母运行，或明确记录 hard fail 与阻断原因；
+- 自动化门禁和 secret scan 通过；
+- 文档准确区分合成数据功能证据、真实模型工程证据、真实家庭效果和生产能力；
+- 工作树干净，每个结果用小提交保存，可逐个回退。
+
+## 11. 用户需要配合的时间点
+
+现在不需要用户准备新素材、重新输入密钥或决定数据库方案。
+
+只有两个时间点需要用户操作：
+
+1. E3 全部离线 Gate 通过后，批准 E4 的精确模型、API 请求数、费用上限、素材清单和停止条件；
+2. E4 通过后，批准 E5 的冻结 14 组 validation manifest、最大 API 请求数和费用上限。
+
+其他工程和文档工作直接推进。

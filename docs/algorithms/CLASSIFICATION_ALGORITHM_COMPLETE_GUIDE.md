@@ -609,6 +609,8 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 
 详细任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)；T0/T1 的实际运行和全栈替换点见 [全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)。
 
+2026-09-29 后续的具体执行顺序、评分器 v2、真实实验台 Provider 和付费授权边界见 [下一阶段执行计划](../superpowers/plans/2026-09-29-classification-next-execution-plan.md)。
+
 ## 17. 源码与文档导航
 
 |主题|权威入口|

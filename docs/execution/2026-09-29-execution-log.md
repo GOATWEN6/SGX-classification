@@ -57,3 +57,5 @@
 2. 将真实 Stage A Provider 通过服务端 adapter 接入 `/classification-lab`；
 3. 本地完成上传、AI 整理、复核、删除、撤权和失败恢复的 T0 页面验收；
 4. 冻结 `.12` 后，再申请 14 组 `t1_validation` 的一次性调用授权。
+
+上述工作已整理为可执行的分阶段计划：[SGX 自动分类与归纳：下一阶段执行计划](../superpowers/plans/2026-09-29-classification-next-execution-plan.md)。计划明确 E1–E3 为零付费离线工作；只有真实 Provider adapter 通过 mock transport、保存响应重放和安全门禁后，才分别申请 E4 页面真实模型冒烟与 E5 冻结 validation 的授权。
