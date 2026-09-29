@@ -125,7 +125,7 @@ E2 已实现 `sgx-semantic-scorer.2.0.0`。评分器读取 E1 冻结的 policy�
 
 E2 只证明冻结合成 fixture 上的评分合同可执行。Oracle fixture 刻意包含错误输出，因此 safety Gate 为 `not_applicable_oracle_fixture`，不能解释为产品安全通过或失败。`aggregateScore` 仍为 `null`，功能数字阈值继续等待真实数据校准；旧 r5 raw response 已缺失，E2 没有伪造历史 exact rescore。
 
-下一项是 E3：先实现纯 Stage A → Lab composition adapter，再实现两阶段 runner/CAS/cancel，最后接 real provider factory。E3 Source Gate 已确认复用现有 `ClassificationEngine`、`ApiVisionProvider`、`AbortSignal` 和文件 store，不在本阶段新增数据库、Redis 或队列依赖。
+该 E2 检查点的下一项是 E3：先实现纯 Stage A → Lab composition adapter，再实现两阶段 runner/CAS/cancel，最后接 real provider factory。E3 Source Gate 已确认复用现有 `ClassificationEngine`、`ApiVisionProvider`、`AbortSignal` 和文件 store，不在本阶段新增数据库、Redis 或队列依赖；E3a 的后续完成状态见下方记录。
 
 ## E3a Composition Adapter 设计冻结
 
@@ -134,4 +134,40 @@ E3a 已冻结为 batch-isolated Lab 的纯契约适配层，Spec 见
 
 设计复审先发现 6 个 P1：授权上下文不足、本批 Envelope 与完整历史目录混淆、纯文字 compose 接口矛盾、EXIF-only `capture` 与底层 Guard 不完全一致、`placeKind` 缺版本化政策、user-origin correction authority 可能丢失。修订后再补齐完整 authorization digest 与机器可验证的 unresolved time sidecar，最终复审为 P0=0、P1=0。
 
-该设计不读取密钥、不联网、不调用模型，也不声称验证跨批历史归组。下一项是按测试矩阵实现 E3a；E3b 才处理两阶段 runner、CAS、取消和晚到结果，E3c 才接真实 Provider。
+该设计不读取密钥、不联网、不调用模型，也不声称验证跨批历史归组。
+
+## E3a Composition Adapter 实现完成（2026-09-30）
+
+E3a 已按冻结 Spec 实现为 batch-isolated Lab 的纯函数组合层。主要结果：
+
+- `contentId / evidenceId / photoId` 可追溯映射，单图文字/final ASR 才进入图片 Stage A；
+  多图、批次和 AI 候选绑定保持独立；
+- 服务端授权新增规范化 `allowedCorrectionIds`，重复 Correction、未在 allowlist 中的 Correction 或
+  `authorityRef` 不一致均 fail closed；文字 route 保留 `bindingId` 并进入 `inputDigest`；
+- 文字 Observation 必须引用本批活动的文字/final ASR Evidence，`sourceType` 与模态一致，非空
+  `quote` 能在原文中回查；
+- Stage A 结果必须匹配 `providerVersion`、snapshot version 和本次 context hash；缓存 Observation、
+  Edge、Group、依赖 hash 与 support 重新严格校验；
+- 禁用人物匹配时拒绝人物 edge、跨图人物组和 identity；合并后的 retrieval candidates 再经过
+  `validateSparseAssociationInput`；
+- 时间 role/precision、`placeKind`、多个 Evidence supports 与 unresolved sidecar 在组织层保留。
+
+稳定拒收码同步增加 `DUPLICATE_CORRECTION`、`FOREIGN_TEXT_OBSERVATION`、
+`DUPLICATE_STAGE_A_EDGE` 和 `PERSON_MATCHING_NOT_AUTHORIZED` 等边界；候选仍是候选，未写长期
+Memory，也未接 API、store 或 UI。
+
+验证结果：
+
+- 允许 loopback 的受控环境中，`npm run test:classification`：328/328 通过；
+- `npm run typecheck`：通过；
+- `npm run test:classification:secret`：通过；
+- `git diff --check`：通过；
+- 本阶段没有网络或 API 调用，没有读取凭据，额外费用 ¥0。
+
+独立终审初次结果为 P0=0、P1=0、P2=1；唯一 P2 是 `usableForOrganization=false` 的 Group
+仍可能生成 retrieval candidate。提交前已过滤该类 Group、补充回归并完成 328/328 复跑，最终没有
+遗留的已知 P0/P1/P2。
+
+这组证据只证明离线集成契约成立，不证明真实模型准确率、真实家庭泛化、页面产品闭环或生产就绪。
+下一项为 E3b：冻结并实现两阶段 runner、run identity、revision/CAS、AbortSignal、取消/撤权和晚到结果
+拒收；E3c 才接真实 Provider factory。

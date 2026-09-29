@@ -72,6 +72,20 @@ test('deterministic text baseline extracts traceable common facets without claim
   assert.ok(result.observations.some(item => item.facet === 'event' && item.rawValue === '毕业'));
   assert.ok(result.limitations.includes('not_a_model_accuracy_result'));
   assert.ok(result.observations.every(item => item.evidenceId === 'evidence_text_only'));
+  assert.ok(result.observations.every(item => item.supports.every(support => support.sourceType === 'user_text')));
+  const normalizedText = adapted.contents[0].originalText.normalize('NFKC').toLowerCase();
+  assert.ok(result.observations.every(item => item.supports.every(support => normalizedText.includes(support.quote.normalize('NFKC').toLowerCase()))));
+});
+
+test('deterministic text baseline records final ASR as an explicit support source', () => {
+  const { input, payloads } = materialize(fixtures.familyTransfer);
+  const adapted = adaptIngestionForOrganization(input, payloads);
+  const content = adapted.contents.find(item => item.contentId === 'content_asr_1');
+  const result = new DeterministicTextExtractor().extract({ scope: input.scope, content, taxonomyVersion: input.taxonomyVersion });
+  assert.ok(result.observations.length > 0);
+  assert.ok(result.observations.every(item => item.supports.every(support => support.sourceType === 'final_asr')));
+  const normalizedText = content.originalText.normalize('NFKC').toLowerCase();
+  assert.ok(result.observations.every(item => item.supports.every(support => normalizedText.includes(support.quote.normalize('NFKC').toLowerCase()))));
 });
 
 test('deterministic text baseline handles Chinese years, correction, negation, relationships and prompt injection', () => {

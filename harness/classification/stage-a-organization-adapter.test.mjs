@@ -86,6 +86,7 @@ function fixture() {
   };
   const result = {
     contractVersion: 'classification-stage-a.1',
+    providerVersion: snapshot.version,
     runId: request.runId,
     scope,
     workflowStatus: 'succeeded',
@@ -136,7 +137,20 @@ test('stage A groups remain AI candidates and technical group ids do not become 
 
 test('an explicit user event correction is the only bridge path to user_confirmed', () => {
   const { request, result, edge } = fixture();
-  result.snapshot.edges = [{ ...edge, origin: 'user' }];
+  request.corrections = [{
+    correctionId: 'correction_1',
+    revision: 1,
+    authorityRef: 'authority_1',
+    kind: 'event',
+    decision: 'same',
+    left: edge.left,
+    right: edge.right,
+    leftPhotoHash: request.photos.find(item => item.photoId === edge.left.photoId).sourceHash,
+    rightPhotoHash: request.photos.find(item => item.photoId === edge.right.photoId).sourceHash,
+    active: true
+  }];
+  result.snapshot.correctionsHash = contract.digest(request.corrections);
+  result.snapshot.edges = [{ ...edge, supports: [], rationale: 'correction_1', origin: 'user' }];
   const adapted = adaptStageAForOrganization({ request, result, createdAt });
   assert.equal(adapted.explicitAssociations.length, 1);
   assert.equal(adapted.explicitAssociations[0].status, 'user_confirmed');
@@ -166,4 +180,92 @@ test('withdrawn photos cannot keep observations or relationship edges', () => {
   withdrawnEdge.request.photos[1].active = false;
   delete withdrawnEdge.result.snapshot.observations.photo_2;
   assert.throws(() => adaptStageAForOrganization({ request: withdrawnEdge.request, result: withdrawnEdge.result, createdAt }), /STAGE_A_EDGE_FOR_INACTIVE_CONTENT/);
+});
+
+test('bridge rejects missing or mismatched provider version', () => {
+  const missing = fixture();
+  delete missing.result.providerVersion;
+  assert.throws(() => adaptStageAForOrganization({ request: missing.request, result: missing.result, createdAt }), /STAGE_A_RESULT_MISMATCH/);
+
+  const mismatch = fixture();
+  mismatch.result.providerVersion = 'other-stage-a.1';
+  assert.throws(() => adaptStageAForOrganization({ request: mismatch.request, result: mismatch.result, createdAt }), /STAGE_A_RESULT_MISMATCH/);
+});
+
+test('expected context hash accepts exact and incomplete snapshots and rejects drift', () => {
+  const exact = fixture();
+  const expectedContextHash = contract.digest('expected-context');
+  exact.result.snapshot.contextHash = expectedContextHash;
+  assert.doesNotThrow(() => adaptStageAForOrganization({ request: exact.request, result: exact.result, createdAt, expectedContextHash }));
+
+  const incomplete = fixture();
+  incomplete.result.snapshot.contextHash = `incomplete:${expectedContextHash}`;
+  assert.doesNotThrow(() => adaptStageAForOrganization({ request: incomplete.request, result: incomplete.result, createdAt, expectedContextHash }));
+
+  const drift = fixture();
+  drift.result.snapshot.contextHash = contract.digest('other-context');
+  assert.throws(() => adaptStageAForOrganization({ request: drift.request, result: drift.result, createdAt, expectedContextHash }), /STAGE_A_RESULT_MISMATCH/);
+});
+
+test('strict snapshot schemas reject malformed or open edge and group records', () => {
+  const cases = [
+    value => { value.result.snapshot.edges[0].unexpected = true; },
+    value => { value.result.snapshot.edges[0].deps.photo_1 = 'not-a-hash'; },
+    value => { value.result.snapshot.groups[0].unexpected = true; },
+    value => { value.result.snapshot.groups[0].state = 'confirmed'; },
+    value => { value.result.snapshot.groups[0].revision = 0; },
+    value => { value.result.snapshot.groups[0].identity.state = 'confirmed'; },
+    value => { value.result.snapshot.groups[0].supersedes = ['not valid']; }
+  ];
+  for(const mutate of cases) {
+    const malformed = fixture();
+    mutate(malformed);
+    assert.throws(() => adaptStageAForOrganization({ request: malformed.request, result: malformed.result, createdAt }), /STAGE_A_RESULT_MISMATCH/);
+  }
+});
+
+test('person matching disabled rejects relations, cross-photo groups and identities but keeps unnamed single-photo groups', () => {
+  const crossPhoto = fixture();
+  assert.throws(() => adaptStageAForOrganization({ request: crossPhoto.request, result: crossPhoto.result, createdAt, allowPersonMatching: false }), /PERSON_MATCHING_NOT_AUTHORIZED/);
+
+  const identity = fixture();
+  identity.result.snapshot.groups = [{
+    ...identity.result.snapshot.groups[0],
+    members: [{ photoId: 'photo_1', faceId: 'face_1' }]
+  }, identity.result.snapshot.groups[1]];
+  assert.throws(() => adaptStageAForOrganization({ request: identity.request, result: identity.result, createdAt, allowPersonMatching: false }), /PERSON_MATCHING_NOT_AUTHORIZED/);
+
+  const relation = fixture();
+  relation.result.snapshot.groups = relation.result.snapshot.groups.filter(group => group.kind !== 'person');
+  relation.result.snapshot.edges.push({
+    ...relation.result.snapshot.edges[0],
+    kind: 'person',
+    left: { photoId: 'photo_1', faceId: 'face_1' },
+    right: { photoId: 'photo_2', faceId: 'face_2' }
+  });
+  assert.throws(() => adaptStageAForOrganization({ request: relation.request, result: relation.result, createdAt, allowPersonMatching: false }), /PERSON_MATCHING_NOT_AUTHORIZED/);
+
+  const unnamed = fixture();
+  unnamed.result.snapshot.groups = [
+    { ...unnamed.result.snapshot.groups[0], groupId: 'person_group_1', members: [{ photoId: 'photo_1', faceId: 'face_1' }], identity: undefined },
+    { ...unnamed.result.snapshot.groups[0], groupId: 'person_group_2', members: [{ photoId: 'photo_2', faceId: 'face_2' }], identity: undefined },
+    unnamed.result.snapshot.groups[1]
+  ];
+  assert.doesNotThrow(() => adaptStageAForOrganization({ request: unnamed.request, result: unnamed.result, createdAt, allowPersonMatching: false }));
+});
+
+test('groups that are not usable for organization never become retrieval candidates', () => {
+  const value = fixture();
+  value.result.snapshot.edges = [];
+  value.result.snapshot.groups = [{
+    groupId: 'event_group_unusable',
+    kind: 'event',
+    members: [{ photoId: 'photo_1' }, { photoId: 'photo_2' }],
+    revision: 1,
+    state: 'ai_organized',
+    usableForOrganization: false,
+    supersedes: []
+  }];
+  const adapted = adaptStageAForOrganization({ request: value.request, result: value.result, createdAt });
+  assert.equal(adapted.retrievalCandidates.length, 0);
 });

@@ -192,6 +192,7 @@
       "additionalProperties": false,
       "properties": {
         "evidenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
+        "sourceType": { "enum": ["visual", "caption", "exif", "ocr", "user_text", "final_asr"] },
         "quote": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "region": {
           "type": "object",
@@ -216,6 +217,16 @@
         "facet": { "enum": ["person", "time", "place", "event", "scene", "theme", "content_type"] },
         "rawValue": { "type": "string", "minLength": 1, "maxLength": 256 },
         "normalizedValue": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "temporal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "role": { "enum": ["event", "capture", "scan", "upload"] },
+            "precision": { "enum": ["date", "year", "decade", "relative"] }
+          },
+          "required": ["role", "precision"]
+        },
+        "placeKind": { "enum": ["named", "generic", "unresolved"] },
         "supports": {
           "type": "array",
           "items": { "$ref": "#/definitions/ObservationSupport" },
@@ -224,6 +235,16 @@
         },
         "state": { "enum": ["candidate", "abstained", "conflicted"] }
       },
+      "allOf": [
+        {
+          "if": { "required": ["temporal"] },
+          "then": { "properties": { "facet": { "const": "time" } } }
+        },
+        {
+          "if": { "required": ["placeKind"] },
+          "then": { "properties": { "facet": { "const": "place" } } }
+        }
+      ],
       "required": ["contentId", "evidenceId", "facet", "rawValue", "supports", "state"]
     },
     "ExplicitAssociation": {

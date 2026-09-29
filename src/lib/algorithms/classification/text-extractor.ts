@@ -65,7 +65,7 @@ function negated(text: string, value: string): boolean {
 function unique<T>(values: T[]): T[] { return [...new Set(values)]; }
 function quoteFor(text: string, value: string): string {
   const index = text.indexOf(value);
-  if(index < 0) return value;
+  if(index < 0) return text.slice(0, Math.min(text.length, 96));
   return text.slice(Math.max(0, index - 12), Math.min(text.length, index + value.length + 12));
 }
 
@@ -86,7 +86,11 @@ export class DeterministicTextExtractor implements TextContentExtractor {
       facet,
       rawValue: value,
       normalizedValue,
-      supports: [{ evidenceId, quote: quoteFor(text, value) }],
+      supports: [{
+        evidenceId,
+        sourceType: content.modality === 'final_asr' ? 'final_asr' : 'user_text',
+        quote: quoteFor(text, value)
+      }],
       state: 'candidate'
     }));
 

@@ -1,5 +1,18 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-09-30：E3a Stage A → Lab composition adapter 已实现。
+> [`classification-hybrid.schema.json`](classification-hybrid.schema.json) 的 `ContentObservation`
+> 现在支持可选 `temporal` 与 `placeKind`，`ObservationSupport` 支持可选 `sourceType`，并允许一个
+> Observation 由多个本 Content 的 Evidence 支持；primary Evidence 必须出现在 supports 中。
+> 这些字段在通用契约中保持可选以兼容非 Stage A 来源，但 E3a 映射对 Stage A time/place 和 support
+> 执行严格规则：time 必须有 role/precision，非 time 不得携带 temporal，文字/final ASR 的
+> `sourceType + quote` 必须与原始 Evidence 对应，unresolved 地点/时间不能伪装成确定分类。
+> E3a 同时绑定 Correction allowlist、route `bindingId`、Provider/snapshot version 和 context hash，
+> 严格解析 Edge/Group，禁用人物匹配时拒收人物关联，并重新验证合并后的 retrieval candidates。
+> 受控 loopback 全量分类回归为 328/328，typecheck、secret scan 和 diff check 通过；该证据仅支持
+> `offline_integration_contract_only`，不证明模型准确率、页面产品闭环或生产就绪。E3b execution
+> lifecycle 与 E3c real provider factory 仍未完成。
+
 > 2026-09-29：semantic scoring v2 现有五份 strict draft-07 Schema：
 > [`classification-scoring-policy-v2.schema.json`](classification-scoring-policy-v2.schema.json)、
 > [`classification-truth-v2.schema.json`](classification-truth-v2.schema.json) 和

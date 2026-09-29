@@ -2,7 +2,7 @@
 
 > 日期：2026-09-29  
 > 阶段：E3a  
-> 状态：冻结，进入测试优先实现  
+> 状态：已实现并完成离线集成验证（2026-09-30）
 > 前置：E0 artifact registry、E1 semantic policy/truth、E2 `sgx-semantic-scorer.2.0.0`  
 > 证据边界：`offline_integration_contract_only`
 
@@ -64,6 +64,7 @@ export interface StageALabPlanInput {
     active: boolean;
     allowedEvidenceIds: readonly string[];
     allowedConsentRefs: readonly string[];
+    allowedCorrectionIds: readonly string[];
     allowPersonMatching: boolean;
   };
   placeKindPolicy: {
@@ -101,7 +102,7 @@ export function composeStageALabResult(input: {
 
 无活动图片时不是错误。`stageA` 为空，audit 记录 `skippedReason=no_active_images`，文字内容仍由 `baseOrganization` 进入后续链路。此时 `stageResult` 必须为空；存在 `stageA` 时 `stageResult` 必填，组合器对不一致输入 fail closed。
 
-`authorization` 必须来自服务端授权目录，不能由客户端 Envelope 推导。E3a 校验 actor、scope、revision、active、Evidence allowlist 和 consent allowlist；当前 Lab 若 `allowPersonMatching=true` 则拒绝执行，然后再传给现有 Stage A adapter。Envelope 只描述用户本批提交，因此 E3a 冻结为 **batch-isolated Lab**：它验证本批抽取与组织接线，不宣称验证历史照片目录、跨批长期归组或增量 snapshot。完整授权历史 Catalog 属于 E3c/T2。
+`authorization` 必须来自服务端授权目录，不能由客户端 Envelope 推导。E3a 校验 actor、scope、revision、active、Evidence/consent/correction allowlist；Correction 还必须携带与服务端授权一致的 `authorityRef`。当前 Lab 若 `allowPersonMatching=true` 则拒绝执行，然后再传给现有 Stage A adapter。Envelope 只描述用户本批提交，因此 E3a 冻结为 **batch-isolated Lab**：它验证本批抽取与组织接线，不宣称验证历史照片目录、跨批长期归组或增量 snapshot。完整授权历史 Catalog 属于 E3c/T2。
 
 ## 4. ID 映射
 
@@ -124,6 +125,7 @@ interface ImageRoute {
 }
 
 interface TextRoute {
+  bindingId: string;
   sourceContentId: string;
   evidenceId: string;
   modality: 'user_text' | 'final_asr';
@@ -152,6 +154,11 @@ interface TextRoute {
 - payload 字节长度和 SHA-256 与 Evidence 完全一致。
 
 该文字仍保留为独立 `ContentItem`，原文不被 AI 标题或摘要覆盖。
+
+组合时，调用方注入的文字 Observation 也必须重新校验：`contentId/evidenceId` 只能指向本批活动的
+`user_text` 或 final ASR，support 的 `sourceType` 必须与原模态一致，`quote` 必须非空且经
+NFKC、大小写和空白规范化后仍能在原文中找到。由抽取器生成的派生标签若不是原文逐字内容，support
+必须回落到真实原文片段；不能把生成标签伪装成 Evidence quote。
 
 多图说明不复制进每张 `Photo.textEvidence`，但保留用户明确的 `supports` 关联。批次级说明只留在 `batchBindings`；AI 可以提出候选关联，但不能擅自变成单图事实。`authority=ai_candidate` 永远不作为 Stage A 的可信文字 Evidence。
 
@@ -272,11 +279,19 @@ interface StageALabCompositionOutput {
 - `needs_review` 可以保留局部 snapshot；
 - `failed/cancelled` 且无 snapshot 时不生成伪结果，由 E3b 设置 Job 终态。
 
+组合器只接受与当前请求匹配的 Stage A 结果：`providerVersion` 必须等于 snapshot `version`，
+snapshot `contextHash` 必须等于本次请求、引用、Correction、授权摘要和 Provider 版本计算出的 hash
+（允许明确的 `incomplete:` 前缀）；缓存 Observation 的 input hash/version、Edge/Group 严格结构、
+依赖 hash 和 support 都会重新验证。禁用人物匹配时，人物 edge、跨图片人物组或 identity 一律拒收。
+合并后的 retrieval candidates 再经过 `validateSparseAssociationInput` 校验，防止直接拼接绕过数量、
+端点和关系约束。
+
 ## 10. 错误与复核
 
 Fatal 错误使用稳定代码：
 
 - `DUPLICATE_ID_MAPPING`
+- `DUPLICATE_CORRECTION`
 - `MISSING_IMAGE_ASSET`
 - `FOREIGN_IMAGE_ASSET`
 - `SOURCE_LENGTH_MISMATCH`
@@ -288,13 +303,29 @@ Fatal 错误使用稳定代码：
 - `AUTHORIZATION_CHANGED`
 - `INACTIVE_AUTHORIZATION`
 - `PERSON_MATCHING_NOT_ALLOWED`
+- `PERSON_MATCHING_NOT_AUTHORIZED`
 - `PLACE_KIND_POLICY_MISMATCH`
 - `PLACE_KIND_POLICY_DIGEST_MISMATCH`
 - `STAGE_A_RESULT_MISMATCH`
 - `STAGE_A_SNAPSHOT_REQUIRED`
+- `DUPLICATE_STAGE_A_EDGE`
+- `FOREIGN_TEXT_OBSERVATION`
 - `FOREIGN_STAGE_A_SUPPORT`
+- `STAGE_A_OBSERVATION_FOR_INACTIVE_CONTENT`
+- `STAGE_A_OBSERVATION_WITHOUT_SUPPORT`
 - `STAGE_A_EDGE_FOR_INACTIVE_CONTENT`
+- `TEXT_SUPPORT_REQUIRES_EVIDENCE`
 - `INVALID_TEMPORAL_QUALIFIER`
+- `OBSERVATION_PRIMARY_SUPPORT_MISSING`
+- `FOREIGN_SUPPORT`
+- `DUPLICATE_RETRIEVAL_CANDIDATE`
+- `FOREIGN_RETRIEVAL_CONTENT`
+- `DUPLICATE_RETRIEVAL_PAIR`
+- `FOREIGN_RETRIEVAL_EVIDENCE`
+- `RETRIEVAL_LIMIT_EXCEEDED`
+
+最后七项来自 E3a 复用的组织/检索契约验证器；它们与本 adapter 自身错误码一样 fail closed，不能被
+转换成空结果或静默丢弃。
 
 以下进入 review，不作为 fatal：
 
@@ -308,7 +339,7 @@ Fatal 错误使用稳定代码：
 
 E3a 不读取 `process.env`、文件、Keychain 或网络，不生成当前时间和随机数，不调用 Provider，不写 store，也不修改输入对象。`runId`、时间、预算、payload 与媒体字节都由调用方注入。
 
-`inputDigest` 绑定 adapter version、完整规范化 authorization（actor、authorityRef、scope、revision、contextRevision、active、排序去重后的 Evidence/consent allowlist、allowPersonMatching）、完整 Envelope、文字 payload hash、图片 source hash、最终 routes、taxonomy version 和 `placeKindPolicy.policyDigest`。同一个 authorization revision 下只要 allowlist、active 状态或上下文改变，digest 就必须改变。Provider/model/prompt/scorer 的完整 run identity、并发与 CAS 属于 E3b。
+`inputDigest` 绑定 adapter version、完整规范化 authorization（actor、authorityRef、scope、revision、contextRevision、active、排序去重后的 Evidence/consent/correction allowlist、allowPersonMatching）、完整 Envelope、文字 payload hash、图片 source hash、最终 routes（包括 `bindingId`）、taxonomy version 和 `placeKindPolicy.policyDigest`。同一个 authorization revision 下只要 allowlist、active 状态或上下文改变，digest 就必须改变。Provider/model/prompt/scorer 的完整 run identity、并发与 CAS 属于 E3b。
 
 ## 12. Source Gate
 
@@ -352,6 +383,12 @@ E3 Source Gate 为 `PASS_WITH_CONDITIONS`。E3a 直接复用：
 23. 输入对象不被修改；
 24. 测试期间 `externalCalls=0`、`credentialsRead=false`、`costCny=0`；
 25. deterministic Lab 回归保持通过。
+26. Correction allowlist、重复 correction ID 和 `authorityRef` 防伪；
+27. Provider/snapshot version、context hash、缓存 input hash/version、严格 Edge/Group 拒收；
+28. 人物匹配关闭时拒绝人物 edge、跨图人物组和 identity；
+29. 文字 Observation 的模态、Evidence、`sourceType` 和原文 quote 重新校验；
+30. 合并后的 retrieval candidates 再走语言无关契约验证；
+31. `usableForOrganization=false` 的 Group 不产生 retrieval candidate。
 
 ## 14. 完成条件
 
@@ -365,3 +402,29 @@ E3a 只有同时满足以下条件才算完成：
 - unresolved `placeKind` 没有被伪装成确定类别；
 - deterministic Lab 行为兼容；
 - 文档明确该阶段只证明集成契约，不代表模型准确率或产品效果。
+
+## 15. 实现与验证记录
+
+E3a 已由以下入口实现：
+
+- `src/lib/algorithms/classification/lab-stage-a-composition.ts`：生成纯 `StageALabPlan`，并组合
+  Stage A 与文字抽取结果；
+- `src/lib/algorithms/classification/stage-a-organization-adapter.ts`：严格校验并映射 Stage A
+  snapshot、Observation、Edge 和 Group；
+- `src/lib/algorithms/classification/content-organization.ts`、
+  `contracts/classification-hybrid.schema.json`：支持多 Evidence support、`sourceType`、时间限定信息和
+  `placeKind`；
+- `src/lib/algorithms/classification/text-extractor.ts`：为文字/final ASR support 保留可回查的原文 quote。
+
+2026-09-30 验证证据：
+
+- 允许 loopback 的受控环境中，`npm run test:classification` 为 **328/328 通过**；
+- `npm run typecheck`、`npm run test:classification:secret` 和 `git diff --check` 通过；
+- 当前实现不读取凭据、不联网、不调用模型，`externalCalls=0`、`costCny=0`。
+
+独立终审先得到 P0=0、P1=0、P2=1；唯一 P2 是不可用于组织的 Group 仍可能生成候选。该项已在
+提交前修复并增加回归，最终没有遗留的已知 P0/P1/P2。
+
+因此 E3a 只证明 batch-isolated Lab 的**离线集成契约**可执行。它不证明真实模型准确率、真实家庭
+泛化、页面产品闭环、生产存储或长期 Memory 已就绪。下一项为 E3b 两阶段 execution lifecycle；
+真实 Provider factory 仍属于 E3c。

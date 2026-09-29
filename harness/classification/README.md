@@ -82,6 +82,37 @@ CLI 的 `--cases` 模式只做冻结 oracle conformance；`--run` 模式接收
 仍为 `pending_real_data_calibration`。CLI 不读取密钥、不联网、不调用模型；它不执行旧 r5 exact rescore，
 也不证明真实准确率、泛化能力或产品闭环。
 
+## E3a Stage A → Lab composition adapter
+
+E3a 的纯函数入口位于
+[`lab-stage-a-composition.ts`](../../src/lib/algorithms/classification/lab-stage-a-composition.ts)，
+对应测试为 [`lab-stage-a-composition.test.mjs`](lab-stage-a-composition.test.mjs) 和
+[`stage-a-organization-adapter.test.mjs`](stage-a-organization-adapter.test.mjs)。它只组合调用方注入的
+Envelope、payload、图片 bytes、服务端授权和 Stage A 结果，不读取文件、环境变量或凭据，不联网，
+不调用模型，也不写 store/UI。
+
+固定边界包括：
+
+- 只有活动、`user_explicit` 且恰好绑定一张活动图片的文字/final ASR 进入该图 Stage A；
+  多图、batch 和 AI candidate 保留独立 route/binding；
+- authorization 显式包含 `allowedCorrectionIds`，route 保留 `bindingId`；两者参与规范化 digest；
+- 文字 Observation support 的 `sourceType` 必须与原始模态一致，非空 `quote` 必须能在原文中回查；
+- Stage A `providerVersion`、snapshot version/context hash、缓存 input hash/version、Edge/Group、依赖和
+  supports 都重新校验；禁用人物匹配时人物 edge、跨图人物组和 identity 被拒收；
+- 合并后的 retrieval candidates 再经过 `validateSparseAssociationInput`；时间 role/precision、
+  `placeKind` 和多个 Evidence supports 不在映射中丢失。
+
+通过正式测试入口运行 E3a 与全部分类回归（入口会先编译 TypeScript 并注入测试 build 目录）：
+
+```sh
+npm run test:classification
+```
+
+2026-09-30 受控 loopback 全量 `npm run test:classification` 为 328/328；typecheck、secret scan 和
+`git diff --check` 同时通过。该结果只证明 batch-isolated Lab 的离线集成契约，不证明真实模型准确率、
+真实家庭泛化、页面闭环、生产存储或长期 Memory 已完成。E3b execution lifecycle 和 E3c real
+provider factory 仍未实现。
+
 ## 实验产物登记（E0）
 
 真实模型探索、离线 replay 和冻结评测必须写入 Git 外的持久私有目录；`/tmp`、`/private/tmp`

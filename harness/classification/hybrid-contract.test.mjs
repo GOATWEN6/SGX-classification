@@ -15,6 +15,7 @@ const {
   DecisionPolicySchema,
   DecisionPolicyResultSchema
 } = require(path.join(buildDir, 'src/lib/algorithms/classification/hybrid-contract.js'));
+const { ContentObservationSchema } = require(path.join(buildDir, 'src/lib/algorithms/classification/content-organization.js'));
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const readJson = async name => JSON.parse(await readFile(path.join(fixtureDir, name), 'utf8'));
@@ -39,7 +40,7 @@ async function hybridValidators() {
   const files = (await readdir(directory)).filter(file => file.endsWith('.schema.json'));
   for(const file of files) ajv.addSchema(JSON.parse(await readFile(new URL(file, directory), 'utf8')));
   const base = 'urn:sgx:classification-hybrid:v1#/definitions/';
-  return Object.fromEntries(['AssetFeature', 'RetrievalCandidate', 'FamilyReference', 'DecisionPolicy', 'DecisionPolicyResult', 'SparseAssociationInput']
+  return Object.fromEntries(['AssetFeature', 'RetrievalCandidate', 'FamilyReference', 'DecisionPolicy', 'DecisionPolicyResult', 'ContentObservation', 'SparseAssociationInput']
     .map(name => [name, ajv.getSchema(`${base}${name}`)]));
 }
 
@@ -78,6 +79,56 @@ test('hybrid runtime contracts reject unsafe semantic combinations', async () =>
       new RegExp(entry.error),
       entry.id
     );
+  }
+});
+
+test('content observation qualifiers stay aligned across Zod and JSON Schema', async () => {
+  const validators = await hybridValidators();
+  const valid = {
+    contentId: 'content-photo-1',
+    evidenceId: 'evidence-photo-1',
+    facet: 'time',
+    rawValue: '1985年5月1日',
+    normalizedValue: '1985-05-01',
+    temporal: { role: 'event', precision: 'date' },
+    supports: [
+      { evidenceId: 'evidence-photo-1', sourceType: 'visual' },
+      { evidenceId: 'evidence-text-1', sourceType: 'user_text', quote: '这是1985年五一拍的' },
+      { evidenceId: 'evidence-asr-1', sourceType: 'final_asr', quote: '那天正好是五一' }
+    ],
+    state: 'candidate'
+  };
+  const validPlace = {
+    contentId: 'content-photo-1',
+    evidenceId: 'evidence-photo-1',
+    facet: 'place',
+    rawValue: '家里',
+    normalizedValue: '家里',
+    placeKind: 'generic',
+    supports: [{ evidenceId: 'evidence-photo-1', sourceType: 'ocr', quote: '家里' }],
+    state: 'candidate'
+  };
+
+  for(const observation of [valid, validPlace]) {
+    assert.deepEqual(ContentObservationSchema.parse(clone(observation)), observation);
+    assert.equal(validators.ContentObservation(clone(observation)), true, JSON.stringify(validators.ContentObservation.errors));
+  }
+
+  const invalidCases = [
+    {
+      id: 'temporal_on_place',
+      value: { ...clone(validPlace), temporal: { role: 'event', precision: 'date' } },
+      zodError: /INVALID_TEMPORAL_QUALIFIER/
+    },
+    {
+      id: 'place_kind_on_time',
+      value: { ...clone(valid), placeKind: 'named' },
+      zodError: /INVALID_PLACE_KIND_QUALIFIER/
+    }
+  ];
+  for(const invalid of invalidCases) {
+    assert.throws(() => ContentObservationSchema.parse(clone(invalid.value)), invalid.zodError, `${invalid.id}:zod`);
+    assert.equal(validators.ContentObservation(clone(invalid.value)), false, `${invalid.id}:json-schema`);
   }
 });
 

@@ -11,15 +11,16 @@
 
 ## 1. 结论
 
-当前项目已经具备一条可运行的 Stage A 算法链、严格契约、预算与授权保护、合成测试集、真实 Qwen CLI 调用报告和本地分类实验台。E1 已冻结版本化语义 policy/truth、四例 input-only 盲审和正反 fixture；E2 已实现可执行 scorer、严格 runtime 输入和离线 CLI。当前仍未形成“浏览器上传 → 真实模型 → Guard → 故事归纳 → 用户动作”的完整 `T1-Local Product Alpha` 闭环，也没有完成冻结的 `T0-Synthetic Functional Gate`。
+当前项目已经具备一条可运行的 Stage A 算法链、严格契约、预算与授权保护、合成测试集、真实 Qwen CLI 调用报告和本地分类实验台。E1 已冻结版本化语义 policy/truth、四例 input-only 盲审和正反 fixture；E2 已实现可执行 scorer、严格 runtime 输入和离线 CLI；E3a 已实现 batch-isolated Lab 的纯 composition adapter。当前仍未形成“浏览器上传 → 真实模型 → Guard → 故事归纳 → 用户动作”的完整 `T1-Local Product Alpha` 闭环，也没有完成冻结的 `T0-Synthetic Functional Gate`。
 
-最先要做的不是继续扩大真实 API 调用，而是依次解决剩余接线阻断项。E0 registry、E1 语义冻结和 E2 scorer 已实现，后续从 E3 开始：
+最先要做的不是继续扩大真实 API 调用，而是依次解决剩余接线阻断项。E0 registry、E1 语义冻结、E2 scorer 和 E3a composition adapter 已实现，后续从 E3b 开始：
 
 1. **E0 已实现**：为后续实验建立非临时、可校验的受控证据目录；
 2. **E1 已冻结，E2 已实现**：统一时间角色和 truth/scoring policy v2，并由版本化 scorer 消费冻结数据；
-3. 把现有 Stage A Provider 作为服务端 adapter 接入 `/classification-lab`；
-4. 修复 Provider 版本不参与幂等键、同步运行无法中途取消的问题；
-5. 用 mock transport 完成零费用页面闭环，再申请一次小规模真实页面冒烟。
+3. **E3a 已完成**：把 Ingestion/Evidence 安全组合成 Stage A 输入并映射回内容组织；
+4. **E3b 下一项**：修复 Provider 版本不参与幂等键、同步运行无法中途取消的问题；
+5. **E3c**：把现有 Stage A Provider 作为服务端 Provider factory 接入 `/classification-lab`；
+6. 用 mock transport 完成零费用页面闭环，再申请一次小规模真实页面冒烟。
 
 E3 可以立即执行，不需要用户重新准备素材、输入密钥或决定数据库方案。新的付费请求只有在离线 Gate 全部通过并形成精确清单后再单独申请。
 
@@ -45,9 +46,10 @@ E3 可以立即执行，不需要用户重新准备素材、输入密钥或决�
 |`.12` 离线精确重放报告|报告记录 g001、g025 保存响应 2/2 被接住；原 replay 目录当前已不存在|保留当时执行结论和提交记录|当前不能重新读取旧原始响应，也不能把报告替代原始证据|
 |E1 语义冻结|`sgx-scoring-policy.2`、`sgx-truth.2.v3-derived-e1-2026-09-29`、盲审 ledger、freeze manifest、正反 fixtures|合成输入的语义合同、时间角色、七类评分口径和安全边界已冻结|单凭 E1 不能证明 scorer 执行结果、历史 r5 exact rescore、真实分布效果或产品效果|
 |E2 语义评分器|`sgx-semantic-scorer.2.0.0`、oracle report Schema、runtime request/result Schema、CLI、freeze manifest|冻结 oracle 16/16 可执行；来源、ID、冲突、终态、地点 namedness 和固定分母 fail closed|历史 r5 exact rescore、数字功能门槛、真实分布效果或产品效果|
-|工程回归|E1 + E2 聚焦 25/25；最新受控 loopback 全量分类回归 303/303|E1/E2 Schema、绑定、语义不变量与当前分类工程回归通过|不等于算法效果和产品验收；此前一次 409 / CLI timeout 未复现，作为历史间歇性问题保留|
+|E3a 组合适配|`lab-stage-a-composition.ts`、Stage A/ingestion/organization adapter 与契约回归|batch-isolated Lab 的 Evidence 分流、ID 映射、来源/授权/版本/关系校验可执行|页面真实 Provider、执行生命周期、模型准确率或生产就绪|
+|工程回归|E1 + E2 聚焦 25/25；最新受控 loopback 全量分类回归 328/328|E1–E3a Schema、绑定、语义不变量与当前分类工程回归通过|不等于算法效果和产品验收；此前一次 409 / CLI timeout 未复现，作为历史间歇性问题保留|
 
-E0 检查点在受限沙箱运行时，`typecheck` 与 secret scan 通过；当时 `test:classification` 为 250 pass / 28 fail，28 项均因环境禁止监听 `127.0.0.1` 而出现 `listen EPERM`。E2 完成后在允许 loopback 的受控环境完成最新全量复跑，结果为 303/303 通过、0 fail、0 cancelled。更早一次受控运行中的 expired-cache 409 与随后 CLI shutdown 超时未复现，保留为历史间歇性问题，不作为当前 blocker。
+E0 检查点在受限沙箱运行时，`typecheck` 与 secret scan 通过；当时 `test:classification` 为 250 pass / 28 fail，28 项均因环境禁止监听 `127.0.0.1` 而出现 `listen EPERM`。E2 完成后受控 loopback 全量为 303/303；E3a 完成后的最新受控 loopback 全量为 328/328 通过、0 fail、0 cancelled。更早一次受控运行中的 expired-cache 409 与随后 CLI shutdown 超时未复现，保留为历史间歇性问题，不作为当前 blocker。
 
 E1 聚焦验证 `node --test harness/classification/semantic-scoring-v2.test.mjs` 为 6/6，通过 scoring policy、truth、scoring cases 三份 strict Schema、policy/盲审 ledger hash 绑定、七类语义 fixture、固定分母状态、g025 `role_unknown` 防升级和 freeze manifest 哈希检查。本阶段没有网络或真实 API 调用，没有读取凭据，新增费用为 ¥0；这项验证只支持 `synthetic_functional_only` claim。
 
@@ -79,10 +81,11 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 - **处理**：先完成全部离线 Gate；随后用页面真实冒烟中的第一个互补场景验证 `.12`，失败立即停止，0 自动重试。
 - **完成标准**：新响应记录模型、Prompt、token、费用、时延和稳定状态，且不泄漏凭据。
 
-### P0-04：`/classification-lab` 仍只有 deterministic Provider
+### P0-04（E3a 部分解除）：`/classification-lab` 仍只有 deterministic Provider
 
 - **现象**：`LabProviderMode` 只有 `deterministic`；`createConfiguredLabProvider` 对其他模式抛出 `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED`。
-- **根因**：CLI Stage A 和产品实验台分别完成，但缺少将 Ingestion/Evidence 转换为 `TrustedStageACatalog` 并驱动 `ClassificationEngine` 的正式 adapter。
+- **E3a 进展**：已完成 Ingestion/Evidence → `StageALabPlan` → Stage A 结果 → 内容组织的纯函数适配，包含授权、ID、Evidence、时间和关联候选校验。
+- **剩余根因**：页面 Provider factory、两阶段 runner、持久结果联合 Schema 和真实服务端配置尚未接线。
 - **影响**：用户在页面上传真实或合成照片时，看到的仍是确定性演示结果，不是真实模型结果。
 - **处理**：新增 `stage_a_mock` 与 `stage_a_real`，复用现有 `ApiVisionProvider`、`adaptTrustedStageACatalog`、`ClassificationEngine` 和 `adaptStageAForOrganization`。
 - **完成标准**：deterministic 可回退；mock 可完整走页面；旧保存响应只有按 hash 恢复后才能追加 replay；真实模式只能在服务端启用。
@@ -103,13 +106,13 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 - **处理**：Provider result 返回受 Schema 约束的 usage；service 只从受信结果汇总，不由浏览器传入。
 - **完成标准**：mock 为 0；保存响应 replay 明确为 0 外部调用；真实模式记录实际值和保守账本边界。
 
-### P0-07：批次级文字/ASR 与 Stage A 单图输入的边界尚未接好
+### P0-07（E3a 已解除）：批次级文字/ASR 与 Stage A 单图输入边界
 
 - **现象**：Lab ingestion 支持 `batch` 或多图目标；`adaptTrustedStageACatalog` 则要求进入 Stage A 的每条文字 Evidence 恰好绑定到一张图片，未绑定文字会触发 `UNBOUND_TEXT_EVIDENCE`。
-- **根因**：这是两层契约的职责差异：Stage A 做单图观察，内容组织层可以处理批次级说明；真实 Lab adapter 还没有把两类 Evidence 分流。
-- **影响**：若直接把全部 Evidence 塞进 Stage A，会拒绝合法批次输入；若复制到每张图，会把候选关系伪造成单图事实。
-- **处理**：只把明确单图绑定的文字送入该图 Stage A；批次或多图说明保留独立 Evidence，由关联/组织层提出候选。
-- **完成标准**：单图绑定、多图绑定、未指定图片、纯文字、纯 final ASR 都有测试，且不会擅自改写 Evidence 归属。
+- **历史根因**：这是两层契约的职责差异：Stage A 做单图观察，内容组织层可以处理批次级说明；此前没有统一分流 adapter。
+- **E3a 处理**：仅把活动、`user_explicit` 且恰好指向一张活动图片的文字/final ASR 送入该图 Stage A；多图、批次、AI 候选和非图片目标保留独立 route/binding。文字 Observation 还会重新校验本批 content/evidence、模态 `sourceType` 与原文 quote。
+- **验证**：单图、多图、batch、AI candidate、纯文字与纯 final ASR 均有回归；不复制 Evidence、不制造空图片调用。
+- **剩余边界**：E3b/E3c 仍需在真实执行生命周期和页面 Provider 中消费该计划；这不影响 P0-07 的契约分流已解除。
 
 ### P0-08：真实 Stage A 结果尚未经过 Lab 用户动作生命周期
 
@@ -127,13 +130,14 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 - **处理**：真实页面运行前离线计算最坏请求数、图片数、token/费用上限和停止条件；绑定素材 hash、模型和 Prompt 版本。
 - **完成标准**：缺授权、过期、素材变化、模型变化或预算不足均在首个外部调用前停止。
 
-### P0-10：E1 已统一 `capture`、`event` 与 `role_unknown`，下游实现待消费
+### P0-10（E3a 已解除）：`capture`、`event` 与 `role_unknown` 下游消费
 
 - **E1 前现象**：现行 `.12` Prompt 规定 `capture` 只能来自可信原始 EXIF，用户说明“照片拍于某日”应归为 `event`；真实模型报告和旧执行计划却曾把 g007 的 ASR 解释为 `capture` 更合理。
 - **历史根因**：Prompt 将 `capture` 定义为传感器/原始文件时间，报告把它解释成自然语言中的“拍摄语义”。
 - **E1 处理**：冻结 policy 保持 EXIF-only `capture`；用户文字或 final ASR 描述某次活动中的拍摄日期记为 `event`；没有 provenance 的图片像素日期保留为 `role_unknown`。g007 的 `capture` 不再是可接受答案，g025 的 `2001-07` 不再自动制造时间冲突。
-- **剩余影响**：E2 scorer 已消费结构化 role/precision；E3 内容组织仍必须保留这些字段，不能只比较时间字符串。若未来产品改变“用户明确声明拍摄日期”的解释，必须同时版本化 Prompt、Guard、truth、policy 和测试。
-- **完成标准**：scorer、组织链和权威文档都遵守冻结角色；`role_unknown` 只能经有 provenance 的后续确认升级。
+- **E3a 处理**：内容组织 Observation 已保留 `role + precision`；只有受信原始 EXIF 可进入 `capture`，其他无可靠 provenance 的 capture/可见时间进入 `unresolvedTemporalObservations` 和 review，不能静默改成 event；`placeKind` 同样保留 unresolved 状态。
+- **验证**：同值不同 role、非 time facet 携带 temporal、OCR/user text 非可信 capture、trusted EXIF capture 和 E2 `role_unknown` sidecar 均有回归。
+- **后续约束**：E3b/E3c 和页面必须原样消费这些字段；若未来改变“用户明确声明拍摄日期”的解释，必须同时版本化 Prompt、Guard、truth、policy 和测试。
 
 ### P0-11：旧冻结包与真实响应只放在 `/private/tmp`，当前已经不可访问
 
@@ -167,20 +171,20 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 - **处理**：保留原图 Evidence；服务端生成受控 sRGB/JPEG/WebP 派生图用于模型，记录原图 hash、派生图 hash、尺寸、变换参数和授权继承。T0 若尚未实现派生图，页面需在提交前明确限制并给出稳定错误码。
 - **完成标准**：模型只读取已授权派生图；原图与派生图可追溯；页面不会接受后再以未知错误失败。
 
-### P0-15：时间 role 与 precision 在 Stage A→内容组织时丢失
+### P0-15（E3a 已解除）：时间 role 与 precision 的 Stage A→内容组织映射
 
-- **现象**：Stage A observation 有 `event/capture/scan/upload` 与 precision；当前组织 adapter 主要传递时间值，组织器按 normalized value 比较。
-- **根因**：早期内容组织模型把时间当作扁平标签，没有保留结构化语义。
-- **影响**：同一年中的事件时间、翻拍时间和上传时间可能被错误视作同类聚类信号，老照片尤其容易被按扫描/上传时间归组。
-- **处理**：组织 Observation 保留 `value + role + precision`；故事分组优先 event，capture 仅作拍摄时间，scan/upload 默认作为管理元数据而非人生事件时间。
-- **完成标准**：同值不同 role 的正反测试通过；标题、时间线和分组明确采用哪一种时间。
+- **历史现象**：Stage A observation 有 `event/capture/scan/upload` 与 precision；旧组织 adapter 主要传递时间值，组织器按 normalized value 比较。
+- **历史根因**：早期内容组织模型把时间当作扁平标签，没有保留结构化语义。
+- **E3a 处理**：组织 Observation 现在保留 `value + role + precision`，非可信 capture 和角色不明时间进入 sidecar/review；同值不同 role 的正反测试已覆盖。
+- **后续边界**：E3b/E3c 和产品标题、时间线、分组仍须消费结构化字段；E3a 本身不实现页面呈现策略。
 
-### P0-16：Stage A 与 Lab 之间仍有状态和 ID 映射缺口
+### P0-16（E3a 部分解除）：Stage A 与 Lab 的状态和 ID 映射
 
 - **现象**：Stage A 使用 Evidence ID 作为 photoId，内容组织使用 contentId；`batchBindings` 虽从 adapter 返回，但尚未证明被真实组织器消费；若每个 Lab 请求新建内存 engine，旧 snapshot 也不会自然跨请求保存。
-- **根因**：Stage A CLI、Ingestion、Lab 和组织器各自完成了局部契约，尚未由一个 composition adapter 冻结 ID 映射和状态存储职责。
+- **E3a 进展**：composition adapter 已冻结并测试 `evidenceId ↔ contentId ↔ photoId`、route `bindingId`、endpoint remap 和不重复 ContentItem。
+- **剩余根因**：snapshot store、跨请求增量状态、撤权/删除 CAS 和真实组织器生命周期属于 E3b/E3c，尚未接线。
 - **影响**：可能重复生成图片内容项、丢掉批次关联、无法做增量更新，或让撤权/修正只作用于某一层 ID。
-- **处理**：E3a 明确 `evidenceId ↔ contentId ↔ photoId` 映射表和唯一主键；E3b 把 snapshot store 作为可替换依赖注入 runner；组织器显式消费 batch/multi-image bindings。
+- **处理**：E3a 已明确三类 ID 映射表和唯一主键；E3b 把 snapshot store 作为可替换依赖注入 runner；E3c/页面组织链显式消费 batch/multi-image bindings。
 - **完成标准**：单图、多图、批次说明、增量修正、删除和撤权在三类 ID 之间均有可追溯测试，不出现重复 ContentItem。
 
 ## 5. P1：冻结 T1 与全栈交付前的问题
@@ -410,7 +414,7 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 
 分为三个可单独回退的子阶段：
 
-- **E3a composition adapter**：Spec 已冻结，见 [`2026-09-29-classification-lab-stage-a-composition-spec.md`](../superpowers/specs/2026-09-29-classification-lab-stage-a-composition-spec.md)；先解决 Evidence/photo/content 三类 ID 映射、单图与批次 Evidence 分流、time role/precision 保留、多 Evidence supports 校验和版本化 `placeKind`；输出纯 `StageALabPlan`，不改 API/store/UI；
+- **E3a composition adapter（已完成）**：见 [`2026-09-29-classification-lab-stage-a-composition-spec.md`](../superpowers/specs/2026-09-29-classification-lab-stage-a-composition-spec.md)；已完成 Evidence/photo/content 三类 ID 映射、单图与批次 Evidence 分流、time role/precision、多 Evidence supports、版本化 `placeKind`、Correction allowlist、文字原文支持校验、Provider/context hash、严格 Edge/Group 和 merged retrieval validation；输出纯 `StageALabPlan`，不改 API/store/UI；
 - **E3b execution lifecycle**：content digest 与 run identity、两阶段 job runner、snapshot store、AbortSignal、取消/撤权/晚到结果 CAS；
 - **E3c real provider factory**：真实 Provider、机器可校验执行授权、usage、媒体派生图/EXIF provenance、结构化时间路由和配置说明。
 
@@ -418,6 +422,10 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
 **主要文件**：`lab-provider.ts`、`lab-store.ts`、`lab-service.ts`，以及聚焦测试。
 **Gate**：零网络、零密钥读取、零费用完成成功/拒判/复核/非法输出/限流/超时/运行中取消/撤权/删除/晚到结果测试；同输入在 Provider/模型/Prompt 变化时不会命中旧 run；图片上限在页面与 Provider 间一致；event/capture/scan/upload 不被压平；deterministic 保持可用。
 **提交边界**：adapter、边界测试、文档各自小提交。
+
+**E3a Gate 结果**：受控 loopback 全量分类回归 328/328；typecheck、secret scan 和
+`git diff --check` 通过；没有网络/API 调用、凭据读取或费用。该结果仅证明离线集成契约，不证明
+真实模型准确率、页面产品闭环或生产就绪。E3b 是当前下一项，E3c 仍未完成。
 
 ### E4：本地页面真实模型 `T1-Local Product Alpha` 冒烟
 
@@ -445,7 +453,9 @@ E2 聚焦验证与 E1 合计 25/25，通过 16 个冻结 oracle、strict report/
   → E0 持久证据 registry（已实现）
   → E1 盲审时间语义/评分 policy/truth（已冻结）
   → E2 scorer v2 + 固定分母报告（已实现）
-  → E3 Lab Stage A adapter（下一项，零外部调用）
+  → E3a Lab Stage A composition adapter（已完成，零外部调用）
+  → E3b execution lifecycle（下一项，零外部调用）
+  → E3c real provider factory
   → 申请 E4 精确授权
   → E4 页面真实模型 T1-Local Product Alpha
   → 申请 E5 精确授权

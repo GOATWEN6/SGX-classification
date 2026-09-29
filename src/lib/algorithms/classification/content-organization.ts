@@ -19,6 +19,11 @@ const dateTime = z.string().datetime({ offset: true });
 const scope = z.object({ householdId: id, subjectId: id }).strict();
 const facet = z.enum(['person', 'time', 'place', 'event', 'scene', 'theme', 'content_type']);
 const modality = z.enum(['photo', 'user_text', 'final_asr', 'file', 'work']);
+const observationSourceType = z.enum(['visual', 'caption', 'exif', 'ocr', 'user_text', 'final_asr']);
+const temporalQualifier = z.object({
+  role: z.enum(['event', 'capture', 'scan', 'upload']),
+  precision: z.enum(['date', 'year', 'decade', 'relative'])
+}).strict();
 const region = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })
   .refine(value => value.x + value.width <= 1 && value.y + value.height <= 1, 'INVALID_REGION');
 
@@ -33,16 +38,21 @@ export const ContentItemSchema = z.object({
   lifecycle: z.enum(['active', 'withdrawn'])
 }).strict();
 
-export const ObservationSupportSchema = z.object({ evidenceId: id, quote: z.string().min(1).max(1000).optional(), region: region.optional() }).strict();
+export const ObservationSupportSchema = z.object({ evidenceId: id, sourceType: observationSourceType.optional(), quote: z.string().min(1).max(1000).optional(), region: region.optional() }).strict();
 export const ContentObservationSchema = z.object({
   contentId: id,
   evidenceId: id,
   facet,
   rawValue: z.string().min(1).max(256),
   normalizedValue: z.string().min(1).max(256).optional(),
+  temporal: temporalQualifier.optional(),
+  placeKind: z.enum(['named', 'generic', 'unresolved']).optional(),
   supports: z.array(ObservationSupportSchema).min(1).max(16),
   state: z.enum(['candidate', 'abstained', 'conflicted'])
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if(value.temporal && value.facet !== 'time') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_TEMPORAL_QUALIFIER' });
+  if(value.placeKind && value.facet !== 'place') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_PLACE_KIND_QUALIFIER' });
+});
 
 export const AssociationCandidateSchema = z.object({
   associationId: id,
@@ -168,10 +178,8 @@ export function validateOrganizationInput(raw: unknown): OrganizationInput {
     const content = contentById.get(observation.contentId);
     if(!content) fail('OBSERVATION_FOR_WITHDRAWN_OR_FOREIGN_CONTENT');
     if(!contentEvidenceIds(content).has(observation.evidenceId)) fail('FOREIGN_EVIDENCE');
-    for(const support of observation.supports) {
-      if(!contentEvidenceIds(content).has(support.evidenceId)) fail('FOREIGN_SUPPORT');
-      if(support.evidenceId !== observation.evidenceId) fail('OBSERVATION_EVIDENCE_MISMATCH');
-    }
+    if(!observation.supports.some(support => support.evidenceId === observation.evidenceId)) fail('OBSERVATION_PRIMARY_SUPPORT_MISSING');
+    for(const support of observation.supports) if(!contentEvidenceIds(content).has(support.evidenceId)) fail('FOREIGN_SUPPORT');
     const list = observationsByContent.get(observation.contentId) ?? [];
     list.push(observation);
     observationsByContent.set(observation.contentId, list);

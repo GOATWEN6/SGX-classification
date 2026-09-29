@@ -4,7 +4,7 @@
 > 分支：`codex/classification-contract-v1`  
 > 起点提交：`08a37c6`  
 > 当前 Prompt/Guard：`sgx-five-facets.12`  
-> 状态：E0 已实现、E1 已冻结、E2 scorer 已实现并通过独立复审；E3a Spec 已冻结，composition adapter 实现为下一项；新的付费调用尚未授权
+> 状态：E0–E2 已完成；E3a composition adapter 已实现并通过离线集成验证；E3b execution lifecycle 为下一项；新的付费调用尚未授权
 
 > 2026-09-29 审计补充：执行前必须同时遵循 [当前问题总表与修订后的执行边界](../../algorithms/CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)。旧 `/private/tmp` 冻结包、真实运行和 replay 目录当前已不存在，因此不得把“旧 6 例离线重算/保存响应 replay”写成可直接执行步骤；时间角色以现行 Prompt 的 EXIF-only `capture` 规则为准。
 
@@ -25,12 +25,13 @@
 - 已完成 6/6 次 `qwen3.7-flash-2026-07-15` 真实请求，0 自动重试，累计记账 ¥0.045918；批准额度已经用完。
 - 原始结果必须保留：2 succeeded、2 needs_review、2 failed。后续离线修复不能覆盖这些历史状态。
 - g001、g025 的保存响应已在 `.12` 下精确离线重放 2/2 通过；这只证明 Guard 修复有效，没有产生新 API 调用。
-- E0 检查点曾在受限沙箱得到非 HTTP 250 pass / HTTP 相关 28 fail（`listen EPERM 127.0.0.1`）；E1 改动后全量为 284/284，E2 完成后的最新受控 loopback 全量复跑为 303/303。此前一次 expired-cache 409 与随后 CLI shutdown 超时未复现，保留为历史间歇性记录。
+- E0 检查点曾在受限沙箱得到非 HTTP 250 pass / HTTP 相关 28 fail（`listen EPERM 127.0.0.1`）；E1 改动后全量为 284/284，E2 完成后为 303/303；E3a 完成后的最新受控 loopback 全量复跑为 328/328。此前一次 expired-cache 409 与随后 CLI shutdown 超时未复现，保留为历史间歇性记录。
 - `/classification-lab` 当前只支持 `deterministic` Provider；`lab-store.ts` 也明确拒绝其他 Provider 结果。
 - 现有 Stage A Provider、Evidence adapter 和 Stage A→内容组织 adapter 可复用，不再另写一套模型调用链。
 - 旧 r5、两个真实运行和 `.12` replay 的报告仍在 Git，但报告引用的 `/private/tmp` 原始目录当前已经不存在；必须为新批次建立持久证据根，不能从文档反向伪造旧响应。
 - E1 已冻结 `sgx-scoring-policy.2.2026-09-29` 与新 truth revision `sgx-truth.2.v3-derived-e1-2026-09-29`；claim boundary 为 `synthetic_functional_only`。g025 的可见 `2001-07` 保存为 `role_unknown`，不与 `event:1998-summer` 形成同角色冲突。
-- E2 已实现 `sgx-semantic-scorer.2.0.0`、strict oracle report/runtime Schema、离线 CLI 和逐文件 freeze manifest；E1 + E2 focused 25/25、最新全量 303/303，独立复审 P0/P1/P2 均为 0。整个过程没有网络或 API 调用、没有读取凭据、额外费用 ¥0。历史 r5 exact rescore、功能数字 Gate 和真实分布效果仍未完成。
+- E2 已实现 `sgx-semantic-scorer.2.0.0`、strict oracle report/runtime Schema、离线 CLI 和逐文件 freeze manifest；E1 + E2 focused 25/25、E2 检查点全量 303/303，独立复审 P0/P1/P2 均为 0。整个过程没有网络或 API 调用、没有读取凭据、额外费用 ¥0。历史 r5 exact rescore、功能数字 Gate 和真实分布效果仍未完成。
+- E3a 已实现纯 `StageALabPlan` 和组合器：单图/多图/批次 Evidence 分流，三类 ID 映射，Correction allowlist，文字 `sourceType + quote` 回查，Stage A provider/context hash 校验，严格 Edge/Group、人物匹配拒收和合并 retrieval validation。它只证明离线集成契约，不代表页面或真实 Provider 已接通。
 - Lab 当前幂等键不含 Provider/model/prompt/scorer；同步 POST 也无法在真实调用期间执行取消或撤权。E3 必须先修这两个边界。
 
 ## 3. 执行顺序
@@ -42,7 +43,7 @@ E1 语义与评分口径冻结（已完成）
   ↓ Gate 1
 E2 评分器 v2 与固定分母报告（已完成）
   ↓ Gate 2
-E3a 纯 Stage A → Lab composition adapter（下一项）
+E3a 纯 Stage A → Lab composition adapter（已完成）
   ↓
 E3b 两阶段 runner / CAS / cancel
   ↓
@@ -135,7 +136,7 @@ Gate 1 已完成：`sgx-scoring-policy.2.2026-09-29`、`sgx-truth.2.v3-derived-e
 - 评分器测试、全量分类回归、typecheck、secret scan、diff check 通过；
 - 冻结 `.12` Prompt、taxonomy、Guard 和 scorer 版本；进入 validation 后不再调参。
 
-验证结果：冻结 Oracle 16/16；E1 + E2 focused 25/25；最新全量分类回归 303/303；typecheck、secret scan、syntax 和 diff check 通过；独立终审 P0/P1/P2 均为 0。`aggregateScore=null`，功能数字阈值仍等待真实数据校准。本 Gate 只证明合成 fixture 的评分合同可执行，不代表模型准确率、产品安全或真实家庭效果。
+验证结果：冻结 Oracle 16/16；E1 + E2 focused 25/25；E2 检查点全量分类回归 303/303；typecheck、secret scan、syntax 和 diff check 通过；独立终审 P0/P1/P2 均为 0。`aggregateScore=null`，功能数字阈值仍等待真实数据校准。本 Gate 只证明合成 fixture 的评分合同可执行，不代表模型准确率、产品安全或真实家庭效果。
 
 提交边界：
 
@@ -150,9 +151,13 @@ Source Gate 结论为 `PASS_WITH_CONDITIONS`：复用现有 `ApiVisionProvider`�
 
 E3 分三个小提交推进：
 
-1. **E3a composition adapter**：Spec 已冻结；纯函数完成 Evidence/photo/content ID 映射、单图与批次说明分流、time role/precision、多个 Evidence supports 和版本化 `placeKind`；不接网络、凭据、API、store 或 UI。
+1. **E3a composition adapter（已完成）**：纯函数完成 Evidence/photo/content ID 映射、单图与批次说明分流、time role/precision、多个 Evidence supports、版本化 `placeKind`、Correction allowlist、文字原文支持校验、Provider/context hash 与严格 Edge/Group 校验；不接网络、凭据、API、store 或 UI。
 2. **E3b execution lifecycle**：content digest 与 run identity 分离、pending→processing 两阶段 runner、per-job revision/CAS、AbortSignal、取消/撤权/晚到结果拒收。
 3. **E3c provider factory**：服务端真实 Provider、授权 preflight、usage 与 artifact registry、媒体派生图和 EXIF provenance。
+
+E3a 验证结果：受控 loopback 全量分类回归 328/328，typecheck、secret scan 和 `git diff --check`
+均通过；`externalCalls=0`、未读取凭据、额外费用 ¥0。该 Gate 只覆盖 batch-isolated Lab 的离线
+集成契约。E3b 仍需实现 run identity、两阶段状态转换与并发拒收；E3c 仍需实现真实 Provider factory。
 
 ### 6.1 服务端数据流
 
