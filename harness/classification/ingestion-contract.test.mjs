@@ -61,6 +61,14 @@ test('every active text or final ASR source has exactly one authoritative bindin
   const duplicate = clone(fixtures.familyTransfer);
   duplicate.bindings.push({ ...clone(duplicate.bindings[0]), bindingId: 'binding_text_second', target: { kind: 'contents', contentIds: ['content_photo_2'] } });
   assert.throws(() => parseIngestionEnvelope(duplicate), /MULTIPLE_AUTHORITATIVE_BINDINGS/);
+
+  const contradictoryState = clone(fixtures.familyTransfer);
+  contradictoryState.bindings.push({
+    ...clone(contradictoryState.bindings[0]),
+    bindingId: 'binding_text_withdrawn_duplicate',
+    state: 'withdrawn'
+  });
+  assert.throws(() => parseIngestionEnvelope(contradictoryState), /DUPLICATE_BINDING_SEMANTICS/);
 });
 
 test('AI cannot invent a batch fact or turn an image into a binding source', () => {

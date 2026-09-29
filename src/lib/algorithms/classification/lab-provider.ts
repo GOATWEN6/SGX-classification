@@ -7,6 +7,7 @@ import {
 import { retrieveExactCandidates } from './exact-retrieval';
 import { adaptIngestionForOrganization, type IngestionPayloads } from './ingestion-organization-adapter';
 import type { IngestionEnvelope } from './ingestion-contract';
+import type { LabHighImpactClaim } from './lab-execution-contract';
 import { DeterministicTextExtractor } from './text-extractor';
 
 export type LabProviderMode = 'deterministic';
@@ -23,6 +24,7 @@ export interface LabProviderResult {
   organization: SparseOrganizationResult;
   observations: ContentObservation[];
   batchBindings: ReturnType<typeof adaptIngestionForOrganization>['batchBindings'];
+  highImpactClaims: LabHighImpactClaim[];
   retrieval: {
     candidateCount: number;
     comparisonCount: number;
@@ -103,6 +105,7 @@ export class DeterministicLabProvider implements ClassificationLabProvider {
       organization,
       observations,
       batchBindings: adapted.batchBindings,
+      highImpactClaims: [],
       retrieval: {
         candidateCount: retrieval.audit.candidateCount,
         comparisonCount: retrieval.audit.comparisonCount,

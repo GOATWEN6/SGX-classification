@@ -181,3 +181,24 @@ E3b Spec 已形成：[`2026-09-30-classification-lab-execution-lifecycle-spec.md
 两轮独立审查重点修复了 Job 自证授权、撤权后原文/Observation 泄露、单 Evidence 删除与整批脱敏冲突、v1/v2 物理根冲突、终态 action 时间不变量、截断 ID 复用和文件 rename 被误称为跨进程 CAS 等风险。设计没有调用模型、网络或凭据，也没有产生费用。
 
 下一动作是先写 E3b 生命周期失败回归，再实现 v2 identity/Schema、同进程共享 mutex/CAS、runner、live guard、隐私投影与恢复。E3c 真实 Provider factory、HTTP/UI 接线和任何付费调用仍不在本提交。
+
+## E3b Execution Lifecycle 实现检查点（2026-09-30）
+
+E3b 冻结契约已实现到独立 v2 代码路径，现有 v1 同步页面保持不变。主要落地结果：
+
+- submit 持久化 `semanticContext` 与 `budgetPolicy`，Job 每次解析都从 content、attempt、完整 execution profile、grant、authorization/context revision 和这两项输入重算 frozen `runIdentityDigest`；
+- `ContentIdentityV1` 现在规范化并绑定全部 association 的来源模态、目标、authority、active/withdrawn 状态和 method；绑定数组重排不改 digest，语义增删或状态变化必定改 digest；同一来源/目标/authority 的 active/withdrawn 矛盾快照直接拒收；
+- runner 在 claim 后立即安装 canonical-root/job 级 controller 和统一 deadline；deadline 覆盖 profile describe、首轮 trusted guard、factory create、executor、结果校验与 commit guard；factory 只有在首轮可信 guard 通过后才创建 executor；
+- Provider 输出除了 strict Schema，还经过 closed-world completeness/provenance Gate：每个 active Content 恰好进入一个 Story，Story facet 必须有成员 Observation 支持，batch binding 与用户明确 contents association 必须完整保留；用户 association 的遗漏/字段改写被拒收，withdrawn association 合法保留为 `rejected`；
+- canonical result 新增严格的 `highImpactClaims`；人物身份、亲属关系、敏感事实和长期 Memory 事实只能作为 `ai_candidate` 候选，并强制 `needs_review`；
+- v2 store 提供同进程 root/job mutex、numeric CAS、strict immutable 字段校验、owner-only 原子写入，以及 root 级 durable privacy ledger；命中同一 run identity 时仍精确比较原始 envelope、原文、运行配置、不可变授权字段与资产清单，输入漂移返回 `IDEMPOTENCY_CONFLICT`；privacy 事件先写全局 ledger 再 fan-out，多 Job 重放幂等，后续 submit 受 ledger fence 约束；
+- factory/executor 启动、执行资产读取、terminal commit、product asset read 和普通 action 都在 root + Job 线性化边界内复查 durable privacy ledger，关闭 live guard 返回后发生删除的 TOCTOU；
+- product get/list/asset 同时消费 live guard 与 durable privacy ledger。部分 Evidence 删除时移除对应输入和资产；因为标题/摘要尚无完整字段级 provenance，产品视图保守压制整个派生 result，等待剩余 Evidence 重处理；
+- v2 普通内容 action 使用 active trusted guard、`expectedRevision` 与 CAS，只追加 action audit；完全相同 `actionId` 重放幂等，同 ID 异内容或 stale revision 拒收，不改写 frozen result，也不写长期 Memory；
+- recovery 先清理严格合法的 orphan pending，保留并报告无法解释的 pending；随后回放 durable privacy ledger，再把其他 generation 的 processing Job 标为 interrupted，全程不自动调用 Provider。
+
+实现后的独立审查曾指出 claim/cancel 窗口、guard 未受统一 deadline、删除结果泄露、缺少 closed-world gate、用户明确 association 可被模型遗漏、run identity 重算不完整、隐私事件只落 Job 和恢复不回放等问题；最终测试审计又复现了“新增 withdrawn binding 仍命中旧 run”以及“合法 binding 仅因数组顺序不同而摘要不一致”的 P1。上述路径已经按当前代码修复，并新增逐字段 association identity、矛盾快照、immutable envelope、规范原文和 asset manifest 漂移回归。content/run identity 对绑定集合顺序不敏感；命中已有 run 后，原始 immutable envelope replay 仍须逐字段一致。早期 22/22 只作为实现中基线；最终生命周期聚焦测试为 65/65。
+
+最终本地门禁：`npm run typecheck` 通过；`npm run test:classification:secret` 通过；受控 loopback 的 `npm run test:classification` 为 393/393、0 fail、0 cancelled；`git diff --check` 通过。全量测试包含现有分类链与本次 E3b 回归，但这些数字只表示工程测试通过，不是分类准确率或真实家庭泛化率。
+
+本检查点没有联网、没有读取凭据、没有调用或计费模型，也没有接数据库、Redis、队列、HTTP 202 或页面 polling。测试内 `stage_a_mock` 只是确定性输出上的生命周期/Schema double，并非真实 Stage A transport。它只证明离线本地执行生命周期已经具备可验证实现，不证明模型准确率、真实家庭泛化、页面产品闭环或产品就绪。下一项进入 E3c：实现真正的 `stage_a_mock/stage_a_real` Provider adapter、HTTP/UI polling、usage/raw artifact sink 与媒体派生 provenance；随后才进行真实数据 T0/T1。

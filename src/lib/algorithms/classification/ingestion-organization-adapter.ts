@@ -78,7 +78,13 @@ function requireTextPayload(envelope: IngestionEnvelope, evidenceId: string, pay
   return text;
 }
 
-function associationForBinding(binding: EvidenceBinding, targetContentId: string, envelope: IngestionEnvelope): AssociationCandidate {
+export function userExplicitAssociationForBinding(
+  binding: EvidenceBinding,
+  targetContentId: string,
+  envelope: IngestionEnvelope
+): AssociationCandidate {
+  if(binding.authority !== 'user_explicit' || binding.target.kind !== 'contents'
+    || !binding.target.contentIds.includes(targetContentId)) fail('USER_EXPLICIT_BINDING_REQUIRED');
   return AssociationCandidateSchema.parse({
     associationId: `assoc_${digest([INGESTION_ORGANIZATION_ADAPTER_VERSION, binding.bindingId, targetContentId]).slice(7, 31)}`,
     fromContentId: binding.sourceContentId,
@@ -143,7 +149,9 @@ export function adaptIngestionForOrganization(raw: unknown, payloads: IngestionP
       continue;
     }
     for(const targetContentId of binding.target.contentIds) {
-      if(binding.authority === 'user_explicit') explicitAssociations.push(associationForBinding(binding, targetContentId, envelope));
+      if(binding.authority === 'user_explicit') {
+        explicitAssociations.push(userExplicitAssociationForBinding(binding, targetContentId, envelope));
+      }
       else retrievalCandidates.push(candidateForBinding(binding, targetContentId, envelope));
     }
   }

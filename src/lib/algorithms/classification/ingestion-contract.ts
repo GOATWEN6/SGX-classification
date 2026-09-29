@@ -92,7 +92,9 @@ function bindingFingerprint(binding: EvidenceBinding): string {
   const target = binding.target.kind === 'batch'
     ? 'batch'
     : `contents:${[...binding.target.contentIds].sort().join(',')}`;
-  return [binding.sourceContentId, target, binding.authority, binding.state].join('/');
+  // An envelope is a current snapshot, not a binding event log. The same
+  // source/target/authority cannot be both active and withdrawn at once.
+  return [binding.sourceContentId, target, binding.authority].join('/');
 }
 
 export function parseIngestionEnvelope(raw: unknown): IngestionEnvelope {
