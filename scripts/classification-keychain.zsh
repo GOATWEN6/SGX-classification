@@ -47,8 +47,19 @@ case "$command" in
     unset SGX_D4_API_KEY
     exit $exit_code
     ;;
+  lab-real)
+    shift
+    setup_key >/dev/null
+    SGX_D4_API_KEY="$(security find-generic-password -a "$account" -s "$service" -w)"
+    export SGX_D4_API_KEY
+    cd "$repo"
+    npm run classification:lab -- "$@"
+    exit_code=$?
+    unset SGX_D4_API_KEY
+    exit $exit_code
+    ;;
   *)
-    print -u2 '用法：scripts/classification-keychain.zsh setup|status|eval [classification:eval 参数]'
+    print -u2 '用法：scripts/classification-keychain.zsh setup|status|eval [classification:eval 参数]|lab-real [Next.js 参数]'
     exit 2
     ;;
 esac

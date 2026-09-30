@@ -104,6 +104,10 @@ test('deterministic text baseline handles Chinese years, correction, negation, r
   assert.equal(negated.observations.some(item => item.facet === 'event' && item.rawValue === '退休'), false);
   assert.ok(negated.observations.some(item => item.facet === 'event' && item.rawValue === '其他'));
 
+  const notGraduation = run('这是一九八四年九月我去夜校报到的第一天，不是毕业照。');
+  assert.ok(notGraduation.observations.some(item => item.facet === 'event' && item.rawValue === '求学'));
+  assert.equal(notGraduation.observations.some(item => item.rawValue === '毕业'), false);
+
   const relationship = run('二〇二四年十月团圆饭，戴眼镜的是我爱人。');
   assert.ok(relationship.observations.some(item => item.facet === 'person' && item.normalizedValue === '我爱人（用户明确关系）'));
 

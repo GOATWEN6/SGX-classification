@@ -122,11 +122,13 @@ test('colloquial two-digit Chinese year grounds a four-digit album candidate',()
   const p=photo('p_short_year','这趟坐火车去看海是九八年夏天。');const o=observation(p,{time:'1998'});
   o.times[0].supports[0].quote=p.caption;assert.equal(contract.validateObservation(o,p).times[0].value,'1998');
 });
-test('unique literal text support is rebound to its supplied evidence without guessing ambiguous provenance',()=>{
+test('text support prefers a unique same-source evidence and only falls back across sources when globally unique',()=>{
   const p=photo('p_text','');p.textEvidence=[{evidenceId:'text_1',revision:1,sourceHash:p.sourceHash,source:'user_text',text:'这趟坐火车去看海是九八年夏天。'}];
   const o=observation(p,{event:'旅行'});o.events[0].supports=[{photoId:p.photoId,source:'final_asr',quote:'坐火车去看海'}];
   const bound=contract.validateObservation(o,p).events[0].supports[0];assert.equal(bound.source,'user_text');assert.equal(bound.evidenceId,'text_1');
-  p.textEvidence.push({...p.textEvidence[0],evidenceId:'text_2',source:'final_asr'});assert.throws(()=>contract.validateObservation(o,p),/TEXT_SUPPORT_REQUIRES_EVIDENCE/);
+  p.textEvidence.push({...p.textEvidence[0],evidenceId:'text_2',source:'final_asr'});
+  const sourceBound=contract.validateObservation(o,p).events[0].supports[0];assert.equal(sourceBound.source,'final_asr');assert.equal(sourceBound.evidenceId,'text_2');
+  p.textEvidence.push({...p.textEvidence[0],evidenceId:'text_3',source:'final_asr'});assert.throws(()=>contract.validateObservation(o,p),/TEXT_SUPPORT_REQUIRES_EVIDENCE/);
 });
 test('partial month date is conservatively downgraded to grounded year',()=>{
   const p=photo('p_month','');const o=observation(p);o.times=[{value:'2001-07',precision:'date',role:'capture',supports:[{photoId:p.photoId,source:'visual',quote:"右下角时间戳显示 '2001 07'"}]}];

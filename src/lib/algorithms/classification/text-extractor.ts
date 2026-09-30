@@ -5,7 +5,7 @@ import {
   type Scope
 } from './content-organization';
 
-export const DETERMINISTIC_TEXT_EXTRACTOR_VERSION = 'deterministic-text-baseline.2';
+export const DETERMINISTIC_TEXT_EXTRACTOR_VERSION = 'deterministic-text-baseline.3';
 
 export interface TextExtractionRequest {
   scope: Scope;
@@ -103,15 +103,19 @@ export class DeterministicTextExtractor implements TextContentExtractor {
       if(/教学楼前/.test(text)) add('place', '教学楼前');
       if(/海边|看海/.test(text)) add('place', '海边行程途中');
       if(/家中|一家吃团圆饭/.test(text)) add('place', '家中');
-      for(const [event, pattern] of eventRules) if(pattern.test(text) && !negated(text, event)) add('event', event);
+      const positiveEvents = new Set<string>();
+      for(const [event, pattern] of eventRules) if(pattern.test(text) && !negated(text, event)) {
+        add('event', event);
+        positiveEvents.add(event);
+      }
       for(const person of people.filter(value => text.includes(value))) add('person', person);
       if(/我爱人/.test(text)) add('person', '我爱人', '我爱人（用户明确关系）');
       for(const scene of scenes.filter(value => text.includes(value))) add('scene', scene);
       if(/团圆|全家/.test(text)) { add('theme', '团聚'); add('theme', '家庭'); }
       if(/旅行|短途游|古镇|看海|看湖/.test(text)) add('theme', '旅行');
       if(/古镇/.test(text)) add('theme', '古镇');
-      if(/毕业/.test(text)) { add('theme', '求学'); add('theme', '毕业'); }
-      if(/婚礼|结婚/.test(text)) { add('theme', '婚礼'); add('theme', '人生里程碑'); }
+      if(positiveEvents.has('毕业')) { add('theme', '求学'); add('theme', '毕业'); }
+      if(positiveEvents.has('婚礼')) { add('theme', '婚礼'); add('theme', '人生里程碑'); }
     }
     add('content_type', content.modality === 'final_asr' ? '语音转写' : '文字记录');
 

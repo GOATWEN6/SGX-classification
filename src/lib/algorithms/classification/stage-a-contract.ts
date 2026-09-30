@@ -84,8 +84,12 @@ function normalizeTemporalEvidence(value:string):string {
 }
 function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
   if(!['user_text','final_asr'].includes(item.source)||item.evidenceId)return item;
-  const matches=(photo.textEvidence??[]).filter(e=>e.text.includes(item.quote));
-  return matches.length===1?{...item,source:matches[0].source,evidenceId:matches[0].evidenceId}:item;
+  const evidence=photo.textEvidence??[];
+  const sourceMatches=evidence.filter(e=>e.source===item.source&&e.text.includes(item.quote));
+  if(sourceMatches.length===1)return {...item,evidenceId:sourceMatches[0].evidenceId};
+  if(sourceMatches.length>1)return item;
+  const fallbackMatches=evidence.filter(e=>e.text.includes(item.quote));
+  return fallbackMatches.length===1?{...item,source:fallbackMatches[0].source,evidenceId:fallbackMatches[0].evidenceId}:item;
 }
 
 const untrustedInstruction=/\bignore\s+(?:all\s+)?(?:previous\s+)?(?:rules|instructions)\b|\bsystem\s+prompt\b|\b(?:event|place|person|scene|time)\s*=|忽略.{0,8}(?:规则|指令)|(?:人物|地点|事件|场景|时间)\s*(?:=|：|写成|设为)/i;
