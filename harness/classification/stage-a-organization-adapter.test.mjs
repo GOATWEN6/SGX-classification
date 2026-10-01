@@ -135,6 +135,37 @@ test('stage A groups remain AI candidates and technical group ids do not become 
   assert.ok(organized.decisionResults.every(item => item.shadow));
 });
 
+test('scan time remains a qualified timeline candidate while text-only capture stays unresolved', () => {
+  const value = fixture();
+  const cached = value.result.snapshot.observations.photo_1;
+  cached.value.times = [{
+    value: '1982', precision: 'year', role: 'capture', supports: [support('photo_1', 'user_text', 'text_1')]
+  }, {
+    value: '1982', precision: 'year', role: 'scan', supports: [support('photo_1', 'final_asr', 'asr_1')]
+  }];
+  const adapted = adaptStageAForOrganization({ request: value.request, result: value.result, createdAt });
+  assert.ok(adapted.observations.some(item => item.facet === 'time' && item.rawValue === '1982' && item.temporal.role === 'scan'));
+  assert.equal(adapted.observations.filter(item => item.contentId === 'photo_1' && item.facet === 'time' && item.rawValue === '1982').length, 1);
+  assert.equal(adapted.unresolvedTemporalObservations[0].rawValue, '1982');
+});
+
+test('event edge records when both sides are supported by user-provided text', () => {
+  const value = fixture();
+  value.request.photos[1].textEvidence = [{
+    evidenceId: 'text_2', revision: 1, sourceHash: contract.digest('text_2'), source: 'user_text', text: '还是同一次家庭聚会'
+  }];
+  const photo2Hash = contract.photoHash(value.request.photos[1]);
+  value.result.snapshot.observations.photo_2.inputHash = photo2Hash;
+  value.result.snapshot.edges[0].deps.photo_2 = photo2Hash;
+  value.result.snapshot.edges[0].supports = [
+    support('photo_1', 'user_text', 'text_1'),
+    { photoId: 'photo_2', source: 'user_text', evidenceId: 'text_2', quote: '还是同一次家庭聚会' }
+  ];
+  const adapted = adaptStageAForOrganization({ request: value.request, result: value.result, createdAt });
+  const event = adapted.retrievalCandidates.find(item => item.relation === 'same_event');
+  assert.ok(event.reasons.includes('two_sided_user_text_support'));
+});
+
 test('an explicit user event correction is the only bridge path to user_confirmed', () => {
   const { request, result, edge } = fixture();
   request.corrections = [{

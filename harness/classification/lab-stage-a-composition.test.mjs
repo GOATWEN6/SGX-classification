@@ -233,7 +233,7 @@ test('rejects partial ASR and tampered text before a Stage A plan exists', () =>
   assert.throws(() => buildStageALabPlan({ ...input, payloads: { textByEvidenceId: { ...input.payloads.textByEvidenceId, evidence_note_1: '篡改' } } }), /SOURCE_LENGTH_MISMATCH|SOURCE_HASH_MISMATCH/);
 });
 
-test('quarantines untrusted capture time and only emits an E2 sidecar for OCR-only evidence', () => {
+test('quarantines untrusted capture time while preserving supported scan and upload timeline roles', () => {
   const { input } = baseFixture();
   const plan = buildStageALabPlan(input);
   const photoId = plan.stageA.request.photos[0].photoId;
@@ -246,14 +246,14 @@ test('quarantines untrusted capture time and only emits an E2 sidecar for OCR-on
     ]
   });
   const output = composeStageALabResult({ plan, stageResult: stageResult(plan, [observation]), createdAt });
-  assert.equal(output.observations.some(item => item.facet === 'time'), false);
-  assert.equal(output.unresolvedTemporalObservations.length, 4);
-  assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1982-06-01').e2RuntimeObservation.kind, 'visible_time_text');
-  assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1982-06-01').e2RuntimeObservation.precision, 'exact_day');
+  assert.deepEqual(output.observations.filter(item => item.facet === 'time').map(item => item.temporal.role).sort(), ['scan', 'upload']);
+  assert.equal(output.unresolvedTemporalObservations.length, 2);
+  const ocrCapture = output.unresolvedTemporalObservations.find(item => item.evidenceKinds.includes('ocr_candidate'));
+  assert.equal(ocrCapture.e2RuntimeObservation.kind, 'visible_time_text');
+  assert.equal(ocrCapture.e2RuntimeObservation.precision, 'exact_day');
   assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1982').e2RuntimeObservation, undefined);
-  assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1982-06-01' && item.reason === 'role_missing').reason, 'role_missing');
-  assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1980s').reason, 'role_missing');
-  assert.equal(output.reviewItems.filter(item => item.startsWith('ROLE_UNKNOWN_TIME:')).length, 4);
+  assert.ok(!output.unresolvedTemporalObservations.some(item => item.reason === 'role_missing'));
+  assert.equal(output.reviewItems.filter(item => item.startsWith('ROLE_UNKNOWN_TIME:')).length, 2);
 });
 
 test('preserves every supported event-time precision', () => {

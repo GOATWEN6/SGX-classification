@@ -254,7 +254,7 @@ function mapObservation(
     addObservation(mapped, content, 'person', mention.text, mention.text.normalize('NFKC').trim(), mapSupports(mention.supports), conflict('person'));
   }
   for(const time of value.times) {
-    const trustedRole = time.role === 'event' || (time.role === 'capture' && time.supports.some(support =>
+    const trustedRole = ['event', 'scan', 'upload'].includes(time.role) || (time.role === 'capture' && time.supports.some(support =>
       support.source === 'exif' && trustedOriginalCaptureEvidenceIds.has(evidenceIdForSupport(support))));
     if(!trustedRole) {
       const unresolved = unresolvedTime(time, content.contentId, time.role === 'capture' ? 'untrusted_capture' : 'role_missing');
@@ -364,6 +364,12 @@ function edgeEvidenceRefs(edge: Edge, contentById: Map<string, ContentItem>): st
 
 function retrievalFromEdge(edge: Edge, sourceEdgeId: string, scope: Request['scope'], contentById: Map<string, ContentItem>, createdAt: string): RetrievalCandidate {
   const relation: RetrievalCandidate['relation'] = edge.kind === 'person' ? 'same_person' : 'same_event';
+  const textSupportedPhotoIds = new Set(edge.supports
+    .filter(support => support.source === 'user_text' || support.source === 'final_asr')
+    .map(support => support.photoId));
+  const twoSidedUserText = edge.kind === 'event'
+    && textSupportedPhotoIds.has(edge.left.photoId)
+    && textSupportedPhotoIds.has(edge.right.photoId);
   return RetrievalCandidateSchema.parse({
     schemaVersion: HYBRID_SCHEMA_VERSION,
     contractVersion: HYBRID_CONTRACT_VERSION,
@@ -376,7 +382,7 @@ function retrievalFromEdge(edge: Edge, sourceEdgeId: string, scope: Request['sco
     stageDecision: edge.decision,
     method: STAGE_A_ORGANIZATION_ADAPTER_VERSION,
     coverage: 'selected',
-    reasons: [`stage_a_${edge.kind}_edge`, `origin_${edge.origin}`],
+    reasons: [`stage_a_${edge.kind}_edge`, `origin_${edge.origin}`, ...(twoSidedUserText ? ['two_sided_user_text_support'] : [])],
     featureRefs: [],
     evidenceRefs: edgeEvidenceRefs(edge, contentById),
     createdAt

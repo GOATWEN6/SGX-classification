@@ -57,7 +57,7 @@ test('lab BFF input becomes server-built v2 Evidence and deterministic story out
   assert.equal(job.result.provider.modelVersion, 'none');
   const joined = job.result.organization.stories.find(story => story.memberContentIds.length === 3);
   assert.ok(joined);
-  assert.equal(joined.titleCandidate, '聚会');
+  assert.equal(joined.titleCandidate, '北京的聚会');
   assert.ok(Object.values(job.originalTextByEvidenceId).includes('这是1985年在北京的同学聚会'));
   const image = job.envelope.evidence.find(item => item.lifecycleState !== 'deleted' && item.modality === 'image');
   const asset = await store.readAsset(job.jobId, image.evidenceId);

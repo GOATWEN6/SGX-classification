@@ -30,8 +30,8 @@ test('image, user text and final ASR form one deterministic story card', () => {
   assert.deepEqual(first, second);
   assert.equal(first.stories.length, 1);
   assert.deepEqual(first.stories[0].memberContentIds, ['asr_1', 'photo_1', 'text_1']);
-  assert.equal(first.stories[0].titleCandidate, '生日');
-  assert.match(first.stories[0].summaryCandidate, /包含3项内容/);
+  assert.equal(first.stories[0].titleCandidate, '北京的生日');
+  assert.match(first.stories[0].summaryCandidate, /共3项内容/);
   assert.equal(first.associations.filter(item => item.status === 'ai_auto').length, 3);
   assert.ok(first.associations.every(item => item.evidenceRefs.length > 0));
   assert.equal(input.contents.find(item => item.contentId === 'text_1').originalText, '周末带家人去北京过生日，大家都来了。');

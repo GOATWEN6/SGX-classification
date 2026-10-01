@@ -98,6 +98,45 @@ test('stage different is retained as a shadow separation and never merges storie
   assert.equal(result.stories.length, 2);
 });
 
+test('two-sided user text can auto-group an AI same-event candidate without legacy overlap score', () => {
+  const result = organizeSparseContent(input(2, [candidate(0, 1, {
+    relation: 'same_event',
+    stageDecision: 'same',
+    reasons: ['stage_a_event_edge', 'two_sided_user_text_support']
+  })]));
+  assert.equal(result.associations[0].score, 0.25);
+  assert.equal(result.associations[0].status, 'ai_auto');
+  assert.equal(result.decisionResults[0].action, 'auto_link_candidate');
+  assert.ok(result.decisionResults[0].reasons.includes('two_sided_user_text_same_event'));
+  assert.deepEqual(result.stories[0].memberContentIds, ['content_0', 'content_1']);
+});
+
+test('story copy prioritizes event time and place and excludes visual appearance descriptions', () => {
+  const value = input(1, []);
+  value.observations.push({
+    contentId: 'content_0', evidenceId: 'evidence_0', facet: 'person',
+    rawValue: '穿红色外套站在左边的人', supports: [{ evidenceId: 'evidence_0', sourceType: 'visual', quote: '左侧人物' }], state: 'candidate'
+  }, {
+    contentId: 'content_0', evidenceId: 'evidence_0', facet: 'time', rawValue: '第二天', normalizedValue: '第二天',
+    temporal: { role: 'event', precision: 'relative' }, supports: [{ evidenceId: 'evidence_0', sourceType: 'user_text', quote: '第二天' }], state: 'candidate'
+  }, {
+    contentId: 'content_0', evidenceId: 'evidence_0', facet: 'place', rawValue: '湖边', normalizedValue: '湖边', placeKind: 'unresolved',
+    supports: [{ evidenceId: 'evidence_0', sourceType: 'user_text', quote: '去了湖边' }], state: 'candidate'
+  });
+  const story = organizeSparseContent(value).stories[0];
+  assert.equal(story.titleCandidate, '湖边的家庭聚会');
+  assert.match(story.summaryCandidate, /记录家庭聚会/);
+  assert.match(story.summaryCandidate, /时间：第二天/);
+  assert.match(story.summaryCandidate, /地点：湖边/);
+  assert.ok(!story.summaryCandidate.includes('红色外套'));
+});
+
+test('a conflicted singleton story is marked needs_review', () => {
+  const value = input(1, []);
+  value.observations[0].state = 'conflicted';
+  assert.equal(organizeSparseContent(value).stories[0].state, 'needs_review');
+});
+
 test('person-only candidate does not become a story edge', () => {
   const result = organizeSparseContent(input(2, [candidate(0, 1, { relation: 'same_person', candidateId: 'candidate_person_1' })]));
   assert.equal(result.associations.length, 0);

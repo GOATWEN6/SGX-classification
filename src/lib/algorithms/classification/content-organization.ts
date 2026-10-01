@@ -270,13 +270,29 @@ function truncate(value: string, max: number): string { return [...value].slice(
 
 function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[], observations: ContentObservation[], review: boolean): StoryUnit {
   const memberObservations = observations.filter(observation => members.includes(observation.contentId) && observation.state === 'candidate');
-  const event = memberObservations.find(observation => observation.facet === 'event');
-  const theme = memberObservations.find(observation => observation.facet === 'theme');
-  const place = memberObservations.find(observation => observation.facet === 'place');
-  const time = memberObservations.find(observation => observation.facet === 'time');
-  const title = truncate(event?.rawValue ?? theme?.rawValue ?? place?.rawValue ?? '未命名故事', 32);
-  const facetLabels = unique(memberObservations.filter(observation => ['person', 'time', 'place', 'theme'].includes(observation.facet)).map(observation => observation.rawValue)).slice(0, 4);
-  const summary = truncate(`包含${members.length}项内容${facetLabels.length ? `，涉及${facetLabels.join('、')}` : ''}`, 120);
+  const values = (facetName: ContentObservation['facet']) => unique(memberObservations
+    .filter(observation => observation.facet === facetName)
+    .map(observation => observation.rawValue));
+  const events = values('event');
+  const themes = values('theme');
+  const places = values('place');
+  const times = values('time');
+  const scenes = values('scene');
+  const explicitPeople = unique(memberObservations
+    .filter(observation => observation.facet === 'person'
+      && observation.supports.some(support => support.sourceType && support.sourceType !== 'visual'))
+    .map(observation => observation.rawValue));
+  const title = truncate(events[0]
+    ? `${places.length ? `${places.slice(0, 2).join('与')}的` : ''}${events[0]}`
+    : themes[0] ?? places[0] ?? (scenes.length ? `${scenes.slice(0, 2).join('与')}记录` : '待整理内容'), 32);
+  const summaryParts = [`共${members.length}项内容`];
+  if(events.length) summaryParts.push(`记录${events.slice(0, 2).join('、')}`);
+  if(times.length) summaryParts.push(`时间：${times.slice(0, 3).join('、')}`);
+  if(places.length) summaryParts.push(`地点：${places.slice(0, 3).join('、')}`);
+  if(themes.length) summaryParts.push(`主题：${themes.slice(0, 3).join('、')}`);
+  if(explicitPeople.length) summaryParts.push(`相关人物：${explicitPeople.slice(0, 3).join('、')}`);
+  if(summaryParts.length === 1 && scenes.length) summaryParts.push(`场景：${scenes.slice(0, 3).join('、')}`);
+  const summary = truncate(`${summaryParts.join('；')}。`, 120);
   const contentById = new Map(contents.map(content => [content.contentId, content]));
   const supports = unique(memberObservations.flatMap(observation => [observation.evidenceId, ...observation.supports.map(support => support.evidenceId)]));
   const fallbackSupports = unique(members.flatMap(contentId => contentById.get(contentId)?.evidenceIds ?? []));
@@ -318,7 +334,8 @@ export function organizeContent(raw: unknown): OrganizationResult {
   }
   const reviewByRoot = new Set<string>();
   for(const review of associations.filter(association => association.status === 'needs_review')) { reviewByRoot.add(union.find(review.fromContentId)); if(review.toContentId) reviewByRoot.add(union.find(review.toContentId)); }
-  const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations, reviewByRoot.has(union.find(members[0]))));
+  const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations,
+    reviewByRoot.has(union.find(members[0])) || observations.some(observation => members.includes(observation.contentId) && observation.state === 'conflicted')));
   return OrganizationResultSchema.parse({ version: CONTENT_ORGANIZATION_VERSION, scope: input.scope, stories, associations, reviewItems: unique(reviewItems) });
 }
 
@@ -326,6 +343,9 @@ function sparseDecisionResult(candidate: RetrievalCandidate, score: ReturnType<t
   const reasons: string[] = ['uncalibrated_policy'];
   let action: DecisionPolicyResult['action'] = 'review';
   let riskLevel: DecisionPolicyResult['riskLevel'] = 'medium';
+  const twoSidedUserTextSameEvent = candidate.stageDecision === 'same'
+    && candidate.relation === 'same_event'
+    && candidate.reasons.includes('two_sided_user_text_support');
   if(candidate.stageDecision === 'different') {
     action = 'auto_separate';
     riskLevel = 'low';
@@ -335,6 +355,10 @@ function sparseDecisionResult(candidate: RetrievalCandidate, score: ReturnType<t
   } else if(score.conflicted) {
     riskLevel = 'high';
     reasons.push('association_conflict');
+  } else if(twoSidedUserTextSameEvent) {
+    action = 'auto_link_candidate';
+    riskLevel = 'low';
+    reasons.push('two_sided_user_text_same_event');
   } else if(score.score >= 0.8) {
     action = 'auto_link_candidate';
     riskLevel = 'low';
@@ -406,11 +430,14 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
     const scored = scoreAssociation(candidate.fromContentId, candidate.toContentId, input.observations);
     const decision = sparseDecisionResult(candidate, scored, input.decisionPolicy.policyVersion, input.createdAt);
     decisionResults.push(decision);
+    const twoSidedUserTextSameEvent = candidate.stageDecision === 'same'
+      && candidate.relation === 'same_event'
+      && candidate.reasons.includes('two_sided_user_text_support');
     const status: AssociationCandidate['status'] = candidate.stageDecision === 'different'
       ? 'not_selected'
       : candidate.stageDecision === 'unknown' || scored.conflicted
         ? 'needs_review'
-        : scored.score >= 0.8
+        : twoSidedUserTextSameEvent || scored.score >= 0.8
           ? 'ai_auto'
           : scored.score >= 0.55
             ? 'needs_review'
@@ -447,6 +474,7 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
     active,
     input.observations,
     reviewByRoot.has(union.find(members[0]))
+      || input.observations.some(observation => members.includes(observation.contentId) && observation.state === 'conflicted')
   ));
   return SparseOrganizationResultSchema.parse({
     version: SPARSE_CONTENT_ORGANIZATION_VERSION,

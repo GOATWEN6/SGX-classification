@@ -191,6 +191,7 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   assert.match(body.messages[0].content,/mentions array is only for person names or relationships/);assert.ok(!body.messages[0].content.includes('canonical?'));
   assert.match(body.messages[0].content,/The exact empty extract shape/);assert.match(body.messages[0].content,/replace PHOTO_ID/);
   assert.match(body.messages[0].content,/always return exactly one event relation/);assert.match(body.messages[0].content,/When personMatchingEnabled is false/);
+  assert.match(body.messages[0].content,/multi-day trip/);assert.match(body.messages[0].content,/rationale must agree with decision/);
   assert.match(body.messages[0].content,/Do not nest request, results, pairIndex/);
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('"format"')));
@@ -237,8 +238,18 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.12$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.13$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
+});
+test('relation rationale that explicitly says same event cannot silently return different',async()=>{
+  const s=two({eventDecision:()=> 'different',alterOutput:(value,stage)=>{
+    if(stage==='relate')value.relations[0].rationale='两张照片属于同一事件中的不同时间点';
+    return value;
+  }});
+  const r=await run(s);
+  assert.equal(r.workflowStatus,'needs_review');
+  assert.ok(r.errors.some(error=>error.stage==='relate'&&error.code==='MODEL_RELATION_CONTRADICTION'));
+  assert.equal(groupMembers(r,'event').length,2);
 });
 test('real-mode sanitizer keeps valid facets and exposes dropped model assertions for review',async()=>{
   const p=photo('p_real_sanitize','');const raw=observation(p,{event:'兴趣活动',scene:'户外'});

@@ -41,6 +41,7 @@ export function candidates(changed:string[],photos:Photo[],observations:Record<s
 }
 export function validateRelation(raw:Relation,photos:Photo[],observations:Record<string,CachedObservation>,pair:[string,string]):Edge {
   if(raw.left.photoId===raw.right.photoId||!pair.every(p=>[raw.left.photoId,raw.right.photoId].includes(p)))throw new StageError('UNREQUESTED_PAIR');
+  if(raw.kind==='event'&&raw.decision==='different'&&/属于同一(?:个)?事件/.test(raw.rationale.normalize('NFKC')))throw new StageError('MODEL_RELATION_CONTRADICTION');
   validateSupports(raw.supports,photos);
   for(const side of [raw.left,raw.right]){
     if(!raw.supports.some(s=>s.photoId===side.photoId))throw new StageError('RELATION_MISSING_SOURCE');
