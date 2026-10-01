@@ -72,10 +72,11 @@ export class ApiVisionProvider implements VisionProvider {
   readonly version:string;readonly mode:'mock_transport'|'real_api';
   readonly inputCnyPerMillion:number;readonly outputCnyPerMillion:number;
   constructor(private readonly options:{provider:'qwen'|'glm';model:string;resolver:ImageResolver;transport?:Transport;
+    mode?:'mock_transport'|'real_api';
     credential?:()=>string;grant?:{destination:string;model:string;expiresAt:string;photoIds:string[]};
     inputCnyPerMillion:number;outputCnyPerMillion:number;record?:(entry:{responseId:string;model:string;raw:unknown})=>void;}) {
     if(!options.model||![options.inputCnyPerMillion,options.outputCnyPerMillion].every(x=>Number.isFinite(x)&&x>=0))throw new StageError('INVALID_PROVIDER_CONFIG');
-    this.mode=options.transport?'mock_transport':'real_api';this.version=`${options.provider}/${options.model}/${PROMPT_VERSION}`;
+    this.mode=options.mode??(options.transport?'mock_transport':'real_api');this.version=`${options.provider}/${options.model}/${PROMPT_VERSION}`;
     this.inputCnyPerMillion=options.inputCnyPerMillion;this.outputCnyPerMillion=options.outputCnyPerMillion;
   }
   async invoke(call:ModelCall,signal:AbortSignal):Promise<ModelReply>{

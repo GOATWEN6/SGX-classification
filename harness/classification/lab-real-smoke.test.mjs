@@ -33,7 +33,9 @@ function config(root, patch = {}) {
   return {
     enabled: true,
     approvalRef: 'chat_approved_real_smoke',
-    expiresAt: '2026-10-01T00:00:00.000Z',
+    // TaskBudget enforces the live wall clock even when the smoke ledger uses
+    // an injected clock, so this authorization fixture must remain future-bounded.
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
     maxRequests: 1,
     maxCostCny: 1,
     dataRoot: root,

@@ -683,9 +683,22 @@ export const StageAMockLabProviderResultSchema = z.object({
   }).strict()
 }).strict();
 
+export const StageARealLabProviderResultSchema = z.object({
+  ...CanonicalOrganizationOutputShape,
+  provider: z.object({
+    mode: z.literal('stage_a_real'),
+    providerVersion: versionValue,
+    modelVersion: versionValue,
+    promptVersion: versionValue,
+    evidenceStatus: z.literal('real_api'),
+    accuracyClaim: z.literal('not_evaluated')
+  }).strict()
+}).strict();
+
 export const CanonicalLabProviderResultSchema = z.union([
   DeterministicLabProviderResultSchema,
-  StageAMockLabProviderResultSchema
+  StageAMockLabProviderResultSchema,
+  StageARealLabProviderResultSchema
 ]);
 
 export type CanonicalLabProviderResult = z.infer<typeof CanonicalLabProviderResultSchema>;
@@ -704,9 +717,17 @@ const StageAMockExecutionResultSchema = z.object({
   output: StageAMockLabProviderResultSchema
 }).strict();
 
+const StageARealExecutionResultSchema = z.object({
+  version: z.literal(LAB_EXECUTION_RESULT_VERSION),
+  workflowStatus: z.enum(['succeeded', 'needs_review']),
+  profile: LabExecutionProfileSchema.extend({ providerMode: z.literal('stage_a_real') }).strict(),
+  output: StageARealLabProviderResultSchema
+}).strict();
+
 export const LabExecutionResultSchema = z.union([
   DeterministicExecutionResultSchema,
-  StageAMockExecutionResultSchema
+  StageAMockExecutionResultSchema,
+  StageARealExecutionResultSchema
 ]).superRefine((value, ctx) => {
   const provider = value.output.provider;
   if(provider.providerVersion !== value.profile.providerVersion) issue(ctx, 'PROVIDER_VERSION_MISMATCH', ['output', 'provider']);
