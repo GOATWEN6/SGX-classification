@@ -1,4 +1,4 @@
-import { Correction, Endpoint, Observation, Photo, Reference, Relation, StageError, digest, endpointKey, pairKey, photoHash, validateSupports } from './stage-a-contract';
+import { Correction, Endpoint, Observation, Photo, Reference, Relation, StageError, bindUniqueTextEvidence, digest, endpointKey, pairKey, photoHash, validateSupports } from './stage-a-contract';
 export interface CachedObservation {inputHash:string;version:string;value:Observation;}
 export interface Edge extends Relation {deps:Record<string,string>;origin:'ai'|'user';}
 export interface Group {groupId:string;kind:'person'|'event';members:Endpoint[];revision:number;state:'ai_organized';
@@ -40,17 +40,21 @@ export function candidates(changed:string[],photos:Photo[],observations:Record<s
   return {pairs,traces};
 }
 export function validateRelation(raw:Relation,photos:Photo[],observations:Record<string,CachedObservation>,pair:[string,string]):Edge {
-  if(raw.left.photoId===raw.right.photoId||!pair.every(p=>[raw.left.photoId,raw.right.photoId].includes(p)))throw new StageError('UNREQUESTED_PAIR');
-  if(raw.kind==='event'&&raw.decision==='different'&&/属于同一(?:个)?事件/.test(raw.rationale.normalize('NFKC')))throw new StageError('MODEL_RELATION_CONTRADICTION');
-  validateSupports(raw.supports,photos);
-  for(const side of [raw.left,raw.right]){
-    if(!raw.supports.some(s=>s.photoId===side.photoId))throw new StageError('RELATION_MISSING_SOURCE');
-    if(raw.kind==='person'){
+  const normalized:Relation={...raw,supports:raw.supports.map(support=>{
+    const photo=photos.find(candidate=>candidate.photoId===support.photoId);
+    return photo?bindUniqueTextEvidence(support,photo):support;
+  })};
+  if(normalized.left.photoId===normalized.right.photoId||!pair.every(p=>[normalized.left.photoId,normalized.right.photoId].includes(p)))throw new StageError('UNREQUESTED_PAIR');
+  if(normalized.kind==='event'&&normalized.decision==='different'&&/属于同一(?:个)?事件/.test(normalized.rationale.normalize('NFKC')))throw new StageError('MODEL_RELATION_CONTRADICTION');
+  validateSupports(normalized.supports,photos);
+  for(const side of [normalized.left,normalized.right]){
+    if(!normalized.supports.some(s=>s.photoId===side.photoId))throw new StageError('RELATION_MISSING_SOURCE');
+    if(normalized.kind==='person'){
       if(!side.faceId||!observations[side.photoId]?.value.people.some(p=>p.faceId===side.faceId))throw new StageError('UNKNOWN_FACE');
-      if(!raw.supports.some(s=>s.photoId===side.photoId&&s.source==='visual'))throw new StageError('IDENTITY_WITHOUT_VISUAL');
+      if(!normalized.supports.some(s=>s.photoId===side.photoId&&s.source==='visual'))throw new StageError('IDENTITY_WITHOUT_VISUAL');
     }else if(side.faceId)throw new StageError('EVENT_WITH_FACE');
   }
-  return {...raw,deps:Object.fromEntries(photos.map(p=>[p.photoId,photoHash(p)])),origin:'ai'};
+  return {...normalized,deps:Object.fromEntries(photos.map(p=>[p.photoId,photoHash(p)])),origin:'ai'};
 }
 function eventWindow(o:Observation|undefined):[number,number]|undefined {
   if(!o||o.conflicts.includes('time'))return;

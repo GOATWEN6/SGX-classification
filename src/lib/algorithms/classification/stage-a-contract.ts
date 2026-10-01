@@ -82,7 +82,7 @@ function normalizeTemporalEvidence(value:string):string {
     .replace(/([一二三四五六七八九]?十)(?=年代)/g,chineseSmallNumber)
     .replace(/(^|[^\d])(\d{2})年/g,(_match,prefix:string,short:string)=>`${prefix}${Number(short)<=SHORT_YEAR_PIVOT?'20':'19'}${short}年`);
 }
-function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
+export function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
   if(!['user_text','final_asr'].includes(item.source)||item.evidenceId)return item;
   const evidence=photo.textEvidence??[];
   const sourceMatches=evidence.filter(e=>e.source===item.source&&e.text.includes(item.quote));

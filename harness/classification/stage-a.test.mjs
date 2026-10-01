@@ -251,6 +251,26 @@ test('relation rationale that explicitly says same event cannot silently return 
   assert.ok(r.errors.some(error=>error.stage==='relate'&&error.code==='MODEL_RELATION_CONTRADICTION'));
   assert.equal(groupMembers(r,'event').length,2);
 });
+test('relation support binds a uniquely matching text evidence id and still rejects ambiguity',async()=>{
+  const options={eventDecision:()=> 'different',alterOutput:(value,stage)=>{
+    if(stage==='relate')value.relations[0].supports=value.relations[0].supports.map(support=>({
+      photoId:support.photoId,source:'user_text',quote:`${support.photoId}明确说明是另一趟旅行`
+    }));
+    return value;
+  }};
+  const s=two(options);
+  for(const photo of s.req.photos)photo.textEvidence=[{evidenceId:`${photo.photoId}_text`,revision:1,sourceHash:photo.sourceHash,source:'user_text',text:`${photo.photoId}明确说明是另一趟旅行`}];
+  s.sync();
+  const r=await run(s);
+  assert.equal(r.errors.length,0);
+  assert.ok(r.snapshot.edges[0].supports.every(support=>support.evidenceId));
+  const ambiguous=two(options);
+  for(const photo of ambiguous.req.photos)photo.textEvidence=[{evidenceId:`${photo.photoId}_text`,revision:1,sourceHash:photo.sourceHash,source:'user_text',text:`${photo.photoId}明确说明是另一趟旅行`}];
+  ambiguous.req.photos[0].textEvidence.push({...ambiguous.req.photos[0].textEvidence[0],evidenceId:'duplicate_text'});
+  ambiguous.sync();
+  const rejected=await run(ambiguous);
+  assert.ok(rejected.errors.some(error=>error.code==='TEXT_SUPPORT_REQUIRES_EVIDENCE'));
+});
 test('real-mode sanitizer keeps valid facets and exposes dropped model assertions for review',async()=>{
   const p=photo('p_real_sanitize','');const raw=observation(p,{event:'兴趣活动',scene:'户外'});
   raw.times=[{value:'daytime',precision:'relative',role:'capture',supports:[{photoId:p.photoId,source:'visual',quote:'Natural sunlight and shadows visible in the park setting.'}]}];
