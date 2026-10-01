@@ -573,7 +573,7 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 - 契约、授权、哈希、预算、错误停止和固定分母能够运行；
 - 图片及绑定 `user_text/final_asr` 的 Stage A 代码路径存在；
 - Qwen/GLM Provider adapter、严格 Zod 与语义校验存在；
-- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.13`；`.12` 的 14 次多图产品功能批次保留为历史基线，`.13` 尚待 6 次定点复测。不同历史链路的“累计调用”口径尚未由统一 ledger 核对，不能继续直接写成项目总数；旧 `/private/tmp` 原始产物当前也已不可访问，Git 内只保留汇总报告和提交记录；
+- 当前 Qwen Prompt/Guard 已升级到 `sgx-five-facets.13`；`.12` 的 14 次多图产品功能批次保留为历史基线，`.13` 定点复测实际执行 5 次并在 evidenceId 格式门禁停止，两批同一授权链累计 19 次、记账费用 ¥0.1620192。三图分组语义和产品 StoryUnit 达到定点目标，正式批次状态仍保留为 `needs_review`；
 - synthetic-v3.1 r5 已按 40 组固定分母冻结，208/208 checksum、26/14 分区和 33/6/1 路由通过独立只读审计；
 - 最新失败的 g001/g025 真实响应已在 `.12` 下精确离线重放；历史图片内指令污染和视觉臆测时间仍会被局部删除，其他有依据维度继续保留；
 - 内容组织的规则分、StoryUnit 和用户显式关系有自动化测试。
