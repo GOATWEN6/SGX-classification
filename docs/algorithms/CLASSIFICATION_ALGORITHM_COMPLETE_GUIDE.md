@@ -2,6 +2,7 @@
 
 > 当前统一阅读入口 · 文档版本：1.2.0 · 更新日期：2026-09-29<br>
 > 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.12`<br>
+> 产品目标、完整输入输出流程、五项审计和下一轮真实模型 Gate 见：[2026-10-01 产品目标与真实验证 Gate](CLASSIFICATION_PRODUCT_OBJECTIVE_AND_REAL_VALIDATION_GATE_2026-10-01.md)<br>
 > 当前问题、原因和修订执行顺序见：[当前问题总表与下一阶段执行计划](CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)<br>
 > 全栈接入与运行命令见：[T0/T1 全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)
 
