@@ -1,0 +1,60 @@
+{
+  "manifestVersion": "sgx-model-candidates.1",
+  "status": "candidate_unbenchmarked",
+  "createdAt": "2026-10-02T00:00:00.000Z",
+  "claimBoundary": "Source Gate candidates only. Selection requires the frozen OCR and embedding benchmark; this file is not a production model manifest.",
+  "candidates": [
+    {
+      "capability": "ocr",
+      "priority": 1,
+      "runtime": "RapidOCR",
+      "runtimeVersion": "3.9.x",
+      "modelId": "PP-OCRv5 Chinese mobile",
+      "modelRevision": "RapidOCR-v3.9.2-PP-OCRv5",
+      "sourceUrl": "https://github.com/RapidAI/RapidOCR",
+      "license": "Apache-2.0",
+      "expectedDevice": "cpu",
+      "sha256": null,
+      "selectionState": "benchmark_required"
+    },
+    {
+      "capability": "ocr",
+      "priority": 2,
+      "runtime": "PaddleOCR",
+      "runtimeVersion": "3.x",
+      "modelId": "PP-OCRv5 Chinese server",
+      "modelRevision": "freeze-after-download",
+      "sourceUrl": "https://github.com/PaddlePaddle/PaddleOCR",
+      "license": "Apache-2.0",
+      "expectedDevice": "gpu_or_cpu",
+      "sha256": null,
+      "selectionState": "comparison_only"
+    },
+    {
+      "capability": "image_text_embedding",
+      "priority": 1,
+      "runtime": "transformers",
+      "runtimeVersion": "freeze-after-preflight",
+      "modelId": "google/siglip2-base-patch16-224",
+      "modelRevision": "0ad8c6e0ff16615356a08a1ad8c8bbc8930c434e",
+      "sourceUrl": "https://huggingface.co/google/siglip2-base-patch16-224",
+      "license": "Apache-2.0",
+      "expectedDevice": "gpu_preferred_cpu_supported",
+      "sha256": null,
+      "selectionState": "benchmark_required"
+    },
+    {
+      "capability": "image_text_embedding",
+      "priority": 2,
+      "runtime": "cn_clip",
+      "runtimeVersion": "freeze-after-preflight",
+      "modelId": "OFA-Sys/Chinese-CLIP-ViT-B-16",
+      "modelRevision": "freeze-after-download",
+      "sourceUrl": "https://github.com/OFA-Sys/Chinese-CLIP",
+      "license": "MIT",
+      "expectedDevice": "gpu_preferred_cpu_supported",
+      "sha256": null,
+      "selectionState": "shadow_comparison"
+    }
+  ]
+}
