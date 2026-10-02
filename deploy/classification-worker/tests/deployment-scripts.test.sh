@@ -126,6 +126,7 @@ for expected in (
     "SGX_PERSISTENCE_POLICY_VERSION=classification-download-persistence.1",
     "SGX_DOWNLOAD_ROOT=/gemini/code/sgx-classification/shared/downloads",
     "HF_HOME=/gemini/code/sgx-classification/shared/cache/huggingface",
+    "TRANSFORMERS_CACHE=/gemini/code/sgx-classification/shared/cache/huggingface/transformers",
     "MODELSCOPE_CACHE=/gemini/code/sgx-classification/shared/cache/modelscope",
     "PIP_CACHE_DIR=/gemini/code/sgx-classification/shared/cache/pip",
     "SGX_RUNTIME_CACHE_ROOT=/quota/sgx-classification/cache",
@@ -141,6 +142,7 @@ for name in (
     "HF_HOME",
     "HF_HUB_CACHE",
     "HUGGINGFACE_HUB_CACHE",
+    "TRANSFORMERS_CACHE",
     "MODELSCOPE_CACHE",
     "SGX_ONNX_CACHE",
     "TORCH_HOME",
@@ -216,6 +218,19 @@ for path in \
   [[ -d "$SGX_CLASSIFICATION_RUNTIME_TEST_ROOT/$path" ]] || fail "runtime layout path missing: $path"
 done
 [[ -d "$SGX_CLASSIFICATION_SCRATCH_TEST_ROOT/jobs" ]] || fail 'scratch jobs path missing'
+
+download_env="$({
+  bash "$PACKAGE_ROOT/bin/with-persistent-download-env.sh" \
+    python3 -c 'import os; print("\n".join(f"{name}={os.environ[name]}" for name in ("HF_HOME", "TRANSFORMERS_CACHE", "MODELSCOPE_CACHE", "PIP_CACHE_DIR")))'
+})"
+persistent_test_root="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SGX_CLASSIFICATION_TEST_ROOT")"
+for expected in \
+  "HF_HOME=$persistent_test_root/shared/cache/huggingface" \
+  "TRANSFORMERS_CACHE=$persistent_test_root/shared/cache/huggingface/transformers" \
+  "MODELSCOPE_CACHE=$persistent_test_root/shared/cache/modelscope" \
+  "PIP_CACHE_DIR=$persistent_test_root/shared/cache/pip"; do
+  grep -Fqx "$expected" <<<"$download_env" || fail "persistent download wrapper omitted $expected"
+done
 
 for path in \
   "$SGX_CLASSIFICATION_TEST_ROOT" \

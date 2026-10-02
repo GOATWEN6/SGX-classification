@@ -108,6 +108,18 @@ promote verified files to `shared/models`, and start production runtime with
 network downloads disabled. `requireRuntimeEnvironment` rejects a worker whose
 download-related environment variables point outside the persistent SGX root.
 
+Operators must run any network-capable acquisition command through
+`bin/with-persistent-download-env.sh`. The wrapper exports the Hugging Face,
+Transformers, ModelScope, ONNX, Torch, pip, uv, XDG and virtualenv caches below
+`/gemini/code/sgx-classification`, validates the complete managed layout, and
+then executes the supplied command. It does not enable downloads by itself and
+does not contain credentials. Example:
+
+```bash
+/gemini/code/sgx-classification/current/deploy/classification-worker/bin/with-persistent-download-env.sh \
+  python -m pip download --dest /gemini/code/sgx-classification/shared/wheelhouse <reviewed-package>
+```
+
 The scripts never install packages, access the network, read or write secrets, restart a service, modify system configuration, create a release, or create `VERIFIED`. A separate offline build/verification step must populate an immutable release and write a regular `VERIFIED` file only after its manifest, dependency locks, health checks and provenance pass.
 
 ## Layout, activation and rollback
