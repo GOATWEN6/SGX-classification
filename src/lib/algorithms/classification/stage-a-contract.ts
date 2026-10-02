@@ -106,6 +106,7 @@ export function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
 const untrustedInstruction=/\bignore\s+(?:all\s+)?(?:previous\s+)?(?:rules|instructions)\b|\bsystem\s+prompt\b|\b(?:event|place|person|scene|time)\s*=|忽略.{0,8}(?:规则|指令)|(?:人物|地点|事件|场景|时间)\s*(?:=|：|写成|设为)/i;
 const instructionOnly=(supports:Support[])=>supports.length>0&&supports.every(item=>
   (item.source==='ocr'||item.source==='visual')&&untrustedInstruction.test(item.quote));
+const relativeTimeExpression=/(?:大前天|前天|昨天|今天|明天|后天|前年|去年|今年|明年|后年|上(?:个)?月|这(?:个)?月|本月|下(?:个)?月|上周|这周|本周|下周|刚才|最近|那天|当时|小时候|年轻时|退休后|day before yesterday|yesterday|today|tomorrow|last year|this year|next year|last month|this month|next month|last week|this week|next week)/i;
 
 /**
  * Drops a narrow set of unsupported optional model assertions before strict validation.
@@ -119,9 +120,25 @@ export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate
     if(!instructionOnly(item.supports))return true;
     dropped.add(facet);reviewItems.push(`UNTRUSTED_INSTRUCTION_DROPPED:${photo.photoId}:${facet}`);return false;
   });
-  const times=filterInstruction('time',parsed.times).filter(time=>{
-    if(!time.supports.every(item=>item.source==='visual'))return true;
-    dropped.add('time');reviewItems.push(`UNSUPPORTED_VISUAL_TIME_DROPPED:${photo.photoId}`);return false;
+  const times=filterInstruction('time',parsed.times).flatMap(time=>{
+    if(time.supports.every(item=>item.source==='visual')){
+      dropped.add('time');reviewItems.push(`UNSUPPORTED_VISUAL_TIME_DROPPED:${photo.photoId}`);return [];
+    }
+    const value=normalizeTemporalEvidence(time.value).trim();
+    const hasGroundedRelativeText=relativeTimeExpression.test(value)&&time.supports.some(item=>
+      item.source!=='visual'&&relativeTimeExpression.test(normalizeTemporalEvidence(item.quote)));
+    // A relative phrase such as “前年冬天” occasionally arrives with precision=year.
+    // Reclassifying its precision is a deterministic format repair; it does not invent
+    // an absolute date or change the source text.
+    const candidateTime=hasGroundedRelativeText&&time.precision!=='relative'?{...time,precision:'relative' as const}:time;
+    try{
+      const probe=validateObservation({photoId:parsed.photoId,people:[],mentions:[],times:[candidateTime],places:[],events:[],scenes:[],unknownFacets:['person','place','event','scene'],conflicts:[]},photo);
+      return probe.times;
+    }catch(error){
+      const code=error instanceof StageError?error.code:'INVALID_TIME';
+      if(!['INVALID_TIME','UNSUPPORTED_TIME_PRECISION','SCAN_NOT_CAPTURE'].includes(code))throw error;
+      dropped.add('time');reviewItems.push(`${code}_DROPPED:${photo.photoId}`);return [];
+    }
   });
   const candidate:Observation={
     ...parsed,

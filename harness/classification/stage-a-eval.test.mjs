@@ -141,6 +141,26 @@ test('case-local invalid output preserves the denominator and continues the next
   assert.equal(ledger.tasks[2].status,'succeeded');
   assert.deepEqual((await readFile(callsPath,'utf8')).trim().split('\n'),['a','b']);
 });
+test('case-local semantic time failure does not stop later independent real-model tasks',async t=>{
+  const f=await fixture(t);const [a,b]=f.manifest.tasks[0].request.photos;
+  f.manifest.tasks=[
+    {...structuredClone(f.manifest.tasks[0]),taskId:'invalid_time_a',request:{...structuredClone(f.s.req),runId:'run_invalid_time_a',photos:[a]},evaluatePhotoIds:['a']},
+    {...structuredClone(f.manifest.tasks[0]),taskId:'valid_after_time',request:{...structuredClone(f.s.req),runId:'run_valid_after_time',authorizationRevision:'auth2',photos:[b]},evaluatePhotoIds:['b']}
+  ];
+  await f.save();const prepared=await preflight(f.manifestPath);const approval={version:'sgx-eval-approval.1',batchId:prepared.manifest.batchId,manifestHash:prepared.manifestHash,
+    approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',expiresAt:new Date(Date.now()+60000).toISOString(),provider:prepared.manifest.provider,model:prepared.manifest.model,
+    photoIds:prepared.usedPhotoIds,caps:prepared.manifest.caps,allowExternalImages:true,allowPersonMatching:false};
+  const approvalPath=path.join(f.root,'time-approval.json');await writeFile(approvalPath,JSON.stringify(approval));const callsPath=path.join(f.root,'time-calls.jsonl'),loader=path.join(f.root,'time-stub.cjs');
+  await writeFile(loader,`const {appendFileSync}=require('node:fs');const base=process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification';
+    const {ApiVisionProvider}=require(base+'/stage-a-provider.js');const {StageError}=require(base+'/stage-a-contract.js');
+    ApiVisionProvider.prototype.invoke=async function(call){const p=call.photos[0];appendFileSync(${JSON.stringify(callsPath)},p.photoId+'\\n');if(p.photoId==='a')throw new StageError('INVALID_TIME');
+      return {value:{observations:[{photoId:p.photoId,people:[],mentions:[],times:[],places:[],events:[],scenes:[{label:'室内',supports:[{photoId:p.photoId,source:'visual',quote:'controlled local observation'}]}],unknownFacets:['person','time','place','event'],conflicts:[]}]},usage:{inputTokens:100,outputTokens:50},responseId:'local_'+p.photoId,model:'qwen3.5-flash-2026-02-23'};};`);
+  const out=path.join(f.root,'time-results');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
+    '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,2,child.stderr);const ledger=JSON.parse(await readFile(path.join(out,'ledger.json'),'utf8'));
+  assert.equal(ledger.globalStop,undefined);assert.deepEqual(ledger.caseFailures,[{taskId:'invalid_time_a',codes:['INVALID_TIME']}]);
+  assert.equal(ledger.tasks[1].status,'succeeded');assert.deepEqual((await readFile(callsPath,'utf8')).trim().split('\n'),['a','b']);
+});
 test('global authorization error stops later tasks after one provider attempt',async t=>{
   const f=await fixture(t);const [a,b]=f.manifest.tasks[0].request.photos;
   f.manifest.tasks=[

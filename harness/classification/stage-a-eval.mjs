@@ -40,7 +40,8 @@ if(args.includes('--help')||!manifestPath||!out){
       const m=batch.manifest;await save('manifest.json',m);await save('approval-reference.json',{approvalHash,authorizationEvidenceRef:approval.authorizationEvidenceRef,expiresAt:approval.expiresAt});
       const start=Date.now(),deadline=Math.min(Date.parse(approval.expiresAt),start+m.caps.maxDurationSeconds*1000);
       const totals={requests:0,images:0,inputTokens:0,outputTokens:0,costCny:0,latencyMs:0};const ledger=[],scores=[];
-      const caseFailureCodes=new Set(['INVALID_OUTPUT','OUTPUT_TRUNCATED','RESPONSE_LIMIT','RATE_LIMITED','PROVIDER_UNAVAILABLE','PROVIDER_REJECTED','TIMEOUT']);
+      const caseFailureCodes=new Set(['INVALID_OUTPUT','OUTPUT_TRUNCATED','RESPONSE_LIMIT','RATE_LIMITED','PROVIDER_UNAVAILABLE','PROVIDER_REJECTED','TIMEOUT',
+        'INVALID_TIME','UNSUPPORTED_TIME','UNSUPPORTED_TIME_PRECISION','SCAN_NOT_CAPTURE']);
       const caseFailures=[],failedSequences=new Set();
       let globalStop,activeTaskId;const controller=new AbortController();const interrupt=()=>{globalStop='INTERRUPTED';controller.abort();};
       process.once('SIGINT',interrupt);process.once('SIGTERM',interrupt);
