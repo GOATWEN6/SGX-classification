@@ -259,7 +259,6 @@ function mapObservation(
     if(!trustedRole) {
       const unresolved = unresolvedTime(time, content.contentId, time.role === 'capture' ? 'untrusted_capture' : 'role_missing');
       unresolvedTemporalObservations.push(unresolved);
-      reviewItems.push(`ROLE_UNKNOWN_TIME:${unresolved.observationId}`);
       continue;
     }
     addObservation(mapped, content, 'time', time.value, time.value, mapSupports(time.supports), conflict('time'), {
@@ -274,7 +273,6 @@ function mapObservation(
         ? 'named'
         : 'unresolved';
     addObservation(mapped, content, 'place', place.label, normalized, mapSupports(place.supports), conflict('place'), { placeKind });
-    if(placeKind === 'unresolved') reviewItems.push(`PLACE_KIND_UNRESOLVED:${content.contentId}:${place.label}`);
   }
   for(const event of value.events) {
     addObservation(mapped, content, 'event', event.type, event.type, mapSupports(event.supports), conflict('event'));
@@ -538,7 +536,6 @@ export function adaptStageAForOrganization(raw: StageAOrganizationInput): StageA
     reviewItems: unique([
       ...snapshot.reviewItems,
       ...reviewItems,
-      ...snapshotEdges.filter(edge => edge.decision === 'unknown').map(edge => `UNKNOWN_RELATION:${edge.kind}:${[endpointKey(edge.left), endpointKey(edge.right)].sort().join('/')}`),
       ...Object.values(validatedObservations).flatMap(cached => cached.value.conflicts.map(facet => `CONFLICT:${cached.value.photoId}:${facet}`))
     ]),
     unresolvedTemporalObservations,

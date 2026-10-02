@@ -35,10 +35,10 @@ async function fixture() {
     manifestHash: digest(manifest),
     datasetRootDigest: `sha256:${'1'.repeat(64)}`,
     model: 'qwen3.7-flash-2026-07-15',
-    maxRequests: 20,
-    maxCostCny: 5,
+    maxRequests: 150,
+    maxCostCny: 25,
     automaticRetries: 0,
-    allowPersonMatching: false,
+    allowPersonMatching: true,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     authorizationEvidenceRef: 'chat_test'
   };
@@ -54,6 +54,9 @@ test('authorized real batch status binds an immutable local manifest and does no
   assert.equal(status.configured, true);
   assert.equal(status.started, false);
   assert.equal(status.pointer.manifestHash, value.pointer.manifestHash);
+  assert.equal(status.pointer.allowPersonMatching, true);
+  assert.equal(status.pointer.maxRequests, 150);
+  assert.equal(status.pointer.maxCostCny, 25);
   assert.equal('SGX_D4_API_KEY' in value.env, false);
 
   await writeFile(value.manifestPath, '{"batch":"changed"}\n');
@@ -73,4 +76,3 @@ test('authorized real batch rejects paths outside its configured data root', asy
   await writeFile(realBatchPointerPath(value.env), `${JSON.stringify(bad)}\n`);
   await assert.rejects(getAuthorizedRealBatchStatus(value.env), /REAL_BATCH_PATH_FORBIDDEN/);
 });
-

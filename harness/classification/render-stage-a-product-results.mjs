@@ -12,6 +12,12 @@ const { adaptStageAForOrganization } = require(
 const { organizeSparseContent } = require(
   path.join(buildDir, 'src/lib/algorithms/classification/content-organization.js')
 );
+const {
+  buildActiveEvidenceRulePolicy,
+  collectEvidenceRuleReviewItems
+} = require(
+  path.join(buildDir, 'src/lib/algorithms/classification/evidence-rule-policy.js')
+);
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -42,23 +48,17 @@ for (const task of manifest.tasks) {
     allowPersonMatching: false
   });
   const organized = organizeSparseContent({
-    schemaVersion: '1.0',
-    contractVersion: 'classification-hybrid.1',
+    schemaVersion: '2.0',
+    contractVersion: 'classification-hybrid.2',
     scope: task.request.scope,
     contents: adapted.contents,
     observations: adapted.observations,
     retrievalCandidates: adapted.retrievalCandidates,
     explicitAssociations: adapted.explicitAssociations,
-    decisionPolicy: {
-      schemaVersion: '1.0',
-      contractVersion: 'classification-hybrid.1',
-      policyVersion: 'real-product-replay-shadow.1',
-      mode: 'shadow',
-      calibrated: false,
+    decisionPolicy: buildActiveEvidenceRulePolicy({
       maxCandidatesPerContent: task.request.budget.candidatesPerPhoto,
-      riskPolicyVersion: 'impact-risk.1',
       createdAt
-    },
+    }),
     createdAt
   });
   tasks.push({
@@ -67,12 +67,11 @@ for (const task of manifest.tasks) {
     stories: organized.stories,
     associations: organized.associations,
     decisionResults: organized.decisionResults,
-    reviewItems: [...new Set([
-      ...stageResult.reviewItems,
-      ...adapted.reviewItems,
-      ...organized.reviewItems,
-      ...adapted.unresolvedTemporalObservations.map(item => `UNRESOLVED_TIME:${item.observationId}`)
-    ])],
+    reviewItems: collectEvidenceRuleReviewItems(
+      stageResult.reviewItems,
+      adapted.reviewItems,
+      organized.reviewItems
+    ),
     unresolvedTemporalObservations: adapted.unresolvedTemporalObservations,
     audit: adapted.audit
   });

@@ -12,14 +12,18 @@ import {
 } from './lab-stage-a-composition';
 import { ApiVisionProvider, PROVIDER_ENDPOINTS, type Transport } from './stage-a-provider';
 import { ClassificationEngine } from './stage-a-pipeline';
-import { PROMPT_VERSION, StageError, digest } from './stage-a-contract';
+import { PROMPT_VERSION, STAGE_A_VALIDATION_VERSION, StageError, digest } from './stage-a-contract';
 import { DeterministicTextExtractor } from './text-extractor';
 import { retrieveExactCandidates } from './exact-retrieval';
 import { organizeSparseContent } from './content-organization';
+import {
+  buildActiveEvidenceRulePolicy,
+  collectEvidenceRuleReviewItems
+} from './evidence-rule-policy';
 
 export const REAL_SMOKE_VERSION = 'classification-real-smoke.1';
 export const REAL_SMOKE_MODEL = 'qwen3.7-flash-2026-07-15';
-export const REAL_SMOKE_PROVIDER_VERSION = `qwen/${REAL_SMOKE_MODEL}/${PROMPT_VERSION}`;
+export const REAL_SMOKE_PROVIDER_VERSION = `qwen/${REAL_SMOKE_MODEL}/${PROMPT_VERSION}/${STAGE_A_VALIDATION_VERSION}`;
 export const REAL_SMOKE_MAX_IMAGE_BYTES = 1024 * 1024;
 
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -355,8 +359,8 @@ export async function runRealSmoke(
         : []);
     const composed = composeStageALabResult({ plan, stageResult: stage, textObservations, createdAt: submission.submittedAt });
     const retrieval = retrieveExactCandidates({
-      schemaVersion: '1.0',
-      contractVersion: 'classification-hybrid.1',
+      schemaVersion: '2.0',
+      contractVersion: 'classification-hybrid.2',
       scope: built.envelope.scope,
       contents: composed.contents,
       observations: composed.observations,
@@ -366,23 +370,17 @@ export async function runRealSmoke(
       createdAt: submission.submittedAt
     });
     const organization = organizeSparseContent({
-      schemaVersion: '1.0',
-      contractVersion: 'classification-hybrid.1',
+      schemaVersion: '2.0',
+      contractVersion: 'classification-hybrid.2',
       scope: built.envelope.scope,
       contents: composed.contents,
       observations: composed.observations,
       retrievalCandidates: [...composed.retrievalCandidates, ...retrieval.candidates],
       explicitAssociations: composed.explicitAssociations,
-      decisionPolicy: {
-        schemaVersion: '1.0',
-        contractVersion: 'classification-hybrid.1',
-        policyVersion: 'classification-real-smoke-shadow.1',
-        mode: 'shadow',
-        calibrated: false,
+      decisionPolicy: buildActiveEvidenceRulePolicy({
         maxCandidatesPerContent: 8,
-        riskPolicyVersion: 'impact-risk.1',
         createdAt: submission.submittedAt
-      },
+      }),
       createdAt: submission.submittedAt
     });
     const workflowStatus = stage.workflowStatus === 'needs_review'
@@ -401,7 +399,11 @@ export async function runRealSmoke(
       },
       organization,
       observations: composed.observations,
-      reviewItems: [...new Set([...stage.reviewItems, ...composed.reviewItems, ...organization.reviewItems])],
+      reviewItems: collectEvidenceRuleReviewItems(
+        stage.reviewItems,
+        composed.reviewItems,
+        organization.reviewItems
+      ),
       unresolvedTemporalObservations: composed.unresolvedTemporalObservations,
       usage: stage.usage,
       audit: {

@@ -18,6 +18,7 @@ const photo = (photoId, active = true) => ({
   sourceHash: contract.digest(`${photoId}_bytes`),
   mimeType: 'image/jpeg',
   caption: '',
+  ...(photoId === 'photo_2' ? { ocrText: '1982年在武汉家庭聚会' } : {}),
   textEvidence: photoId === 'photo_1' ? [
     { evidenceId: 'text_1', revision: 1, sourceHash: contract.digest('text'), source: 'user_text', text: '1982年在武汉家庭聚会' },
     { evidenceId: 'asr_1', revision: 1, sourceHash: contract.digest('asr'), source: 'final_asr', text: '1982年在武汉家庭聚会' }
@@ -120,14 +121,14 @@ test('stage A groups remain AI candidates and technical group ids do not become 
   const adapted = adaptStageAForOrganization({ request, result, createdAt });
   const { contents, observations, retrievalCandidates, explicitAssociations } = adapted;
   const organized = organizeSparseContent({
-    schemaVersion: '1.0',
-    contractVersion: 'classification-hybrid.1',
+    schemaVersion: '2.0',
+    contractVersion: 'classification-hybrid.2',
     scope,
     contents,
     observations,
     retrievalCandidates,
     explicitAssociations,
-    decisionPolicy: { schemaVersion: '1.0', contractVersion: 'classification-hybrid.1', policyVersion: 'decision-shadow.1', mode: 'shadow', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt },
+    decisionPolicy: { schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', policyVersion: 'decision-shadow.1', mode: 'shadow', decisionMode: 'evidence_rules', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt },
     createdAt
   });
   assert.ok(organized.associations.every(item => item.status !== 'user_confirmed'));

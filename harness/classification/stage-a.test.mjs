@@ -84,15 +84,22 @@ test('two concurrent runs: latest run wins and stale completion cannot overwrite
   const old=run(s);await entered.promise;s.req.runId='run_new';const newer=await run(s);release.resolve();const stale=await old;
   assert.ok(newer.snapshot);assert.ok(stale.errors.some(e=>e.code==='STALE_RUN'));assert.equal(s.store.get(contract.digest(scope)).revision,newer.snapshot.revision);
 });
-test('new model version invalidates observations; unresolved view uses cache without hiding review',async()=>{
-  const store=new MemorySnapshotStore();const first=two({store});const a=await run(first);assert.equal(a.workflowStatus,'needs_review');
-  first.req.trigger='view';assert.equal((await run(first)).workflowStatus,'needs_review');
+test('new model version invalidates observations; low-risk unknown relations remain cached without a user task',async()=>{
+  const store=new MemorySnapshotStore();const first=two({store});const a=await run(first);assert.equal(a.workflowStatus,'succeeded');
+  first.req.trigger='view';assert.equal((await run(first)).workflowStatus,'succeeded');
   const second=two({store,providerOverrides:{model:'qwen-next-test'}});const b=await run(second);assert.deepEqual(b.changedPhotoIds,['a','b']);
 });
 test('candidate limit discloses omitted photos including missing-data fallback',async()=>{
   const photos=Array.from({length:6},(_,i)=>photo(`p${i}`,''));const s=setup(photos);s.req.budget.candidatesPerPhoto=2;const r=await run(s);
   assert.ok(r.candidateTraces.every(t=>t.eligible===5&&t.coverage==='truncated'&&t.omitted.length===3));
-  assert.ok(r.candidateTraces.every(t=>t.selected.length>0));assert.ok(r.reviewItems.some(i=>i.startsWith('CANDIDATE_TRUNCATED')));
+  assert.ok(r.candidateTraces.every(t=>t.selected.length>0));assert.ok(r.candidateTraces.every(t=>t.reason==='bounded_categorical_retrieval_with_discovery_fallback'));assert.ok(r.reviewItems.some(i=>i.startsWith('CANDIDATE_TRUNCATED')));
+});
+test('embedding Top-K only reorders bounded candidates and never turns similarity into a same decision',async()=>{
+  const photos=Array.from({length:4},(_,i)=>photo(`p${i}`,''));const s=setup(photos);s.req.budget.candidatesPerPhoto=1;
+  s.req.retrievalHints=[{kind:'image_text_embedding_topk',leftPhotoId:'p0',rightPhotoId:'p3',rank:1,modelId:'embedding/test',modelRevision:'r1'}];
+  const r=await run(s);const trace=r.candidateTraces.find(item=>item.photoId==='p0');
+  assert.deepEqual(trace.selected,['p3']);assert.equal(trace.reason,'embedding_topk_then_categorical');
+  assert.equal(groupMembers(r,'event').length,4);
 });
 test('budget zero / unconfigured model are explicit failures, never Fake success',async()=>{
   const s=two();s.req.budget.maxRequests=0;const r=await run(s);assert.equal(r.workflowStatus,'failed');assert.equal(s.calls.length,0);assert.ok(r.errors.some(e=>e.code==='BUDGET_EXHAUSTED'));
@@ -131,17 +138,17 @@ test('text support prefers a unique same-source evidence and only falls back acr
   p.textEvidence.push({...p.textEvidence[0],evidenceId:'text_3',source:'final_asr'});assert.throws(()=>contract.validateObservation(o,p),/TEXT_SUPPORT_REQUIRES_EVIDENCE/);
 });
 test('partial month date is conservatively downgraded to grounded year',()=>{
-  const p=photo('p_month','');const o=observation(p);o.times=[{value:'2001-07',precision:'date',role:'capture',supports:[{photoId:p.photoId,source:'visual',quote:"右下角时间戳显示 '2001 07'"}]}];
+  const p={...photo('p_month',''),ocrText:'2001 07'};const o=observation(p);o.times=[{value:'2001-07',precision:'date',role:'capture',supports:[{photoId:p.photoId,source:'ocr',quote:'2001 07'}]}];
   const time=contract.validateObservation(o,p).times[0];assert.equal(time.value,'2001');assert.equal(time.precision,'year');assert.equal(time.supports[0].source,'ocr');
 });
 test('year precision carrying a grounded month is conservatively reduced to year',()=>{
   const p=photo('p_year_month','1984年9月');const o=observation(p,{time:'1984-09',precision:'year'});
   const time=contract.validateObservation(o,p).times[0];assert.equal(time.value,'1984');assert.equal(time.precision,'year');
 });
-test('explicit image text time support is locally tagged as OCR without accepting visual-era guesses',()=>{
-  const p=photo('p_ocr','');const o=observation(p);o.times=[{value:'2023',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'visual',quote:'图片右下角叠加文字显示“2023 退休纪念”'}]}];o.unknownFacets=[];
+test('explicit OCR text grounds time only when the literal quote exists in derived OCR evidence',()=>{
+  const p={...photo('p_ocr',''),ocrText:'2023 退休纪念'};const o=observation(p);o.times=[{value:'2023',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'ocr',quote:'2023 退休纪念'}]}];o.unknownFacets=[];
   const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].supports[0].source,'ocr');assert.ok(!normalized.unknownFacets.includes('time'));
-  o.times[0].supports[0].quote='服装看起来像 2023 年前后';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_TIME/);
+  o.times[0].supports[0].quote='服装看起来像 2023 年前后';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_QUOTE/);
 });
 test('candidate sanitizer drops visual-only time but preserves supported event and scene',()=>{
   const p=photo('p_daylight','');const o=observation(p,{event:'兴趣活动',scene:'户外'});
@@ -238,7 +245,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.13$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.13\/stage-a-validation\.2$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{
@@ -250,6 +257,36 @@ test('relation rationale that explicitly says same event cannot silently return 
   assert.equal(r.workflowStatus,'needs_review');
   assert.ok(r.errors.some(error=>error.stage==='relate'&&error.code==='MODEL_RELATION_CONTRADICTION'));
   assert.equal(groupMembers(r,'event').length,2);
+});
+test('relation rationale catches same-trip and reverse different-event contradictions',async()=>{
+  const sameTrip=two({eventDecision:()=> 'different',alterOutput:(value,stage)=>{if(stage==='relate')value.relations[0].rationale='这是同一趟旅行的两个场景';return value;}});
+  const sameTripResult=await run(sameTrip);
+  assert.ok(sameTripResult.errors.some(error=>error.code==='MODEL_RELATION_CONTRADICTION'));
+  const differentEvents=two({eventDecision:()=> 'same',alterOutput:(value,stage)=>{if(stage==='relate')value.relations[0].rationale='照片属于不同事件，彼此无关';return value;}});
+  const differentEventsResult=await run(differentEvents);
+  assert.ok(differentEventsResult.errors.some(error=>error.code==='MODEL_RELATION_CONTRADICTION'));
+});
+test('negated same-event rationale is recognized as different in Chinese and English',async()=>{
+  for(const rationale of ['两张照片不是同一事件','These photos are not the same event']){
+    const different=two({eventDecision:()=> 'different',alterOutput:(value,stage)=>{if(stage==='relate')value.relations[0].rationale=rationale;return value;}});
+    assert.equal((await run(different)).errors.some(error=>error.code==='MODEL_RELATION_CONTRADICTION'),false,rationale);
+    const same=two({eventDecision:()=> 'same',alterOutput:(value,stage)=>{if(stage==='relate')value.relations[0].rationale=rationale;return value;}});
+    assert.equal((await run(same)).errors.some(error=>error.code==='MODEL_RELATION_CONTRADICTION'),true,rationale);
+  }
+});
+test('uncertain or bipolar event rationale stays non-terminal',async()=>{
+  for(const rationale of [
+    '无法判断是否为同一事件',
+    '可能是同一事件，也可能是不同事件',
+    'It is unclear whether these are the same event',
+    'These could be the same event or different events',
+  ]){
+    for(const decision of ['same','different']){
+      const s=two({eventDecision:()=> decision,alterOutput:(value,stage)=>{if(stage==='relate')value.relations[0].rationale=rationale;return value;}});
+      const r=await run(s);
+      assert.equal(r.errors.some(error=>error.code==='MODEL_RELATION_CONTRADICTION'),false,`${decision}: ${rationale}`);
+    }
+  }
 });
 test('relation support binds a uniquely matching text evidence id and still rejects ambiguity',async()=>{
   const options={eventDecision:()=> 'different',alterOutput:(value,stage)=>{

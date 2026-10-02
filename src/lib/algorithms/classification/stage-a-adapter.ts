@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Correction, Photo, Reference, Request, Scope, Budget } from './stage-a-contract';
+import type { Correction, Photo, Reference, Request, RetrievalHint, Scope, Budget } from './stage-a-contract';
 import { RequestSchema, StageError, digest, photoHash } from './stage-a-contract';
 import type { EvidenceRecord, SourceRef } from './types';
 import type { AuthorizationSnapshot } from './stage-a-pipeline';
@@ -19,6 +19,7 @@ export interface TrustedTextEvidence {
 export interface TrustedPhotoEvidence {
   image: ActiveImageEvidence | DeletedImageTombstone;
   imageBytes?: Uint8Array;
+  ocrText?: string;
   textEvidence: TrustedTextEvidence[];
   priorPhoto?: Photo;
 }
@@ -42,6 +43,7 @@ export interface StageAAdapterOptions {
   runId: string;
   trigger: Request['trigger'];
   budget: Budget;
+  retrievalHints?: RetrievalHint[];
 }
 
 export interface EvidenceAuditEntry {
@@ -120,6 +122,7 @@ function toPhoto(entry: TrustedPhotoEvidence, scope: Scope): { photo: Photo; byt
     sourceHash: image.sourceHash,
     mimeType: image.mimeType,
     caption: '',
+    ...(entry.ocrText?.trim() ? { ocrText: entry.ocrText.trim() } : {}),
     textEvidence,
     ...(image.capturedAt ? { exif: { capturedAt: image.capturedAt, originalCapture: true } } : {}),
     active: true
@@ -175,7 +178,7 @@ export function adaptTrustedStageACatalog(catalog: TrustedStageACatalog, options
     reviewContextHash: digest([catalog.references, catalog.corrections]),
     active: true
   };
-  const request: Request = RequestSchema.parse({ contractVersion: 'classification-stage-a.1', runId: options.runId, scope: catalog.scope, authorizationRevision: catalog.authorizationRevision, trigger: options.trigger, photos, references: asArray(catalog.references), corrections: asArray(catalog.corrections), budget: options.budget });
+  const request: Request = RequestSchema.parse({ contractVersion: 'classification-stage-a.1', runId: options.runId, scope: catalog.scope, authorizationRevision: catalog.authorizationRevision, trigger: options.trigger, photos, references: asArray(catalog.references), corrections: asArray(catalog.corrections), ...(options.retrievalHints?.length ? { retrievalHints: asArray(options.retrievalHints) } : {}), budget: options.budget });
   const bytesByPhoto = new Map(built.flatMap(item => item.bytes ? [[item.photo.photoId, item.bytes] as const] : []));
   const resolveImage: ImageResolver = async (photo, signal) => {
     if(signal.aborted)fail('CANCELLED');

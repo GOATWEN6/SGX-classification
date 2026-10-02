@@ -32,6 +32,8 @@ type Association = {
   source: string;
   status: string;
   score?: number;
+  decisionBasis?: string;
+  evidenceStrength?: string;
   evidenceRefs: string[];
 };
 type LabActionKind = 'accept_story' | 'reject_association' | 'remove_content' | 'split_content' | 'merge_stories' | 'delete_evidence' | 'revoke_authorization';
@@ -338,7 +340,7 @@ export default function ClassificationLabPage() {
 
         <div className={styles.detailGrid}>
           <section className={styles.detailCard}><h3>关系与风险</h3>
-            {(job.result?.organization.associations.length ?? 0) === 0 ? <p className={styles.empty}>没有产生关系候选。</p> : job.result?.organization.associations.map(item => <div className={styles.row} key={item.associationId}><div><strong>{item.relation}</strong><small>{item.source} · {item.status}</small></div><div className={styles.rowAction}><span>{item.score === undefined ? '用户明确指定' : `规则分 ${item.score.toFixed(2)}`}</span>{job.view?.authorizationState !== 'revoked' && item.status !== 'rejected' && <button type="button" disabled={loading} onClick={() => void performAction('reject_association', [item.associationId])}>拒绝关系</button>}</div></div>)}
+            {(job.result?.organization.associations.length ?? 0) === 0 ? <p className={styles.empty}>没有产生关系候选。</p> : job.result?.organization.associations.map(item => <div className={styles.row} key={item.associationId}><div><strong>{item.relation}</strong><small>{item.source} · {item.status}</small></div><div className={styles.rowAction}><span>{item.source === 'user_explicit' ? '用户明确指定' : item.decisionBasis === 'legacy_overlap' ? '历史重合基线，仅供回放' : `AI 证据规则 · ${item.evidenceStrength ?? '证据不足'}`}</span>{job.view?.authorizationState !== 'revoked' && item.status !== 'rejected' && <button type="button" disabled={loading} onClick={() => void performAction('reject_association', [item.associationId])}>拒绝关系</button>}</div></div>)}
             {job.result?.organization.reviewItems.map(item => <p className={styles.risk} key={item}>{item}</p>)}
           </section>
           <section className={styles.detailCard}><h3>输入 Evidence</h3>
@@ -349,7 +351,7 @@ export default function ClassificationLabPage() {
             <div className={styles.row}><span>模型</span><strong>{job.result?.provider.modelVersion ?? '—'}</strong></div>
             <div className={styles.row}><span>候选边</span><strong>{job.result?.retrieval.candidateCount ?? 0}</strong></div>
             <div className={styles.row}><span>内部比较</span><strong>{job.result?.retrieval.comparisonCount ?? 0}</strong></div>
-            <div className={styles.row}><span>分数含义</span><strong>召回启发值，非概率</strong></div>
+            <div className={styles.row}><span>候选召回</span><strong>分类通道 Top-K，仅选择复核对象</strong></div>
           </section>
           <section className={styles.detailCard}><h3>人工动作审计</h3>
             {(job.actions?.length ?? 0) === 0 ? <p className={styles.empty}>尚无人工修改，当前视图等于 Provider 原始结果。</p> : job.actions.map(item => <div className={styles.row} key={item.actionId}><div><strong>{actionCopy(item.kind)}</strong><small>{new Date(item.createdAt).toLocaleString('zh-CN')}</small></div><span>{item.targetIds.length} 个目标</span></div>)}

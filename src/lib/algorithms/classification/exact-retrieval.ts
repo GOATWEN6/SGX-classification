@@ -17,7 +17,7 @@ import {
 } from './hybrid-contract';
 import { digest } from './stage-a-contract';
 
-export const EXACT_RETRIEVAL_VERSION = 'exact-observation-retrieval.1';
+export const EXACT_RETRIEVAL_VERSION = 'exact-observation-retrieval.2';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const dateTime = z.string().datetime({ offset: true });
@@ -70,13 +70,7 @@ type IndexedContent = {
   evidenceRefs: string[];
 };
 
-const weights: Array<[ContentObservation['facet'], number]> = [
-  ['time', 0.25],
-  ['place', 0.20],
-  ['event', 0.25],
-  ['person', 0.20],
-  ['theme', 0.10]
-];
+const retrievalFacets: ContentObservation['facet'][] = ['time', 'place', 'event', 'person', 'theme'];
 
 function unique<T>(values: T[]): T[] { return [...new Set(values)]; }
 function normalized(observation: ContentObservation): string {
@@ -118,21 +112,32 @@ function intersects(left: Set<string> | undefined, right: Set<string> | undefine
   return false;
 }
 
-function score(left: IndexedContent, right: IndexedContent): { value: number; reasons: string[]; conflicted: boolean } {
-  let value = 0;
+function retrievalSignals(left: IndexedContent, right: IndexedContent): { tier: number; reasons: string[]; conflicted: boolean } {
   const reasons: string[] = [];
-  for(const [facet, weight] of weights) {
+  const matched = new Set<ContentObservation['facet']>();
+  for(const facet of retrievalFacets) {
     if(intersects(left.facets.get(facet), right.facets.get(facet))) {
-      value += weight;
+      matched.add(facet);
       reasons.push(`${facet}_overlap`);
     }
   }
-  const conflicted = weights.some(([facet]) => left.conflictedFacets.has(facet) || right.conflictedFacets.has(facet));
-  if(conflicted) {
-    value = Math.min(value, 0.54);
-    reasons.push('conflict_cap');
-  }
-  return { value: Number(value.toFixed(4)), reasons, conflicted };
+  const conflicted = retrievalFacets.some(facet => left.conflictedFacets.has(facet) || right.conflictedFacets.has(facet));
+  if(conflicted) reasons.push('conflict_present');
+  // Ordered recall lanes, not an additive score. A lane only chooses which
+  // candidates are worth further inspection and never authorizes a merge.
+  const event = matched.has('event');
+  const time = matched.has('time');
+  const place = matched.has('place');
+  const person = matched.has('person');
+  const theme = matched.has('theme');
+  const tier = event && time && place ? 0
+    : event && (time || place) ? 1
+      : event ? 2
+        : time && place ? 3
+          : person && (time || place || theme) ? 4
+            : matched.size > 0 ? 5
+              : 6;
+  return { tier, reasons, conflicted };
 }
 
 function evidenceRefs(left: IndexedContent, right: IndexedContent): string[] {
@@ -142,8 +147,8 @@ function evidenceRefs(left: IndexedContent, right: IndexedContent): string[] {
 
 /**
  * Deterministic T0 baseline. It scans exact observation matches in memory but
- * only emits sparse top-K candidates. The score is a retrieval heuristic, not
- * a calibrated probability and not a production automation threshold.
+ * only emits sparse top-K candidates. Categorical recall lanes order candidates;
+ * they do not estimate relation confidence or authorize product actions.
  */
 export function retrieveExactCandidates(raw: unknown): ExactRetrievalResult {
   const input = ExactRetrievalInputSchema.parse(raw);
@@ -169,10 +174,10 @@ export function retrieveExactCandidates(raw: unknown): ExactRetrievalResult {
       if(targetContentId === sourceContentId || blockedPairs.has(pairId(sourceContentId, targetContentId))) return [];
       const target = indexed.get(targetContentId)!;
       comparisonCount += 1;
-      const scored = score(source, target);
-      if(!input.includeZeroSignalFallback && scored.value === 0) return [];
-      return [{ targetContentId, target, ...scored }];
-    }).sort((left, right) => right.value - left.value || left.targetContentId.localeCompare(right.targetContentId));
+      const signals = retrievalSignals(source, target);
+      if(!input.includeZeroSignalFallback && signals.tier === 6) return [];
+      return [{ targetContentId, target, ...signals }];
+    }).sort((left, right) => left.tier - right.tier || left.targetContentId.localeCompare(right.targetContentId));
 
     const selectedCandidateIds: string[] = [];
     const selectedContentIds = new Set<string>();
@@ -183,7 +188,7 @@ export function retrieveExactCandidates(raw: unknown): ExactRetrievalResult {
       if(emittedPairs.has(pair)) continue;
       emittedPairs.add(pair);
       selectedContentIds.add(item.targetContentId);
-      const fallback = item.value === 0;
+      const fallback = item.tier === 6;
       fallbackUsed ||= fallback;
       const candidate = RetrievalCandidateSchema.parse({
         schemaVersion: HYBRID_SCHEMA_VERSION,
@@ -194,7 +199,6 @@ export function retrieveExactCandidates(raw: unknown): ExactRetrievalResult {
         toContentId: item.targetContentId,
         relation: 'same_story',
         rank: selectedCandidateIds.length + 1,
-        retrievalScore: item.value,
         method: EXACT_RETRIEVAL_VERSION,
         coverage: fallback ? 'fallback' : 'selected',
         reasons: item.reasons.length ? item.reasons : ['zero_signal_fallback'],

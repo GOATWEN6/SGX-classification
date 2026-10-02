@@ -213,6 +213,100 @@ test('real Stage A mock transport runs through the durable v2 lifecycle', async 
   assert.ok(completed.result.output.observations.some(item => item.facet === 'scene'));
 });
 
+test('consent-gated person matching reaches the model and only produces unnamed AI candidates', async t => {
+  const value = await fixture(t, 'stage_a_mock', {
+    submission: {
+      images: [
+        { filename: 'family-one.png', mimeType: 'image/png', bytes: png },
+        { filename: 'family-two.png', mimeType: 'image/png', bytes: png }
+      ],
+      userTextTargetIndexes: [0, 1]
+    }
+  });
+  const imageIds = value.built.envelope.contents.filter(item => item.modality === 'image').map(item => item.evidenceId);
+  const { guardDigest: _guardDigest, ...guardInput } = value.guard;
+  const matchingGuard = buildTrustedLabGuardSnapshot({
+    ...guardInput,
+    allowPersonMatching: true,
+    personMatchingEvidenceIds: imageIds,
+    evidence: guardInput.evidence.map(item => imageIds.includes(item.evidenceId)
+      ? { ...item, personConsentRef: `person_consent_${item.evidenceId}` }
+      : item)
+  });
+  value.input.guard = matchingGuard;
+  value.input.budgetPolicy = { ...value.input.budgetPolicy, maxRequests: 3, maxOutputTokens: 20_000 };
+  const calls = [];
+  const transport = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const context = JSON.parse(body.messages[1].content[0].text);
+    calls.push(context);
+    let response;
+    if(context.stage === 'extract') {
+      const photoId = context.untrustedContext.requestedPhotoIds[0];
+      response = { observations: [{
+        photoId,
+        people: [{
+          faceId: `face_${calls.length}`, description: '', box: { x: 0.1, y: 0.1, width: 0.2, height: 0.3 },
+          supports: [{ photoId, source: 'visual', quote: '画面可见一张清晰人脸' }]
+        }],
+        mentions: [], times: [], places: [], events: [], scenes: [],
+        unknownFacets: ['time', 'place', 'event', 'scene'], conflicts: []
+      }] };
+    } else {
+      const [left, right] = context.untrustedContext.requestedPairs[0];
+      const observations = context.untrustedContext.observations;
+      response = { relations: [
+        {
+          kind: 'event', left: { photoId: left }, right: { photoId: right }, decision: 'unknown',
+          supports: [left, right].map(photoId => ({ photoId, source: 'visual', quote: '仅见人物，缺少事件线索' })),
+          rationale: '缺少足够事件证据'
+        },
+        {
+          kind: 'person',
+          left: { photoId: left, faceId: observations[0].people[0].faceId },
+          right: { photoId: right, faceId: observations[1].people[0].faceId },
+          decision: 'same',
+          supports: [left, right].map(photoId => ({ photoId, source: 'visual', quote: '两张照片均可见待比较人脸' })),
+          rationale: '仅形成同人候选，不确认姓名或关系'
+        }
+      ] };
+    }
+    return new Response(JSON.stringify({
+      id: `person_response_${calls.length}`, model: value.model,
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(response) } }]
+    }), { status: 200 });
+  };
+  const factory = new StageALabExecutorFactory({
+    profile: value.executionProfile,
+    provider: 'qwen', model: value.model, inputCnyPerMillion: 0, outputCnyPerMillion: 0,
+    placeKindPolicy: placePolicy(value.built.envelope.taxonomyVersion), transport
+  });
+  const pending = await submitLabExecutionJob(value.input, value.store, clock);
+  const completed = await runPendingLabExecutionJob(pending.jobId, {
+    store: value.store, factory, guardProvider: new GuardProvider(matchingGuard), clock,
+    runnerGeneration: 'runner_stage_a_person_matching'
+  });
+  assert.ok(['succeeded', 'needs_review'].includes(completed.status));
+  assert.equal(calls.filter(call => call.stage === 'relate').length, 1);
+  assert.equal(calls.find(call => call.stage === 'relate').untrustedContext.personMatchingEnabled, true);
+  const personObservations = completed.result.output.observations.filter(item => item.facet === 'person');
+  assert.equal(personObservations.length, 2);
+  assert.ok(personObservations.every(item => item.rawValue === '未命名人物'));
+  assert.deepEqual(completed.result.output.highImpactClaims, []);
+});
+
+test('person matching guard fails closed when any routed image lacks person consent', async t => {
+  const value = await fixture(t);
+  const imageId = value.built.envelope.contents.find(item => item.modality === 'image').evidenceId;
+  const { guardDigest: _guardDigest, ...guardInput } = value.guard;
+  assert.throws(() => buildTrustedLabGuardSnapshot({
+    ...guardInput,
+    allowPersonMatching: true,
+    personMatchingEvidenceIds: [imageId]
+  }), /PERSON_CONSENT_MISSING/);
+});
+
 test('stage_a_real enforces grant and reads the credential only at the authorized call', async t => {
   const value = await fixture(t, 'stage_a_real');
   const calls = [];

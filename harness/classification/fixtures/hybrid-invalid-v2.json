@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "id": "person-feature-without-biometric-consent",
+      "base": "assetFeatures.personEmbedding",
+      "mutation": {
+        "op": "delete",
+        "path": "/biometricConsentRef"
+      },
+      "error": "BIOMETRIC_CONSENT_REQUIRED"
+    },
+    {
+      "id": "stable-person-with-one-reference",
+      "base": "familyReferences.stablePerson",
+      "mutation": {
+        "op": "set",
+        "path": "/sourceContentIds",
+        "value": [
+          "content_photo_2"
+        ]
+      },
+      "error": "STABLE_PERSON_REFERENCE_REQUIRES_DIVERSE_SOURCES"
+    },
+    {
+      "id": "evidence-rule-policy-with-numeric-threshold",
+      "base": "decisionPolicies.shadow",
+      "mutation": {
+        "op": "set",
+        "path": "/autoLinkMin",
+        "value": 0.8
+      },
+      "error": "EVIDENCE_RULES_CANNOT_USE_NUMERIC_THRESHOLDS"
+    },
+    {
+      "id": "self-retrieval-candidate",
+      "base": "retrievalCandidate",
+      "mutation": {
+        "op": "set",
+        "path": "/toContentId",
+        "value": "content_photo_1"
+      },
+      "error": "SELF_RETRIEVAL_CANDIDATE"
+    },
+    {
+      "id": "active-review-without-user-action",
+      "base": "decisionResult",
+      "mutation": {
+        "op": "set",
+        "path": "/shadow",
+        "value": false
+      },
+      "error": "ACTIVE_REVIEW_REQUIRES_USER_ACTION"
+    },
+    {
+      "id": "policy-without-explicit-decision-mode",
+      "base": "decisionPolicies.shadow",
+      "mutation": {
+        "op": "delete",
+        "path": "/decisionMode"
+      },
+      "error": "Required"
+    },
+    {
+      "id": "shadow-calibrated-probability-is-not-implemented",
+      "base": "decisionPolicies.shadow",
+      "mutation": {
+        "op": "set",
+        "path": "/decisionMode",
+        "value": "calibrated_probability"
+      },
+      "error": "CALIBRATED_PROBABILITY_NOT_IMPLEMENTED"
+    }
+  ]
+}

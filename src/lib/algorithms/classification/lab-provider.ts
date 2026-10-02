@@ -63,8 +63,8 @@ export class DeterministicLabProvider implements ClassificationLabProvider {
       return [];
     });
     const retrieval = retrieveExactCandidates({
-      schemaVersion: '1.0',
-      contractVersion: 'classification-hybrid.1',
+      schemaVersion: '2.0',
+      contractVersion: 'classification-hybrid.2',
       scope: envelope.scope,
       contents: adapted.contents,
       observations,
@@ -74,18 +74,19 @@ export class DeterministicLabProvider implements ClassificationLabProvider {
       createdAt: envelope.createdAt
     });
     const organization = organizeSparseContent({
-      schemaVersion: '1.0',
-      contractVersion: 'classification-hybrid.1',
+      schemaVersion: '2.0',
+      contractVersion: 'classification-hybrid.2',
       scope: envelope.scope,
       contents: adapted.contents,
       observations,
       retrievalCandidates: [...adapted.retrievalCandidates, ...retrieval.candidates],
       explicitAssociations: adapted.explicitAssociations,
       decisionPolicy: {
-        schemaVersion: '1.0',
-        contractVersion: 'classification-hybrid.1',
+        schemaVersion: '2.0',
+        contractVersion: 'classification-hybrid.2',
         policyVersion: 'classification-lab-shadow.1',
         mode: 'shadow',
+        decisionMode: 'evidence_rules',
         calibrated: false,
         maxCandidatesPerContent: 8,
         riskPolicyVersion: 'impact-risk.1',

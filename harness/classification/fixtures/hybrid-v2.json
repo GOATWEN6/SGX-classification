@@ -1,0 +1,292 @@
+{
+  "assetFeatures": {
+    "imageEmbedding": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "featureId": "feature_image_1",
+      "scope": {
+        "householdId": "house_a",
+        "subjectId": "elder_a"
+      },
+      "contentId": "content_photo_1",
+      "sourceEvidenceIds": [
+        "evidence_photo_1"
+      ],
+      "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "featureKind": "image_embedding",
+      "producerVersion": "siglip-adapter.1",
+      "modelVersion": "fixture-model.1",
+      "valueRef": "vector_image_1",
+      "valueDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "vectorDimensions": 768,
+      "lifecycleState": "active",
+      "createdAt": "2026-09-27T08:00:00.000Z"
+    },
+    "personEmbedding": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "featureId": "feature_person_1",
+      "scope": {
+        "householdId": "house_a",
+        "subjectId": "elder_a"
+      },
+      "contentId": "content_photo_1",
+      "sourceEvidenceIds": [
+        "evidence_photo_1"
+      ],
+      "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "featureKind": "person_embedding",
+      "producerVersion": "person-adapter.1",
+      "modelVersion": "fixture-person-model.1",
+      "valueRef": "vector_person_1",
+      "valueDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "vectorDimensions": 512,
+      "biometricConsentRef": "consent_biometric_1",
+      "lifecycleState": "active",
+      "createdAt": "2026-09-27T08:00:00.000Z"
+    }
+  },
+  "retrievalCandidate": {
+    "schemaVersion": "2.0",
+    "contractVersion": "classification-hybrid.2",
+    "candidateId": "candidate_1",
+    "scope": {
+      "householdId": "house_a",
+      "subjectId": "elder_a"
+    },
+    "fromContentId": "content_photo_1",
+    "toContentId": "content_photo_2",
+    "relation": "same_event",
+    "rank": 1,
+    "retrievalScore": 0.74,
+    "stageDecision": "unknown",
+    "method": "exact-observation-retrieval.1",
+    "coverage": "selected",
+    "reasons": [
+      "event_overlap",
+      "time_overlap"
+    ],
+    "featureRefs": [
+      "feature_image_1"
+    ],
+    "evidenceRefs": [
+      "evidence_photo_1",
+      "evidence_photo_2"
+    ],
+    "createdAt": "2026-09-27T08:00:01.000Z"
+  },
+  "familyReferences": {
+    "provisionalPerson": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "referenceId": "reference_person_1",
+      "scope": {
+        "householdId": "house_a",
+        "subjectId": "elder_a"
+      },
+      "kind": "person",
+      "canonicalId": "person_a",
+      "labelState": "unnamed",
+      "maturity": "provisional",
+      "sourceContentIds": [
+        "content_photo_1"
+      ],
+      "evidenceRefs": [
+        "evidence_photo_1"
+      ],
+      "featureRefs": [
+        "feature_person_1"
+      ],
+      "confirmedBy": "actor_a",
+      "confirmedAt": "2026-09-27T08:01:00.000Z",
+      "authorizationRevision": "auth_1",
+      "biometricConsentRef": "consent_biometric_1",
+      "revision": 1,
+      "lifecycleState": "active"
+    },
+    "stablePerson": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "referenceId": "reference_person_2",
+      "scope": {
+        "householdId": "house_a",
+        "subjectId": "elder_a"
+      },
+      "kind": "person",
+      "canonicalId": "person_b",
+      "labelState": "user_confirmed",
+      "displayLabel": "李阿姨",
+      "maturity": "stable",
+      "sourceContentIds": [
+        "content_photo_2",
+        "content_photo_3"
+      ],
+      "evidenceRefs": [
+        "evidence_photo_2",
+        "evidence_photo_3"
+      ],
+      "featureRefs": [
+        "feature_person_2",
+        "feature_person_3"
+      ],
+      "confirmedBy": "actor_a",
+      "confirmedAt": "2026-09-27T08:02:00.000Z",
+      "authorizationRevision": "auth_1",
+      "biometricConsentRef": "consent_biometric_1",
+      "revision": 2,
+      "lifecycleState": "active"
+    }
+  },
+  "decisionPolicies": {
+    "shadow": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "policyVersion": "decision-shadow.1",
+      "mode": "shadow",
+      "decisionMode": "evidence_rules",
+      "calibrated": false,
+      "maxCandidatesPerContent": 8,
+      "riskPolicyVersion": "impact-risk.1",
+      "createdAt": "2026-09-27T08:03:00.000Z"
+    },
+    "active": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "policyVersion": "decision-active-evidence-rules.2",
+      "mode": "active",
+      "decisionMode": "evidence_rules",
+      "calibrated": false,
+      "maxCandidatesPerContent": 8,
+      "riskPolicyVersion": "impact-risk.1",
+      "createdAt": "2026-09-27T08:03:00.000Z"
+    }
+  },
+  "decisionResult": {
+    "schemaVersion": "2.0",
+    "contractVersion": "classification-hybrid.2",
+    "resultId": "decision_result_1",
+    "candidateId": "candidate_1",
+    "policyVersion": "decision-shadow.1",
+    "decisionMode": "evidence_rules",
+    "basis": "retrieval_only",
+    "evidenceStrength": "insufficient",
+    "groupImpact": "singleton_pair",
+    "action": "review",
+    "riskLevel": "medium",
+    "shadow": true,
+    "inDistribution": false,
+    "userActionRequired": false,
+    "reasons": [
+      "uncalibrated_policy"
+    ],
+    "createdAt": "2026-09-27T08:03:01.000Z"
+  },
+  "sparseAssociationInput": {
+    "schemaVersion": "2.0",
+    "contractVersion": "classification-hybrid.2",
+    "scope": {
+      "householdId": "house_a",
+      "subjectId": "elder_a"
+    },
+    "contents": [
+      {
+        "contentId": "content_photo_1",
+        "scope": {
+          "householdId": "house_a",
+          "subjectId": "elder_a"
+        },
+        "modality": "photo",
+        "evidenceIds": [
+          "evidence_photo_1"
+        ],
+        "lifecycle": "active"
+      },
+      {
+        "contentId": "content_photo_2",
+        "scope": {
+          "householdId": "house_a",
+          "subjectId": "elder_a"
+        },
+        "modality": "photo",
+        "evidenceIds": [
+          "evidence_photo_2"
+        ],
+        "lifecycle": "active"
+      }
+    ],
+    "observations": [
+      {
+        "contentId": "content_photo_1",
+        "evidenceId": "evidence_photo_1",
+        "facet": "event",
+        "rawValue": "家庭聚会",
+        "normalizedValue": "家庭聚会",
+        "supports": [
+          {
+            "evidenceId": "evidence_photo_1",
+            "quote": "餐桌旁多人合影"
+          }
+        ],
+        "state": "candidate"
+      },
+      {
+        "contentId": "content_photo_2",
+        "evidenceId": "evidence_photo_2",
+        "facet": "event",
+        "rawValue": "家庭聚会",
+        "normalizedValue": "家庭聚会",
+        "supports": [
+          {
+            "evidenceId": "evidence_photo_2",
+            "quote": "同一餐桌场景"
+          }
+        ],
+        "state": "candidate"
+      }
+    ],
+    "retrievalCandidates": [
+      {
+        "schemaVersion": "2.0",
+        "contractVersion": "classification-hybrid.2",
+        "candidateId": "candidate_1",
+        "scope": {
+          "householdId": "house_a",
+          "subjectId": "elder_a"
+        },
+        "fromContentId": "content_photo_1",
+        "toContentId": "content_photo_2",
+        "relation": "same_event",
+        "rank": 1,
+        "retrievalScore": 0.74,
+        "stageDecision": "unknown",
+        "method": "exact-observation-retrieval.1",
+        "coverage": "selected",
+        "reasons": [
+          "event_overlap",
+          "time_overlap"
+        ],
+        "featureRefs": [
+          "feature_image_1"
+        ],
+        "evidenceRefs": [
+          "evidence_photo_1",
+          "evidence_photo_2"
+        ],
+        "createdAt": "2026-09-27T08:00:01.000Z"
+      }
+    ],
+    "explicitAssociations": [],
+    "decisionPolicy": {
+      "schemaVersion": "2.0",
+      "contractVersion": "classification-hybrid.2",
+      "policyVersion": "decision-shadow.1",
+      "mode": "shadow",
+      "decisionMode": "evidence_rules",
+      "calibrated": false,
+      "maxCandidatesPerContent": 8,
+      "riskPolicyVersion": "impact-risk.1",
+      "createdAt": "2026-09-27T08:03:00.000Z"
+    },
+    "createdAt": "2026-09-27T08:04:00.000Z"
+  }
+}

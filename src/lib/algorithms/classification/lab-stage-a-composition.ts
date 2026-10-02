@@ -29,7 +29,7 @@ import {
   adaptStageAForOrganization,
   type UnresolvedTemporalObservation
 } from './stage-a-organization-adapter';
-import { digest, type Budget, type Correction, type Reference, type Request } from './stage-a-contract';
+import { digest, type Budget, type Correction, type Reference, type Request, type RetrievalHint } from './stage-a-contract';
 import type { StageResult } from './stage-a-pipeline';
 import {
   HYBRID_CONTRACT_VERSION,
@@ -52,6 +52,8 @@ export interface StageALabAuthorization {
   allowedConsentRefs: readonly string[];
   allowedCorrectionIds: readonly string[];
   allowPersonMatching: boolean;
+  personMatchingEvidenceIds?: readonly string[];
+  personConsentRefsByEvidenceId?: Readonly<Record<string, string>>;
 }
 
 export interface PlaceKindPolicy {
@@ -74,6 +76,8 @@ export interface StageALabPlanInput {
   references?: Reference[];
   corrections?: Correction[];
   trustedOriginalCaptureEvidenceIds?: readonly string[];
+  derivedOcrTextByEvidenceId?: Readonly<Record<string, { sourceHash: `sha256:${string}`; text: string }>>;
+  retrievalHints?: readonly RetrievalHint[];
 }
 
 export interface ImageRoute {
@@ -182,12 +186,27 @@ function validateAuthorization(envelope: IngestionEnvelope, authorization: Stage
   if(authorization.actorId !== envelope.actorId) fail('NOT_AUTHORIZED');
   if(!sameScope(authorization.scope, envelope.scope)) fail('CROSS_SCOPE');
   if(authorization.authorizationRevision !== envelope.authorizationRevision) fail('AUTHORIZATION_CHANGED');
-  if(authorization.allowPersonMatching) fail('PERSON_MATCHING_NOT_ALLOWED');
   const allowedEvidence = new Set(authorization.allowedEvidenceIds);
   const allowedConsent = new Set(authorization.allowedConsentRefs);
   for(const record of envelope.evidence) {
     if(!isActive(record)) continue;
     if(!allowedEvidence.has(record.evidenceId) || ('consentRef' in record && !allowedConsent.has(record.consentRef))) fail('NOT_AUTHORIZED');
+  }
+  if(!authorization.allowPersonMatching
+    && ((authorization.personMatchingEvidenceIds?.length ?? 0)
+      || Object.keys(authorization.personConsentRefsByEvidenceId ?? {}).length)) {
+    fail('PERSON_MATCHING_NOT_AUTHORIZED');
+  }
+  if(authorization.allowPersonMatching) {
+    const matchingEvidence = new Set(authorization.personMatchingEvidenceIds ?? []);
+    const personConsentRefs = authorization.personConsentRefsByEvidenceId ?? {};
+    const activeImages = envelope.evidence.filter(record => isActive(record) && isImageRecord(record));
+    if(activeImages.some(record => !matchingEvidence.has(record.evidenceId) || !personConsentRefs[record.evidenceId])) {
+      fail('PERSON_CONSENT_MISSING');
+    }
+    if([...matchingEvidence].some(evidenceId => !activeImages.some(record => record.evidenceId === evidenceId))) {
+      fail('NOT_AUTHORIZED');
+    }
   }
 }
 
@@ -237,13 +256,31 @@ function mapCorrection(
   stagePhotoIds: ReadonlySet<string>
 ): Correction {
   if(!authorization.allowedCorrectionIds.includes(correction.correctionId) || correction.authorityRef !== authorization.authorityRef) fail('NOT_AUTHORIZED');
-  if(correction.kind === 'person') fail('PERSON_MATCHING_NOT_ALLOWED');
+  if(correction.kind === 'person' && !authorization.allowPersonMatching) fail('PERSON_MATCHING_NOT_AUTHORIZED');
   const mapPhotoId = (photoId: string): string => stagePhotoIdByContentId[photoId] ?? (stagePhotoIds.has(photoId) ? photoId : fail('NOT_AUTHORIZED'));
-  return {
+  const mapped = {
     ...correction,
     left: { ...correction.left, photoId: mapPhotoId(correction.left.photoId) },
     right: { ...correction.right, photoId: mapPhotoId(correction.right.photoId) }
   };
+  if(mapped.kind === 'person') {
+    const personConsentRefs = authorization.personConsentRefsByEvidenceId ?? {};
+    if(!personConsentRefs[mapped.left.photoId] || !personConsentRefs[mapped.right.photoId]) fail('PERSON_CONSENT_MISSING');
+  }
+  return mapped;
+}
+
+function mapReference(
+  reference: Reference,
+  authorization: StageALabAuthorization,
+  stagePhotoIdByContentId: Readonly<Record<string, string>>,
+  stagePhotoIds: ReadonlySet<string>
+): Reference {
+  if(!authorization.allowPersonMatching) fail('PERSON_MATCHING_NOT_AUTHORIZED');
+  const photoId = stagePhotoIdByContentId[reference.endpoint.photoId]
+    ?? (stagePhotoIds.has(reference.endpoint.photoId) ? reference.endpoint.photoId : fail('NOT_AUTHORIZED'));
+  if(!(authorization.personConsentRefsByEvidenceId ?? {})[photoId]) fail('PERSON_CONSENT_MISSING');
+  return { ...reference, endpoint: { ...reference.endpoint, photoId } };
 }
 
 export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
@@ -251,7 +288,7 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
   const baseOrganization = adaptIngestionForOrganization(input.envelope, input.payloads);
   const envelope = baseOrganization.envelope;
   validateAuthorization(envelope, input.authorization);
-  if(input.references?.length) fail('PERSON_MATCHING_NOT_ALLOWED');
+  if(input.references?.length && !input.authorization.allowPersonMatching) fail('PERSON_MATCHING_NOT_AUTHORIZED');
   const inputCorrections = input.corrections ?? [];
   if(new Set(inputCorrections.map(correction => correction.correctionId)).size !== inputCorrections.length) fail('DUPLICATE_CORRECTION');
   for(const correction of inputCorrections) {
@@ -284,6 +321,21 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
     const record = evidenceById.get(evidenceId);
     if(!record || !isImageRecord(record) || !record.capturedAt) fail('INVALID_TEMPORAL_QUALIFIER');
   }
+  const derivedOcrTextByEvidenceId = input.derivedOcrTextByEvidenceId ?? {};
+  for(const [evidenceId, derived] of Object.entries(derivedOcrTextByEvidenceId)) {
+    const record = evidenceById.get(evidenceId);
+    if(!activeImageIds.has(evidenceId) || !record || !isImageRecord(record)) fail('NOT_AUTHORIZED');
+    if(derived.sourceHash !== record.sourceHash) fail('SOURCE_HASH_MISMATCH');
+    if(!derived.text.trim() || derived.text.length > 16000) fail('INVALID_EVIDENCE_BINDING');
+  }
+  const retrievalHints = [...(input.retrievalHints ?? [])];
+  const hintKeys = new Set<string>();
+  for(const hint of retrievalHints) {
+    if(!activeImageIds.has(hint.leftPhotoId) || !activeImageIds.has(hint.rightPhotoId)) fail('NOT_AUTHORIZED');
+    const key = [hint.kind, ...[hint.leftPhotoId, hint.rightPhotoId].sort(), hint.modelId, hint.modelRevision].join('/');
+    if(hintKeys.has(key)) fail('DUPLICATE_RETRIEVAL_HINT');
+    hintKeys.add(key);
+  }
 
   let stageA: AdaptedStageAInput | undefined;
   if(imageRoutes.length) {
@@ -303,10 +355,18 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
         routedEvidence.add(textRecord.evidenceId);
         return { record: textRecord, text };
       });
-      return { image, imageBytes: input.imageBytesByEvidenceId[route.evidenceId], textEvidence };
+      return {
+        image,
+        imageBytes: input.imageBytesByEvidenceId[route.evidenceId],
+        ...(derivedOcrTextByEvidenceId[route.evidenceId]?.text.trim()
+          ? { ocrText: derivedOcrTextByEvidenceId[route.evidenceId].text.trim() }
+          : {}),
+        textEvidence
+      };
     });
     const stagePhotoIdByContentId = Object.fromEntries(imageRoutes.map(route => [route.contentId, route.stagePhotoId]));
     const stagePhotoIds = new Set(imageRoutes.map(route => route.stagePhotoId));
+    const references = (input.references ?? []).map(reference => mapReference(reference, input.authorization, stagePhotoIdByContentId, stagePhotoIds));
     const corrections = inputCorrections.map(correction => mapCorrection(correction, input.authorization, stagePhotoIdByContentId, stagePhotoIds));
     const catalog: TrustedStageACatalog = {
       actorId: input.authorization.actorId,
@@ -314,7 +374,7 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
       authorizationRevision: input.authorization.authorizationRevision,
       contextRevision: input.authorization.contextRevision,
       authorityRef: input.authorization.authorityRef,
-      allowPersonMatching: false,
+      allowPersonMatching: input.authorization.allowPersonMatching,
       allowedEvidenceIds: [...input.authorization.allowedEvidenceIds],
       allowedConsentRefs: [...input.authorization.allowedConsentRefs],
       evidence: envelope.evidence.filter(record => routedEvidence.has(record.evidenceId)).map(record => {
@@ -322,10 +382,15 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
         return record;
       }),
       photos: stagePhotos,
-      references: [],
+      references,
       corrections
     };
-    stageA = adaptTrustedStageACatalog(catalog, { runId: input.runId, trigger: input.trigger, budget: input.budget });
+    stageA = adaptTrustedStageACatalog(catalog, {
+      runId: input.runId,
+      trigger: input.trigger,
+      budget: input.budget,
+      ...(retrievalHints.length ? { retrievalHints } : {})
+    });
   }
 
   const normalizedAuthorization = {
@@ -338,7 +403,10 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
     allowedEvidenceIds: uniqueSorted(input.authorization.allowedEvidenceIds),
     allowedConsentRefs: uniqueSorted(input.authorization.allowedConsentRefs),
     allowedCorrectionIds: uniqueSorted(input.authorization.allowedCorrectionIds),
-    allowPersonMatching: input.authorization.allowPersonMatching
+    allowPersonMatching: input.authorization.allowPersonMatching,
+    personMatchingEvidenceIds: uniqueSorted(input.authorization.personMatchingEvidenceIds ?? []),
+    personConsentRefsByEvidenceId: Object.fromEntries(Object.entries(input.authorization.personConsentRefsByEvidenceId ?? {})
+      .sort(([left], [right]) => left.localeCompare(right)))
   };
   const authorizationDigest = digest(normalizedAuthorization) as `sha256:${string}`;
   const payloadHashes = Object.entries(input.payloads.textByEvidenceId).sort(([left], [right]) => left.localeCompare(right)).map(([evidenceId, text]) => [evidenceId, hashBytes(Buffer.from(text, 'utf8'))]);
@@ -358,7 +426,9 @@ export function buildStageALabPlan(input: StageALabPlanInput): StageALabPlan {
     budget: input.budget,
     createdAt: input.createdAt,
     references: input.references ?? [],
-    corrections: input.corrections ?? []
+    corrections: input.corrections ?? [],
+    derivedOcrTextByEvidenceId,
+    retrievalHints
   }) as `sha256:${string}`;
 
   return {
@@ -506,6 +576,7 @@ export function composeStageALabResult(input: {
       contractVersion: HYBRID_CONTRACT_VERSION,
       policyVersion: 'classification-lab-stage-a-composition-validation.1',
       mode: 'shadow',
+      decisionMode: 'evidence_rules',
       calibrated: false,
       maxCandidatesPerContent: 128,
       riskPolicyVersion: 'impact-risk.1',

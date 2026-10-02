@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Budget, EVENT_LABELS, Photo, PROMPT_VERSION, SCENE_LABELS, StageDiagnostic, StageError, stable, ExtractSchema, RelateSchema } from './stage-a-contract';
+import { Budget, EVENT_LABELS, Photo, PROMPT_VERSION, SCENE_LABELS, STAGE_A_VALIDATION_VERSION, StageDiagnostic, StageError, stable, ExtractSchema, RelateSchema } from './stage-a-contract';
 export interface ModelCall {stage:'extract'|'relate';photos:Photo[];context:unknown;checkAuthorization?:()=>void;}
 export interface ModelUsage {inputTokens:number;outputTokens:number;}
 export interface ModelReply {value:unknown;usage:ModelUsage;responseId:string;model:string;}
@@ -76,7 +76,7 @@ export class ApiVisionProvider implements VisionProvider {
     credential?:()=>string;grant?:{destination:string;model:string;expiresAt:string;photoIds:string[]};
     inputCnyPerMillion:number;outputCnyPerMillion:number;record?:(entry:{responseId:string;model:string;raw:unknown})=>void;}) {
     if(!options.model||![options.inputCnyPerMillion,options.outputCnyPerMillion].every(x=>Number.isFinite(x)&&x>=0))throw new StageError('INVALID_PROVIDER_CONFIG');
-    this.mode=options.mode??(options.transport?'mock_transport':'real_api');this.version=`${options.provider}/${options.model}/${PROMPT_VERSION}`;
+    this.mode=options.mode??(options.transport?'mock_transport':'real_api');this.version=`${options.provider}/${options.model}/${PROMPT_VERSION}/${STAGE_A_VALIDATION_VERSION}`;
     this.inputCnyPerMillion=options.inputCnyPerMillion;this.outputCnyPerMillion=options.outputCnyPerMillion;
   }
   async invoke(call:ModelCall,signal:AbortSignal):Promise<ModelReply>{
@@ -98,7 +98,7 @@ export class ApiVisionProvider implements VisionProvider {
         photo.mimeType==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:
         Buffer.from(b.slice(0,4)).toString()==='RIFF'&&Buffer.from(b.slice(8,12)).toString()==='WEBP';
       if(!signature)throw new StageError('INVALID_IMAGE');
-      content.push({type:'text',text:JSON.stringify({photoId:photo.photoId,untrustedCaption:photo.caption,untrustedExif:photo.exif})});
+      content.push({type:'text',text:JSON.stringify({photoId:photo.photoId,untrustedCaption:photo.caption,untrustedOcrText:photo.ocrText,untrustedExif:photo.exif})});
       for(const evidence of photo.textEvidence??[])content.push({type:'text',text:JSON.stringify({photoId:photo.photoId,evidenceId:evidence.evidenceId,source:evidence.source,untrustedText:evidence.text})});
       content.push({type:'image_url',image_url:{url:`data:${image.mimeType};base64,${Buffer.from(image.bytes).toString('base64')}`}});
     }

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:sgx:classification-hybrid:v2",
-  "title": "SGX classification hybrid retrieval contract v2",
+  "$id": "urn:sgx:classification-hybrid:v1",
+  "title": "SGX classification hybrid retrieval contract v1",
   "definitions": {
     "Scope": {
       "type": "object",
@@ -16,8 +16,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "featureId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "scope": { "$ref": "#/definitions/Scope" },
         "contentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
@@ -47,8 +47,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "candidateId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "scope": { "$ref": "#/definitions/Scope" },
         "fromContentId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
@@ -86,8 +86,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "referenceId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "scope": { "$ref": "#/definitions/Scope" },
         "kind": { "enum": ["person", "event", "place", "vocabulary", "relation_correction"] },
@@ -128,11 +128,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "policyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "mode": { "enum": ["shadow", "active"] },
-        "decisionMode": { "enum": ["evidence_rules"] },
         "calibrated": { "type": "boolean" },
         "calibrationVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "autoLinkMin": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -141,35 +140,22 @@
         "riskPolicyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
       },
-      "required": ["schemaVersion", "contractVersion", "policyVersion", "mode", "decisionMode", "calibrated", "maxCandidatesPerContent", "riskPolicyVersion", "createdAt"],
-      "allOf": [
-        { "properties": { "calibrated": { "const": false } } },
-        { "not": { "anyOf": [
-          { "required": ["calibrationVersion"] },
-          { "required": ["autoLinkMin"] },
-          { "required": ["autoSeparateMax"] }
-        ] } }
-      ]
+      "required": ["schemaVersion", "contractVersion", "policyVersion", "mode", "calibrated", "maxCandidatesPerContent", "riskPolicyVersion", "createdAt"]
     },
     "DecisionPolicyResult": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "resultId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "candidateId": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
         "policyVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
-        "decisionMode": { "enum": ["evidence_rules"] },
-        "basis": { "enum": ["stage_relation", "retrieval_only", "conflict_guard", "person_reference"] },
-        "evidenceStrength": { "enum": ["supported", "conflicted", "insufficient"] },
-        "groupImpact": { "enum": ["singleton_pair", "extend_story", "bridge_existing_groups", "not_applicable"] },
         "calibrationVersion": { "$ref": "urn:sgx:classification:v1#/definitions/Id" },
-        "action": { "enum": ["auto_link_candidate", "auto_separate", "keep_separate", "review"] },
+        "action": { "enum": ["auto_link_candidate", "auto_separate", "review"] },
         "riskLevel": { "enum": ["low", "medium", "high"] },
         "shadow": { "type": "boolean" },
         "inDistribution": { "type": "boolean" },
-        "userActionRequired": { "type": "boolean" },
         "pSameCalibrated": { "type": "number", "minimum": 0, "maximum": 1 },
         "reasons": {
           "type": "array",
@@ -179,11 +165,7 @@
         },
         "createdAt": { "$ref": "urn:sgx:classification:v1#/definitions/Timestamp" }
       },
-      "required": ["schemaVersion", "contractVersion", "resultId", "candidateId", "policyVersion", "decisionMode", "basis", "evidenceStrength", "groupImpact", "action", "riskLevel", "shadow", "inDistribution", "userActionRequired", "reasons", "createdAt"],
-      "not": { "anyOf": [
-        { "required": ["calibrationVersion"] },
-        { "required": ["pSameCalibrated"] }
-      ] }
+      "required": ["schemaVersion", "contractVersion", "resultId", "candidateId", "policyVersion", "action", "riskLevel", "shadow", "inDistribution", "reasons", "createdAt"]
     },
     "ContentItem": {
       "type": "object",
@@ -290,8 +272,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": "2.0" },
-        "contractVersion": { "const": "classification-hybrid.2" },
+        "schemaVersion": { "const": "1.0" },
+        "contractVersion": { "const": "classification-hybrid.1" },
         "scope": { "$ref": "#/definitions/Scope" },
         "contents": {
           "type": "array",

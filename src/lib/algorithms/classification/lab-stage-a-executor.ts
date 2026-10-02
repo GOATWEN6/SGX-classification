@@ -20,12 +20,17 @@ import {
 import { organizeSparseContent } from './content-organization';
 import { retrieveExactCandidates } from './exact-retrieval';
 import { DeterministicTextExtractor } from './text-extractor';
+import {
+  ACTIVE_EVIDENCE_RULE_POLICY_VERSION,
+  buildActiveEvidenceRulePolicy,
+  collectEvidenceRuleReviewItems
+} from './evidence-rule-policy';
 import { ApiVisionProvider, PROVIDER_ENDPOINTS, type Transport } from './stage-a-provider';
 import { ClassificationEngine, type StageResult } from './stage-a-pipeline';
-import { PROMPT_VERSION, StageError, stable } from './stage-a-contract';
+import { PROMPT_VERSION, STAGE_A_VALIDATION_VERSION, StageError, stable } from './stage-a-contract';
 
 export const STAGE_A_LAB_EXECUTOR_VERSION = 'classification-lab-stage-a-executor.1';
-export const STAGE_A_LAB_DECISION_POLICY_VERSION = 'classification-lab-stage-a-shadow.1';
+export const STAGE_A_LAB_DECISION_POLICY_VERSION = ACTIVE_EVIDENCE_RULE_POLICY_VERSION;
 
 export type StageALabProviderMode = 'stage_a_mock' | 'stage_a_real';
 
@@ -50,10 +55,9 @@ export interface StageALabExecutorFactoryOptions {
 function clone<T>(value: T): T { return structuredClone(value); }
 function equal(left: unknown, right: unknown): boolean { return stable(left) === stable(right); }
 function fail(code: string): never { throw new Error(code); }
-function unique(values: readonly string[]): string[] { return [...new Set(values)].sort(); }
 
 export function stageALabProviderVersion(provider: 'qwen' | 'glm', model: string): string {
-  return `${provider}:${model}:${PROMPT_VERSION}`;
+  return `${provider}:${model}:${PROMPT_VERSION}:${STAGE_A_VALIDATION_VERSION}`;
 }
 
 function validateFactoryOptions(options: StageALabExecutorFactoryOptions): LabExecutionProfile {
@@ -95,7 +99,12 @@ function authorizationFromGuard(
       .sort(),
     allowedConsentRefs: [...guard.allowedConsentRefs].sort(),
     allowedCorrectionIds: [...guard.allowedCorrectionIds].sort(),
-    allowPersonMatching: false
+    allowPersonMatching: guard.allowPersonMatching,
+    personMatchingEvidenceIds: [...(guard.personMatchingEvidenceIds ?? [])].sort(),
+    personConsentRefsByEvidenceId: Object.fromEntries(guard.evidence
+      .filter(item => item.lifecycleState === 'active' && item.personConsentRef)
+      .map(item => [item.evidenceId, item.personConsentRef!])
+      .sort(([left], [right]) => left.localeCompare(right)))
   } as const;
 }
 
@@ -180,7 +189,13 @@ class StageALabExecutor implements LabExecutionExecutor {
           },
           maxCallDurationMs: context.job.budgetPolicy.maxCallDurationMs
         },
-        createdAt: context.job.envelope.createdAt
+        createdAt: context.job.envelope.createdAt,
+        references: guard.personReferences ?? [],
+        corrections: guard.personCorrections ?? [],
+        ...(context.derivedFeatures ? {
+          derivedOcrTextByEvidenceId: context.derivedFeatures.ocrTextByEvidenceId,
+          retrievalHints: [...context.derivedFeatures.retrievalHints]
+        } : {})
       });
 
       let stage: StageResult | undefined;
@@ -207,7 +222,7 @@ class StageALabExecutor implements LabExecutionExecutor {
             ...entry
           })
         });
-        if(provider.version !== `${this.options.provider}/${this.options.model}/${PROMPT_VERSION}`
+        if(provider.version !== `${this.options.provider}/${this.options.model}/${PROMPT_VERSION}/${STAGE_A_VALIDATION_VERSION}`
           || provider.mode !== expectedEvidenceStatus) {
           fail('LAB_RUN_IDENTITY_MISMATCH');
         }
@@ -238,8 +253,8 @@ class StageALabExecutor implements LabExecutionExecutor {
         createdAt: context.job.envelope.createdAt
       });
       const retrieval = retrieveExactCandidates({
-        schemaVersion: '1.0',
-        contractVersion: 'classification-hybrid.1',
+        schemaVersion: '2.0',
+        contractVersion: 'classification-hybrid.2',
         scope: context.job.envelope.scope,
         contents: composed.contents,
         observations: composed.observations,
@@ -249,33 +264,26 @@ class StageALabExecutor implements LabExecutionExecutor {
         createdAt: context.job.envelope.createdAt
       });
       const organized = organizeSparseContent({
-        schemaVersion: '1.0',
-        contractVersion: 'classification-hybrid.1',
+        schemaVersion: '2.0',
+        contractVersion: 'classification-hybrid.2',
         scope: context.job.envelope.scope,
         contents: composed.contents,
         observations: composed.observations,
         retrievalCandidates: [...composed.retrievalCandidates, ...retrieval.candidates],
         explicitAssociations: composed.explicitAssociations,
-        decisionPolicy: {
-          schemaVersion: '1.0',
-          contractVersion: 'classification-hybrid.1',
-          policyVersion: STAGE_A_LAB_DECISION_POLICY_VERSION,
-          mode: 'shadow',
-          calibrated: false,
+        decisionPolicy: buildActiveEvidenceRulePolicy({
           maxCandidatesPerContent: context.job.budgetPolicy.maxCandidatesPerContent,
-          riskPolicyVersion: 'impact-risk.1',
           createdAt: context.job.envelope.createdAt
-        },
+        }),
         createdAt: context.job.envelope.createdAt
       });
       const organization = {
         ...organized,
-        reviewItems: unique([
-          ...organized.reviewItems,
-          ...(stage?.reviewItems ?? []),
-          ...composed.reviewItems,
-          ...composed.unresolvedTemporalObservations.map(item => `UNRESOLVED_TIME:${item.observationId}`)
-        ])
+        reviewItems: collectEvidenceRuleReviewItems(
+          stage?.reviewItems,
+          composed.reviewItems,
+          organized.reviewItems
+        )
       };
       const workflowStatus = organization.reviewItems.length > 0 || stage?.workflowStatus === 'needs_review'
         ? 'needs_review' as const

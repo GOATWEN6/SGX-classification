@@ -36,7 +36,7 @@ import {
 } from './lab-execution-contract';
 import { FileClassificationLabV2Store } from './lab-execution-store';
 import { parseIngestionEnvelope } from './ingestion-contract';
-import { stable } from './stage-a-contract';
+import { stable, type RetrievalHint } from './stage-a-contract';
 
 type LabPurpose = 'classification' | 'album_organization' | 'search_candidate' | 'interview_candidate';
 type FailureStatus = 'cancelled' | 'failed_retryable' | 'failed_terminal';
@@ -59,7 +59,18 @@ export interface LabExecutionExecutor {
     clock: LabClock;
     getGuard: () => Promise<TrustedLabGuardSnapshot>;
     readAsset: (evidenceId: string) => Promise<Uint8Array>;
+    derivedFeatures?: TrustedLabDerivedFeatures;
   }): Promise<LabExecutionOutcome>;
+}
+
+export interface TrustedLabDerivedFeatures {
+  version: 'classification-worker-derived-features.1';
+  ocrTextByEvidenceId: Readonly<Record<string, {
+    sourceHash: `sha256:${string}`;
+    text: string;
+  }>>;
+  retrievalHints: readonly RetrievalHint[];
+  embeddingRetrieval: 'batch_topk' | 'disabled_component_failure' | 'not_applicable';
 }
 
 export interface TrustedLabExecutionContext {
@@ -68,6 +79,7 @@ export interface TrustedLabExecutionContext {
   clock: LabClock;
   getGuard: () => Promise<TrustedLabGuardSnapshot>;
   readAsset: (evidenceId: string) => Promise<Uint8Array>;
+  derivedFeatures?: TrustedLabDerivedFeatures;
 }
 
 export interface LabExecutionExecutorFactory {
@@ -898,6 +910,7 @@ export async function getLabProductJobView(
     try {
       return LabProductJobViewSchema.parse({
         version: LAB_JOB_VERSION_V2,
+        revision: job.revision,
         jobId: job.jobId,
         runId: job.runId,
         status: job.status,

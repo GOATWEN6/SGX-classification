@@ -15,7 +15,12 @@ import {
 } from './ingestion-contract';
 import type { BuiltLabSubmission } from './lab-contract';
 import { userExplicitAssociationForBinding } from './ingestion-organization-adapter';
-import { digest, stable } from './stage-a-contract';
+import {
+  CorrectionSchema,
+  ReferenceSchema,
+  digest,
+  stable
+} from './stage-a-contract';
 
 export const LAB_JOB_VERSION_V2 = 'classification-lab-job.2' as const;
 export const LAB_CONTENT_IDENTITY_VERSION = 'classification-lab-content-identity.1' as const;
@@ -532,10 +537,11 @@ export const TrustedLabGuardEvidenceSchema = z.object({
   revision: z.number().int().positive(),
   sourceHash: hash,
   consentRef: id,
+  personConsentRef: id.optional(),
   lifecycleState: z.enum(['active', 'withdrawn', 'deleted'])
 }).strict();
 
-export const TrustedLabGuardSnapshotInputSchema = z.object({
+const TrustedLabGuardSnapshotInputStructureSchema = z.object({
   scope,
   actorId: id,
   authorityRef: id,
@@ -545,13 +551,58 @@ export const TrustedLabGuardSnapshotInputSchema = z.object({
   active: z.boolean(),
   allowedConsentRefs: z.array(id).max(5000),
   allowedCorrectionIds: z.array(id).max(5000),
-  allowPersonMatching: z.literal(false),
+  allowPersonMatching: z.boolean(),
+  personMatchingEvidenceIds: z.array(id).max(5000).optional(),
+  personReferences: z.array(ReferenceSchema).max(100).optional(),
+  personCorrections: z.array(CorrectionSchema).max(1000).optional(),
   evidence: z.array(TrustedLabGuardEvidenceSchema).min(1).max(5000)
 }).strict();
 
-export const TrustedLabGuardSnapshotSchema = TrustedLabGuardSnapshotInputSchema.extend({
-  guardDigest: hash
-}).strict();
+function validateTrustedLabGuardPersonMatching(
+  value: z.infer<typeof TrustedLabGuardSnapshotInputStructureSchema>,
+  ctx: z.RefinementCtx
+): void {
+  const matchingEvidenceIds = value.personMatchingEvidenceIds ?? [];
+  const references = value.personReferences ?? [];
+  const personCorrections = (value.personCorrections ?? []).filter(correction => correction.kind === 'person');
+  if(!unique(matchingEvidenceIds)) issue(ctx, 'DUPLICATE_PERSON_MATCHING_EVIDENCE', ['personMatchingEvidenceIds']);
+  if(!value.allowPersonMatching && (matchingEvidenceIds.length || references.length || personCorrections.length)) {
+    issue(ctx, 'PERSON_MATCHING_NOT_AUTHORIZED', ['allowPersonMatching']);
+    return;
+  }
+  const evidenceById = new Map(value.evidence.map(evidence => [evidence.evidenceId, evidence]));
+  for(const [index, evidenceId] of matchingEvidenceIds.entries()) {
+    const evidence = evidenceById.get(evidenceId);
+    if(!evidence || evidence.lifecycleState !== 'active' || !evidence.personConsentRef) {
+      issue(ctx, 'PERSON_CONSENT_MISSING', ['personMatchingEvidenceIds', index]);
+    }
+  }
+  const allowedMatchingEvidence = new Set(matchingEvidenceIds);
+  for(const [index, reference] of references.entries()) {
+    if(!allowedMatchingEvidence.has(reference.endpoint.photoId)) {
+      issue(ctx, 'PERSON_CONSENT_MISSING', ['personReferences', index, 'endpoint', 'photoId']);
+    }
+  }
+  for(const [index, correction] of (value.personCorrections ?? []).entries()) {
+    if(!value.allowedCorrectionIds.includes(correction.correctionId)
+      || correction.authorityRef !== value.authorityRef) {
+      issue(ctx, 'PERSON_CORRECTION_NOT_AUTHORIZED', ['personCorrections', index]);
+    }
+    if(correction.kind === 'person'
+      && (!allowedMatchingEvidence.has(correction.left.photoId)
+        || !allowedMatchingEvidence.has(correction.right.photoId))) {
+      issue(ctx, 'PERSON_CONSENT_MISSING', ['personCorrections', index]);
+    }
+  }
+}
+
+export const TrustedLabGuardSnapshotInputSchema = TrustedLabGuardSnapshotInputStructureSchema
+  .superRefine(validateTrustedLabGuardPersonMatching);
+
+export const TrustedLabGuardSnapshotSchema = TrustedLabGuardSnapshotInputStructureSchema
+  .extend({ guardDigest: hash })
+  .strict()
+  .superRefine(validateTrustedLabGuardPersonMatching);
 
 export type TrustedLabGuardSnapshotInput = z.infer<typeof TrustedLabGuardSnapshotInputSchema>;
 export type TrustedLabGuardSnapshot = z.infer<typeof TrustedLabGuardSnapshotSchema>;
@@ -567,6 +618,9 @@ function guardInput(raw: TrustedLabGuardSnapshotInput | TrustedLabGuardSnapshot)
     purposes: sortedUnique(source.purposes) as z.infer<typeof LabPurposeSchema>[],
     allowedConsentRefs: sortedUnique(source.allowedConsentRefs),
     allowedCorrectionIds: sortedUnique(source.allowedCorrectionIds),
+    ...(source.personMatchingEvidenceIds ? { personMatchingEvidenceIds: sortedUnique(source.personMatchingEvidenceIds) } : {}),
+    ...(source.personReferences ? { personReferences: [...source.personReferences].sort((left, right) => left.personId.localeCompare(right.personId)) } : {}),
+    ...(source.personCorrections ? { personCorrections: [...source.personCorrections].sort((left, right) => left.correctionId.localeCompare(right.correctionId)) } : {}),
     evidence
   });
 }
@@ -583,6 +637,9 @@ function grantProjection(raw: TrustedLabGuardSnapshotInput | TrustedLabGuardSnap
     allowedConsentRefs: value.allowedConsentRefs,
     allowedCorrectionIds: value.allowedCorrectionIds,
     allowPersonMatching: value.allowPersonMatching,
+    ...(value.personMatchingEvidenceIds ? { personMatchingEvidenceIds: value.personMatchingEvidenceIds } : {}),
+    ...(value.personReferences ? { personReferences: value.personReferences } : {}),
+    ...(value.personCorrections ? { personCorrections: value.personCorrections } : {}),
     evidence: value.evidence.map(({ lifecycleState: _lifecycleState, ...evidence }) => evidence)
   };
 }
@@ -1407,6 +1464,7 @@ export const LabProductEnvelopeSchema = IngestionEnvelopeStructureSchema.omit({
 
 export const LabProductJobViewSchema = z.object({
   version: z.literal(LAB_JOB_VERSION_V2),
+  revision: z.number().int().nonnegative(),
   jobId: id,
   runId: id,
   status: LabJobStatusV2Schema,

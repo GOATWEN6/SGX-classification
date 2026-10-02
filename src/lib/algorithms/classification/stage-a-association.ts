@@ -1,4 +1,4 @@
-import { Correction, Endpoint, Observation, Photo, Reference, Relation, StageError, bindUniqueTextEvidence, digest, endpointKey, pairKey, photoHash, validateSupports } from './stage-a-contract';
+import { Correction, Endpoint, Observation, Photo, Reference, Relation, RetrievalHint, StageError, bindUniqueTextEvidence, digest, endpointKey, pairKey, photoHash, validateSupports } from './stage-a-contract';
 export interface CachedObservation {inputHash:string;version:string;value:Observation;}
 export interface Edge extends Relation {deps:Record<string,string>;origin:'ai'|'user';}
 export interface Group {groupId:string;kind:'person'|'event';members:Endpoint[];revision:number;state:'ai_organized';
@@ -16,28 +16,62 @@ export function resolveReferences(photos:Photo[],observations:Record<string,Cach
   return references.flatMap(r=>{const endpoint=anchorEndpoint(r.endpoint,r.faceBox,observations);
     return photos.some(p=>p.active&&p.photoId===r.endpoint.photoId&&p.sourceHash===r.photoHash)&&endpoint?[{...r,endpoint}]:[];});
 }
-export function candidates(changed:string[],photos:Photo[],observations:Record<string,CachedObservation>,references:Reference[],limit:number) {
+export function candidates(changed:string[],photos:Photo[],observations:Record<string,CachedObservation>,references:Reference[],limit:number,hints:RetrievalHint[]=[] ) {
   const traces:CandidateTrace[]=[];const pairs:[string,string][]=[];const seen=new Set<string>();
   for(const id of changed){
     const current=observations[id]?.value;if(!current)continue;
     const eligible=photos.filter(p=>p.active&&p.photoId!==id&&observations[p.photoId]);
-    const score=(p:Photo)=>{
+    const retrievalTier=(p:Photo)=>{
       const o=observations[p.photoId].value;
-      return (references.some(r=>r.endpoint.photoId===p.photoId)?8:0)+
-        (current.events.some(a=>o.events.some(b=>a.type===b.type))?3:0)+
-        (current.times.some(a=>o.times.some(b=>a.value===b.value))?2:0)+
-        (current.places.some(a=>o.places.some(b=>a.label===b.label))?1:0);
+      const reference=references.some(r=>r.endpoint.photoId===p.photoId);
+      const event=current.events.some(a=>o.events.some(b=>a.type===b.type));
+      const currentEventTimes=current.times.filter(time=>time.role==='event'||time.role==='capture');
+      const otherEventTimes=o.times.filter(time=>time.role==='event'||time.role==='capture');
+      const time=currentEventTimes.some(a=>otherEventTimes.some(b=>a.value===b.value&&a.precision===b.precision));
+      const place=current.places.some(a=>o.places.some(b=>a.label===b.label));
+      // Categorical recall lanes only. These tiers decide which small set is
+      // worth comparing; they are never interpreted as relation confidence.
+      if(reference)return 0;
+      if(event&&time&&place)return 1;
+      if(event&&time)return 2;
+      if(event&&place)return 3;
+      if(event)return 4;
+      if(time&&place)return 5;
+      if(time)return 6;
+      if(place)return 7;
+      return 8;
     };
-    eligible.sort((a,b)=>score(b)-score(a)||a.photoId.localeCompare(b.photoId));
+    eligible.sort((a,b)=>retrievalTier(a)-retrievalTier(b)||a.photoId.localeCompare(b.photoId));
+    const hintedIds=hints.filter(hint=>hint.leftPhotoId===id||hint.rightPhotoId===id)
+      .sort((a,b)=>a.rank-b.rank||stableHint(a).localeCompare(stableHint(b)))
+      .map(hint=>hint.leftPhotoId===id?hint.rightPhotoId:hint.leftPhotoId)
+      .filter(otherId=>eligible.some(photo=>photo.photoId===otherId));
+    const orderedIds=[...new Set([...hintedIds,...eligible.map(photo=>photo.photoId)])];
+    const ordered=orderedIds.map(photoId=>eligible.find(photo=>photo.photoId===photoId)!);
     // Keep a fallback slot even when metadata is missing / people are decades apart.
-    let selected=eligible.slice(0,limit);
-    if(eligible.length>limit&&limit>1){const fallback=eligible[eligible.length-1];selected=[...eligible.slice(0,limit-1),fallback];}
+    let selected=ordered.slice(0,limit);
+    if(!hintedIds.length&&eligible.length>limit&&limit>1){const fallback=eligible[eligible.length-1];selected=[...eligible.slice(0,limit-1),fallback];}
     const selectedIds=selected.map(p=>p.photoId);
     traces.push({photoId:id,eligible:eligible.length,selected:selectedIds,omitted:eligible.filter(p=>!selectedIds.includes(p.photoId)).map(p=>p.photoId),
-      coverage:eligible.length>limit?'truncated':'complete',reason:eligible.length>limit?'bounded_metadata_and_reference_ranking_with_fallback':'all_authorized_candidates'});
+      coverage:eligible.length>limit?'truncated':'complete',reason:hintedIds.length?'embedding_topk_then_categorical':eligible.length>limit?'bounded_categorical_retrieval_with_discovery_fallback':'all_authorized_candidates'});
     for(const p of selected){const pair=[id,p.photoId].sort() as [string,string];const key=pair.join('/');if(!seen.has(key)){seen.add(key);pairs.push(pair);}}
   }
   return {pairs,traces};
+}
+function stableHint(hint:RetrievalHint):string{return `${hint.kind}/${hint.leftPhotoId}/${hint.rightPhotoId}/${hint.modelId}/${hint.modelRevision}`;}
+function relationRationalePolarity(rationale:string):'same'|'different'|'unspecified' {
+  const value=rationale.normalize('NFKC').toLocaleLowerCase();
+  const uncertain=/(?:无法|不能|难以)(?:判断|确定|确认|辨别)|(?:不确定|尚不明确|并不明确|不清楚|看不出)|是否(?:属于|是|为)?同一|(?:可能|也许|或许).*(?:也可能|也许|或许)|\b(?:unclear|uncertain|indeterminate|unknown|not sure)\b|\b(?:cannot|can't|can not|unable to)\s+(?:determine|tell|confirm)\b|\bwhether\b/.test(value);
+  if(uncertain)return 'unspecified';
+  const negatedSamePattern=/(?:并不是|不是|并非|不属于|不算|不能算)(?:属于|是|为)?同一(?:个|次|场|趟)?(?:事件|旅行|行程|经历|故事|活动|庆典|聚会)|\bnot\s+(?:the\s+)?same\s+(?:event|trip|journey|experience|story|occasion)\b|\b(?:isn't|aren't|wasn't|weren't)\s+(?:the\s+)?same\s+(?:event|trip|journey|experience|story|occasion)\b/gi;
+  const negatedSame=negatedSamePattern.test(value);
+  negatedSamePattern.lastIndex=0;
+  const withoutNegatedSame=value.replace(negatedSamePattern,' ');
+  const same=/(?:属于|是|为)?同一(?:个|次|场|趟)?(?:事件|旅行|行程|经历|故事|活动|庆典|聚会)|\b(?:same|one)\s+(?:event|trip|journey|experience|story|occasion)\b/.test(withoutNegatedSame);
+  const different=/(?:属于|是|为)?(?:不同|另一|另一次|另一场|另一趟|无关|彼此独立)(?:的|个|次|场|趟)?(?:事件|旅行|行程|经历|故事|活动|庆典|聚会)|\b(?:different|separate|distinct|unrelated)\s+(?:events?|trips?|journeys?|experiences?|stories|occasions?)\b/.test(value);
+  const explicitDifferent=negatedSame||different;
+  if(same===explicitDifferent)return 'unspecified';
+  return same?'same':'different';
 }
 export function validateRelation(raw:Relation,photos:Photo[],observations:Record<string,CachedObservation>,pair:[string,string]):Edge {
   const normalized:Relation={...raw,supports:raw.supports.map(support=>{
@@ -45,7 +79,8 @@ export function validateRelation(raw:Relation,photos:Photo[],observations:Record
     return photo?bindUniqueTextEvidence(support,photo):support;
   })};
   if(normalized.left.photoId===normalized.right.photoId||!pair.every(p=>[normalized.left.photoId,normalized.right.photoId].includes(p)))throw new StageError('UNREQUESTED_PAIR');
-  if(normalized.kind==='event'&&normalized.decision==='different'&&/属于同一(?:个)?事件/.test(normalized.rationale.normalize('NFKC')))throw new StageError('MODEL_RELATION_CONTRADICTION');
+  const rationalePolarity=normalized.kind==='event'?relationRationalePolarity(normalized.rationale):'unspecified';
+  if((normalized.decision==='different'&&rationalePolarity==='same')||(normalized.decision==='same'&&rationalePolarity==='different'))throw new StageError('MODEL_RELATION_CONTRADICTION');
   validateSupports(normalized.supports,photos);
   for(const side of [normalized.left,normalized.right]){
     if(!normalized.supports.some(s=>s.photoId===side.photoId))throw new StageError('RELATION_MISSING_SOURCE');

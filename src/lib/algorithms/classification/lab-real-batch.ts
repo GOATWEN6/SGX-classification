@@ -18,10 +18,10 @@ const RealBatchPointerSchema = z.object({
   manifestHash: hash,
   datasetRootDigest: hash,
   model: z.literal('qwen3.7-flash-2026-07-15'),
-  maxRequests: z.number().int().min(1).max(20),
-  maxCostCny: z.number().positive().max(5),
+  maxRequests: z.number().int().min(1).max(150),
+  maxCostCny: z.number().positive().max(25),
   automaticRetries: z.literal(0),
-  allowPersonMatching: z.literal(false),
+  allowPersonMatching: z.boolean(),
   expiresAt: dateTime,
   authorizationEvidenceRef: z.string().min(1)
 }).strict();

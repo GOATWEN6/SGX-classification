@@ -10,7 +10,15 @@ const {
   composeStageALabResult,
   computePlaceKindPolicyDigest
 } = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/lab-stage-a-composition.js`);
-const { validateOrganizationInput } = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/content-organization.js`);
+const {
+  organizeSparseContent,
+  validateOrganizationInput
+} = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/content-organization.js`);
+const {
+  ACTIVE_EVIDENCE_RULE_POLICY_VERSION,
+  buildActiveEvidenceRulePolicy,
+  collectEvidenceRuleReviewItems
+} = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/evidence-rule-policy.js`);
 
 const scope = { householdId: 'house_lab', subjectId: 'elder_lab' };
 const createdAt = '2026-09-29T09:00:00.000Z';
@@ -160,6 +168,71 @@ test('builds a deterministic batch-isolated plan and preserves three ID namespac
   assert.equal(normalizedLeft.audit.inputDigest, normalizedRight.audit.inputDigest);
 });
 
+test('person matching is opt-in and requires a person consent reference for every routed image', () => {
+  const image1 = { record: imageEvidence('image_person_1', Buffer.from('person-one')), bytes: Buffer.from('person-one') };
+  const image2 = { record: imageEvidence('image_person_2', Buffer.from('person-two')), bytes: Buffer.from('person-two') };
+  const envelope = envelopeOf({ images: [image1, image2] });
+  const authorized = {
+    allowPersonMatching: true,
+    personMatchingEvidenceIds: ['image_person_1', 'image_person_2'],
+    personConsentRefsByEvidenceId: {
+      image_person_1: 'person_consent_1',
+      image_person_2: 'person_consent_2'
+    }
+  };
+  const plan = buildStageALabPlan(planInput(envelope, [image1, image2], [], { authorization: authorized }));
+  assert.equal(plan.stageA.authorization.allowPersonMatching, true);
+  assert.deepEqual(plan.stageA.request.references, []);
+  assert.deepEqual(plan.stageA.request.corrections, []);
+
+  assert.throws(() => buildStageALabPlan(planInput(envelope, [image1, image2], [], {
+    authorization: {
+      ...authorized,
+      personConsentRefsByEvidenceId: { image_person_1: 'person_consent_1' }
+    }
+  })), /PERSON_CONSENT_MISSING/);
+  assert.throws(() => buildStageALabPlan(planInput(envelope, [image1, image2], [], {
+    authorization: { ...authorized, allowPersonMatching: false }
+  })), /PERSON_MATCHING_NOT_AUTHORIZED/);
+});
+
+test('confirmed person references and corrections require matching consent and remain trusted inputs', () => {
+  const image1 = { record: imageEvidence('image_reference_1', Buffer.from('reference-one')), bytes: Buffer.from('reference-one') };
+  const image2 = { record: imageEvidence('image_reference_2', Buffer.from('reference-two')), bytes: Buffer.from('reference-two') };
+  const envelope = envelopeOf({ images: [image1, image2] });
+  const authorization = {
+    allowPersonMatching: true,
+    personMatchingEvidenceIds: ['image_reference_1', 'image_reference_2'],
+    personConsentRefsByEvidenceId: {
+      image_reference_1: 'person_consent_reference_1',
+      image_reference_2: 'person_consent_reference_2'
+    }
+  };
+  const base = buildStageALabPlan(planInput(envelope, [image1, image2], [], { authorization }));
+  const [left, right] = base.stageA.request.photos;
+  const box = { x: 0.1, y: 0.1, width: 0.2, height: 0.3 };
+  const reference = {
+    personId: 'confirmed_person_1', displayName: '用户确认人物', revision: 1,
+    endpoint: { photoId: left.photoId, faceId: 'face_reference_1' }, faceBox: box,
+    photoHash: contract.photoHash(left), confirmed: true
+  };
+  const correction = {
+    correctionId: 'person_correction_1', revision: 1, authorityRef: 'grant_lab_1', kind: 'person', decision: 'same',
+    left: { photoId: left.photoId, faceId: 'face_reference_1' },
+    right: { photoId: right.photoId, faceId: 'face_reference_2' },
+    leftPhotoHash: left.sourceHash, rightPhotoHash: right.sourceHash,
+    leftFaceBox: box, rightFaceBox: box, active: true
+  };
+  const plan = buildStageALabPlan(planInput(envelope, [image1, image2], [], {
+    authorization,
+    references: [reference],
+    corrections: [correction]
+  }));
+  assert.equal(plan.stageA.request.references[0].displayName, '用户确认人物');
+  assert.equal(plan.stageA.request.references[0].confirmed, true);
+  assert.equal(plan.stageA.request.corrections[0].authorityRef, 'grant_lab_1');
+});
+
 test('composes stage observations onto product content IDs with source types, temporal qualifier and multiple supports', () => {
   const { input } = baseFixture();
   const plan = buildStageALabPlan(input);
@@ -217,7 +290,7 @@ test('fails closed for authorization drift, person matching, missing/foreign/tam
   const { input } = baseFixture();
   assert.throws(() => buildStageALabPlan({ ...input, authorization: { ...input.authorization, active: false } }), /INACTIVE_AUTHORIZATION/);
   assert.throws(() => buildStageALabPlan({ ...input, authorization: { ...input.authorization, authorizationRevision: 'auth_old' } }), /AUTHORIZATION_CHANGED/);
-  assert.throws(() => buildStageALabPlan({ ...input, authorization: { ...input.authorization, allowPersonMatching: true } }), /PERSON_MATCHING_NOT_ALLOWED/);
+  assert.throws(() => buildStageALabPlan({ ...input, authorization: { ...input.authorization, allowPersonMatching: true } }), /PERSON_CONSENT_MISSING/);
   assert.throws(() => buildStageALabPlan({ ...input, imageBytesByEvidenceId: {} }), /MISSING_IMAGE_ASSET/);
   assert.throws(() => buildStageALabPlan({ ...input, imageBytesByEvidenceId: { ...input.imageBytesByEvidenceId, foreign_image: Buffer.from('x') } }), /FOREIGN_IMAGE_ASSET/);
   assert.throws(() => buildStageALabPlan({ ...input, imageBytesByEvidenceId: { evidence_image_1: Buffer.from('tampered') } }), /SOURCE_LENGTH_MISMATCH|SOURCE_HASH_MISMATCH/);
@@ -235,6 +308,10 @@ test('rejects partial ASR and tampered text before a Stage A plan exists', () =>
 
 test('quarantines untrusted capture time while preserving supported scan and upload timeline roles', () => {
   const { input } = baseFixture();
+  const image = input.envelope.evidence.find(item => item.modality === 'image' && item.lifecycleState === 'active');
+  input.derivedOcrTextByEvidenceId = {
+    [image.evidenceId]: { sourceHash: image.sourceHash, text: '照片边缘印有1982-06-01' }
+  };
   const plan = buildStageALabPlan(input);
   const photoId = plan.stageA.request.photos[0].photoId;
   const observation = stageObservation(photoId, {
@@ -253,7 +330,8 @@ test('quarantines untrusted capture time while preserving supported scan and upl
   assert.equal(ocrCapture.e2RuntimeObservation.precision, 'exact_day');
   assert.equal(output.unresolvedTemporalObservations.find(item => item.rawValue === '1982').e2RuntimeObservation, undefined);
   assert.ok(!output.unresolvedTemporalObservations.some(item => item.reason === 'role_missing'));
-  assert.equal(output.reviewItems.filter(item => item.startsWith('ROLE_UNKNOWN_TIME:')).length, 2);
+  assert.equal(output.reviewItems.filter(item => item.startsWith('ROLE_UNKNOWN_TIME:')).length, 0);
+  assert.equal(output.unresolvedTemporalObservations.length, 2);
 });
 
 test('preserves every supported event-time precision', () => {
@@ -295,7 +373,7 @@ test('applies versioned place-kind policy and never promotes unresolved place to
   const output = composeStageALabResult({ plan, stageResult: stageResult(plan, [observation]), createdAt });
   assert.equal(output.observations.find(item => item.facet === 'place' && item.rawValue === '家中').placeKind, 'generic');
   assert.equal(output.observations.find(item => item.facet === 'place' && item.rawValue === '某个地方').placeKind, 'unresolved');
-  assert.ok(output.reviewItems.some(item => item.startsWith('PLACE_KIND_UNRESOLVED:')));
+  assert.ok(!output.reviewItems.some(item => item.startsWith('PLACE_KIND_UNRESOLVED:')));
 });
 
 test('remaps Stage A edge and group endpoints while preserving user correction authority', () => {
@@ -355,6 +433,59 @@ test('remaps standalone Stage A groups into deterministic product-content candid
   assert.equal(first.retrievalCandidates.length, 1);
   assert.deepEqual([first.retrievalCandidates[0].fromContentId, first.retrievalCandidates[0].toContentId], ['content_image_1', 'content_image_2']);
   assert.equal(first.retrievalCandidates[0].candidateId, second.retrievalCandidates[0].candidateId);
+});
+
+test('uses one active evidence-rule policy for live, smoke and replay semantics', () => {
+  const image1 = { record: imageEvidence('image_policy_1', Buffer.from('policy-one')), bytes: Buffer.from('policy-one') };
+  const image2 = { record: imageEvidence('image_policy_2', Buffer.from('policy-two')), bytes: Buffer.from('policy-two') };
+  const plan = buildStageALabPlan(planInput(envelopeOf({ images: [image1, image2] }), [image1, image2], []));
+  const [left, right] = plan.stageA.request.photos;
+  const empty = photoId => stageObservation(photoId, {
+    mentions: [], times: [], places: [], events: [], scenes: [],
+    unknownFacets: ['person', 'time', 'place', 'event', 'scene']
+  });
+  const groups = [{
+    groupId: 'event_group_policy', kind: 'event',
+    members: [{ photoId: left.photoId }, { photoId: right.photoId }],
+    revision: 1, state: 'ai_organized', usableForOrganization: true, supersedes: []
+  }];
+  const composed = composeStageALabResult({
+    plan,
+    stageResult: stageResult(plan, [empty(left.photoId), empty(right.photoId)], { groups }),
+    createdAt
+  });
+  const policies = ['live', 'smoke', 'replay'].map(() => buildActiveEvidenceRulePolicy({
+    maxCandidatesPerContent: 8,
+    createdAt
+  }));
+  assert.deepEqual(policies[0], policies[1]);
+  assert.deepEqual(policies[1], policies[2]);
+  assert.equal(policies[0].policyVersion, ACTIVE_EVIDENCE_RULE_POLICY_VERSION);
+  assert.equal(policies[0].mode, 'active');
+  assert.equal(policies[0].decisionMode, 'evidence_rules');
+  assert.equal('autoLinkMin' in policies[0], false);
+  assert.equal('autoSeparateMax' in policies[0], false);
+
+  const organizationInput = policy => ({
+    schemaVersion: '2.0',
+    contractVersion: 'classification-hybrid.2',
+    scope,
+    contents: composed.contents,
+    observations: composed.observations,
+    retrievalCandidates: composed.retrievalCandidates,
+    explicitAssociations: composed.explicitAssociations,
+    decisionPolicy: policy,
+    createdAt
+  });
+  const outputs = policies.map(policy => organizeSparseContent(organizationInput(policy)));
+  assert.deepEqual(outputs[0], outputs[1]);
+  assert.deepEqual(outputs[1], outputs[2]);
+  assert.equal(outputs[0].associations.some(item => item.status === 'ai_auto'), true);
+  assert.deepEqual(
+    collectEvidenceRuleReviewItems(['PROVIDER_REVIEW'], [], ['ORGANIZER_REVIEW']),
+    ['ORGANIZER_REVIEW', 'PROVIDER_REVIEW']
+  );
+  assert.equal(collectEvidenceRuleReviewItems([], [], []).some(item => item.startsWith('UNRESOLVED_TIME:')), false);
 });
 
 test('accepts needs-review snapshots, rejects terminal results without snapshots and foreign supports', () => {

@@ -38,6 +38,14 @@ type SmokeResult = {
       titleSupports: string[];
       summarySupports: string[];
     }>;
+    associations: Array<{
+      associationId: string;
+      relation: string;
+      source: string;
+      status: string;
+      decisionBasis?: string;
+      evidenceStrength?: string;
+    }>;
     reviewItems: string[];
   };
   observations: Observation[];
@@ -194,10 +202,16 @@ export default function ClassificationRealSmokePage() {
         <section className={styles.detailCard}><h3>模型识别标签</h3>
           {result.observations.map((item, index) => <div className={styles.row} key={`${item.contentId}-${item.facet}-${index}`}><span>{facetName(item.facet)}</span><strong>{item.normalizedValue ?? item.rawValue}</strong></div>)}
         </section>
-        <section className={styles.detailCard}><h3>待复核与拒判</h3>
-          {result.reviewItems.length === 0 && result.unresolvedTemporalObservations.length === 0
-            ? <p className={styles.empty}>没有待复核项。</p>
-            : <>{result.reviewItems.map(item => <p className={styles.risk} key={item}>{item}</p>)}{result.unresolvedTemporalObservations.map((item, index) => <p className={styles.risk} key={`${item.rawValue}-${index}`}>时间“{item.rawValue}”角色未确认：{item.reason}</p>)}</>}
+        <section className={styles.detailCard}><h3>自动归纳决策</h3>
+          {result.organization.associations.length === 0
+            ? <p className={styles.empty}>本次没有跨内容关系需要判断。</p>
+            : result.organization.associations.map(item => <div className={styles.row} key={item.associationId}><div><strong>{item.relation}</strong><small>{item.source} · {item.status}</small></div><span>{item.source === 'user_explicit' ? '用户明确指定' : `${item.decisionBasis ?? 'retrieval_only'} · ${item.evidenceStrength ?? 'insufficient'}`}</span></div>)}
+        </section>
+        <section className={styles.detailCard}><h3>需处理与暂存信息</h3>
+          {result.reviewItems.length === 0
+            ? <p className={styles.empty}>没有需要用户处理的项目。</p>
+            : result.reviewItems.map(item => <p className={styles.risk} key={item}>{item}</p>)}
+          {result.unresolvedTemporalObservations.map((item, index) => <p className={styles.help} key={`${item.rawValue}-${index}`}>时间“{item.rawValue}”暂未用于时间线：{item.reason}</p>)}
         </section>
         <section className={styles.detailCard}><h3>运行证据</h3>
           <div className={styles.row}><span>模型</span><strong>{result.provider.modelVersion}</strong></div>

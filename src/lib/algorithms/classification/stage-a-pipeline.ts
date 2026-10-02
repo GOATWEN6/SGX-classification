@@ -91,7 +91,7 @@ export class ClassificationEngine {
         }
       }
       const validReferences=resolveReferences(active,observations,r.references);
-      const selected=candidates([...impacted],active,observations,validReferences,r.budget.candidatesPerPhoto);result.candidateTraces=selected.traces;
+      const selected=candidates([...impacted],active,observations,validReferences,r.budget.candidatesPerPhoto,r.retrievalHints??[]);result.candidateTraces=selected.traces;
       if(!stopFurtherCalls)for(const pair of selected.pairs){
         const photos=pair.map(id=>current.get(id)!);
         const oldPair=edges.filter(e=>[e.left.photoId,e.right.photoId].sort().join('/')===pair.join('/'));
@@ -116,7 +116,9 @@ export class ClassificationEngine {
       }
       fresh();
       const reconciled=reconcile(active,observations,edges,r.corrections,r.references,previous?.groups??[],key);
-      result.reviewItems=[...candidateReviewItems,...reconciled.issues,...edges.filter(e=>e.decision==='unknown').map(e=>`UNKNOWN_RELATION:${pairKey(e.kind,e.left,e.right)}`),
+      // Unknown low-impact relations remain auditable in edges but do not create
+      // a user task. Keeping two items separate is the safe reversible default.
+      result.reviewItems=[...candidateReviewItems,...reconciled.issues,
         ...Object.values(observations).flatMap(o=>o.value.conflicts.map(f=>`CONFLICT:${o.value.photoId}:${f}`)),
         ...selected.traces.filter(t=>t.coverage==='truncated').map(t=>`CANDIDATE_TRUNCATED:${t.photoId}`)];
       const snapshot:AlgorithmSnapshot={scope:r.scope,revision:(previous?.revision??0)+1,version,authorizationRevision:r.authorizationRevision,contextHash,

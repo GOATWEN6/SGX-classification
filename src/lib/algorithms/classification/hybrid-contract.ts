@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ScopeSchema } from './stage-a-contract';
 
-export const HYBRID_CONTRACT_VERSION = 'classification-hybrid.1';
-export const HYBRID_SCHEMA_VERSION = '1.0';
+export const HYBRID_CONTRACT_VERSION = 'classification-hybrid.2';
+export const HYBRID_SCHEMA_VERSION = '2.0';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -112,6 +112,7 @@ export const DecisionPolicySchema = z.object({
   ...versionFields,
   policyVersion: id,
   mode: z.enum(['shadow', 'active']),
+  decisionMode: z.enum(['evidence_rules', 'calibrated_probability']),
   calibrated: z.boolean(),
   calibrationVersion: id.optional(),
   autoLinkMin: z.number().min(0).max(1).optional(),
@@ -120,7 +121,11 @@ export const DecisionPolicySchema = z.object({
   riskPolicyVersion: id,
   createdAt: dateTime
 }).strict().superRefine((value, ctx) => {
-  if(value.mode === 'active' && (!value.calibrated || !value.calibrationVersion || value.autoLinkMin === undefined || value.autoSeparateMax === undefined)) {
+  if(value.decisionMode === 'calibrated_probability') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CALIBRATED_PROBABILITY_NOT_IMPLEMENTED' });
+  }
+  if(value.mode === 'active' && value.decisionMode === 'calibrated_probability'
+    && (!value.calibrated || !value.calibrationVersion || value.autoLinkMin === undefined || value.autoSeparateMax === undefined)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ACTIVE_POLICY_REQUIRES_CALIBRATION' });
   }
   if(value.calibrated && !value.calibrationVersion) {
@@ -129,6 +134,10 @@ export const DecisionPolicySchema = z.object({
   if(value.autoLinkMin !== undefined && value.autoSeparateMax !== undefined && value.autoSeparateMax >= value.autoLinkMin) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_DECISION_THRESHOLDS' });
   }
+  if(value.decisionMode === 'evidence_rules'
+    && (value.autoLinkMin !== undefined || value.autoSeparateMax !== undefined || value.calibrated)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'EVIDENCE_RULES_CANNOT_USE_NUMERIC_THRESHOLDS' });
+  }
 });
 
 export const DecisionPolicyResultSchema = z.object({
@@ -136,20 +145,39 @@ export const DecisionPolicyResultSchema = z.object({
   resultId: id,
   candidateId: id,
   policyVersion: id,
+  decisionMode: z.enum(['evidence_rules', 'calibrated_probability']),
+  basis: z.enum(['stage_relation', 'retrieval_only', 'conflict_guard', 'person_reference', 'calibrated_probability']),
+  evidenceStrength: z.enum(['supported', 'conflicted', 'insufficient']),
+  groupImpact: z.enum(['singleton_pair', 'extend_story', 'bridge_existing_groups', 'not_applicable']),
   calibrationVersion: id.optional(),
-  action: z.enum(['auto_link_candidate', 'auto_separate', 'review']),
+  action: z.enum(['auto_link_candidate', 'auto_separate', 'keep_separate', 'review']),
   riskLevel: z.enum(['low', 'medium', 'high']),
   shadow: z.boolean(),
   inDistribution: z.boolean(),
+  userActionRequired: z.boolean(),
   pSameCalibrated: z.number().min(0).max(1).optional(),
   reasons: z.array(id).min(1).max(32),
   createdAt: dateTime
 }).strict().superRefine((value, ctx) => {
+  if(value.decisionMode === 'calibrated_probability') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CALIBRATED_PROBABILITY_NOT_IMPLEMENTED' });
+  }
+  if(value.decisionMode === 'calibrated_probability'
+    && (value.pSameCalibrated === undefined || !value.calibrationVersion)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CALIBRATED_RESULT_REQUIRES_PROBABILITY' });
+  }
   if(value.pSameCalibrated !== undefined && !value.calibrationVersion) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CALIBRATION_VERSION_REQUIRED' });
   }
-  if(!value.shadow && value.pSameCalibrated === undefined) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ACTIVE_DECISION_REQUIRES_CALIBRATED_PROBABILITY' });
+  if(value.decisionMode === 'evidence_rules'
+    && (value.pSameCalibrated !== undefined || value.calibrationVersion !== undefined)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'EVIDENCE_RULE_RESULT_HAS_PROBABILITY' });
+  }
+  if(value.userActionRequired && (value.action !== 'review' || value.shadow)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_USER_ACTION_REQUIREMENT' });
+  }
+  if(!value.shadow && value.action === 'review' && !value.userActionRequired) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ACTIVE_REVIEW_REQUIRES_USER_ACTION' });
   }
 });
 

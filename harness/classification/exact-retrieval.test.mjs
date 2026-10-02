@@ -18,8 +18,8 @@ const observation = (index, facet, value, state = 'candidate') => ({
   state
 });
 const input = (contents, observations, patch = {}) => ({
-  schemaVersion: '1.0',
-  contractVersion: 'classification-hybrid.1',
+  schemaVersion: '2.0',
+  contractVersion: 'classification-hybrid.2',
   scope,
   contents,
   observations,
@@ -56,7 +56,7 @@ test('multi-facet exact match ranks ahead of a single matching facet', () => {
   const result = retrieveExactCandidates(input(contents, observations, { maxCandidatesPerContent: 1 }));
   const first = result.candidates.find(item => item.fromContentId === 'content_0');
   assert.equal(first.toContentId, 'content_1');
-  assert.equal(first.retrievalScore, 0.7);
+  assert.equal(first.retrievalScore, undefined);
   assert.deepEqual(first.reasons, ['time_overlap', 'place_overlap', 'event_overlap']);
 });
 
@@ -102,7 +102,7 @@ test('withdrawn content is omitted while unsafe scope and evidence are rejected'
   assert.throws(() => retrieveExactCandidates(input([content(0), content(1)], [foreignEvidence])), /FOREIGN_EVIDENCE/);
 });
 
-test('conflict cap remains a visible retrieval reason rather than a probability claim', () => {
+test('conflict remains a visible retrieval reason without creating a numerical relation score', () => {
   const contents = [content(0), content(1)];
   const observations = [
     observation(0, 'time', '1982'), observation(0, 'place', '武汉'), observation(0, 'event', '毕业'), observation(0, 'person', '人物甲'), observation(0, 'theme', '友情'),
@@ -110,6 +110,6 @@ test('conflict cap remains a visible retrieval reason rather than a probability 
     observation(1, 'time', '1995', 'conflicted')
   ];
   const result = retrieveExactCandidates(input(contents, observations));
-  assert.equal(result.candidates[0].retrievalScore, 0.54);
-  assert.ok(result.candidates[0].reasons.includes('conflict_cap'));
+  assert.equal(result.candidates[0].retrievalScore, undefined);
+  assert.ok(result.candidates[0].reasons.includes('conflict_present'));
 });

@@ -49,10 +49,10 @@ test('explicit multi-image explanation joins selected contents while batch text 
   const extractor = new DeterministicTextExtractor();
   const observations = adapted.contents.filter(item => item.modality !== 'photo').flatMap(item => extractor.extract({ scope: input.scope, content: item, taxonomyVersion: input.taxonomyVersion }).observations);
   const organized = organizeSparseContent({
-    schemaVersion: '1.0', contractVersion: 'classification-hybrid.1', scope: input.scope,
+    schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', scope: input.scope,
     contents: adapted.contents, observations, retrievalCandidates: adapted.retrievalCandidates,
     explicitAssociations: adapted.explicitAssociations,
-    decisionPolicy: { schemaVersion: '1.0', contractVersion: 'classification-hybrid.1', policyVersion: 'decision-shadow.1', mode: 'shadow', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt: input.createdAt },
+    decisionPolicy: { schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', policyVersion: 'decision-shadow.1', mode: 'shadow', decisionMode: 'evidence_rules', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt: input.createdAt },
     createdAt: input.createdAt
   });
   const storyWithAsr = organized.stories.find(story => story.memberContentIds.includes('content_asr_1'));

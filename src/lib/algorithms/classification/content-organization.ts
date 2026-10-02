@@ -6,13 +6,12 @@ import {
   HYBRID_CONTRACT_VERSION,
   HYBRID_SCHEMA_VERSION,
   RetrievalCandidateSchema,
+  type DecisionPolicy,
   type DecisionPolicyResult,
   type RetrievalCandidate
 } from './hybrid-contract';
 
-export const CONTENT_ORGANIZATION_VERSION = 'content-organization.1';
-export const SPARSE_CONTENT_ORGANIZATION_VERSION = 'content-organization.2';
-export const ASSOCIATION_RULES_VERSION = 'association-rules.1';
+export const SPARSE_CONTENT_ORGANIZATION_VERSION = 'content-organization.3';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const dateTime = z.string().datetime({ offset: true });
@@ -62,8 +61,12 @@ export const AssociationCandidateSchema = z.object({
   relation: z.enum(['same_story', 'same_event', 'supports', 'related']),
   source: z.enum(['user_explicit', 'ai_inferred']),
   status: z.enum(['user_confirmed', 'ai_auto', 'needs_review', 'not_selected', 'rejected']),
+  // Read compatibility for historical replay artifacts. The sparse organizer
+  // never writes these fields or uses them to authorize a product action.
   score: z.number().min(0).max(1).optional(),
   confidenceBand: z.enum(['high', 'medium', 'low']).optional(),
+  decisionBasis: z.enum(['legacy_overlap', 'stage_relation', 'retrieval_only', 'conflict_guard', 'calibrated_probability']).optional(),
+  evidenceStrength: z.enum(['supported', 'conflicted', 'insufficient']).optional(),
   method: z.string().min(1).max(128),
   evidenceRefs: z.array(id).min(1).max(64),
   createdAt: dateTime
@@ -71,11 +74,27 @@ export const AssociationCandidateSchema = z.object({
   if(Boolean(value.toContentId) === Boolean(value.toStoryId)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ASSOCIATION_REQUIRES_ONE_TARGET' });
   if(value.source === 'user_explicit') {
     if(value.status !== 'user_confirmed' && value.status !== 'rejected') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'USER_ASSOCIATION_STATE' });
-    if(value.score !== undefined || value.confidenceBand !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'USER_ASSOCIATION_HAS_SCORE' });
+    if(value.score !== undefined || value.confidenceBand !== undefined || value.decisionBasis !== undefined || value.evidenceStrength !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'USER_ASSOCIATION_HAS_AI_DECISION' });
+    }
   }
   if(value.source === 'ai_inferred') {
     if(value.status === 'user_confirmed') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'AI_CANNOT_BE_USER_CONFIRMED' });
-    if(value.score === undefined || value.confidenceBand === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'AI_ASSOCIATION_REQUIRES_SCORE' });
+    const hasLegacyScore = value.score !== undefined || value.confidenceBand !== undefined;
+    const hasDecision = value.decisionBasis !== undefined || value.evidenceStrength !== undefined;
+    if(hasLegacyScore && (value.score === undefined || value.confidenceBand === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'LEGACY_ASSOCIATION_SCORE_INCOMPLETE' });
+    }
+    if(hasDecision && (!value.decisionBasis || !value.evidenceStrength)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'AI_ASSOCIATION_DECISION_INCOMPLETE' });
+    }
+    if(!hasLegacyScore && !hasDecision) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'AI_ASSOCIATION_REQUIRES_DECISION_BASIS' });
+    if(value.decisionBasis && value.decisionBasis !== 'legacy_overlap' && hasLegacyScore) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'NON_CALIBRATED_ASSOCIATION_HAS_LEGACY_SCORE' });
+    }
+    if(value.decisionBasis === 'legacy_overlap' && !hasLegacyScore) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'LEGACY_ASSOCIATION_REQUIRES_SCORE' });
+    }
   }
 });
 
@@ -91,27 +110,12 @@ export const StoryUnitSchema = z.object({
   state: z.enum(['ai_candidate', 'needs_review', 'user_confirmed', 'withdrawn'])
 }).strict();
 
-export const OrganizationConfigSchema = z.object({
-  autoAssociationThreshold: z.number().min(0).max(1).default(0.8),
-  reviewAssociationThreshold: z.number().min(0).max(1).default(0.55),
-  method: z.string().min(1).max(128).default(ASSOCIATION_RULES_VERSION)
-}).strict().refine(value => value.reviewAssociationThreshold <= value.autoAssociationThreshold, 'INVALID_ASSOCIATION_THRESHOLDS');
-
 export const OrganizationInputSchema = z.object({
   scope,
   contents: z.array(ContentItemSchema).min(1).max(5000),
   observations: z.array(ContentObservationSchema).max(30000),
   explicitAssociations: z.array(AssociationCandidateSchema).max(30000),
-  createdAt: dateTime,
-  config: OrganizationConfigSchema.default({})
-}).strict();
-
-export const OrganizationResultSchema = z.object({
-  version: z.literal(CONTENT_ORGANIZATION_VERSION),
-  scope,
-  stories: z.array(StoryUnitSchema).max(5000),
-  associations: z.array(AssociationCandidateSchema).max(30000),
-  reviewItems: z.array(z.string().min(1).max(256)).max(30000)
+  createdAt: dateTime
 }).strict();
 
 export const SparseAssociationInputSchema = z.object({
@@ -138,7 +142,8 @@ export const SparseOrganizationResultSchema = z.object({
     evaluatedCount: z.number().int().nonnegative().max(30000),
     skippedPersonOnlyCount: z.number().int().nonnegative().max(30000),
     maxCandidatesPerContent: z.number().int().min(1).max(128),
-    policyMode: z.literal('shadow')
+    policyMode: z.enum(['shadow', 'active']),
+    decisionMode: z.enum(['evidence_rules', 'calibrated_probability'])
   }).strict()
 }).strict();
 
@@ -148,9 +153,7 @@ export type ContentObservation = z.infer<typeof ContentObservationSchema>;
 export type ObservationSupport = z.infer<typeof ObservationSupportSchema>;
 export type AssociationCandidate = z.infer<typeof AssociationCandidateSchema>;
 export type StoryUnit = z.infer<typeof StoryUnitSchema>;
-export type OrganizationConfig = z.infer<typeof OrganizationConfigSchema>;
 export type OrganizationInput = z.infer<typeof OrganizationInputSchema>;
-export type OrganizationResult = z.infer<typeof OrganizationResultSchema>;
 export type SparseAssociationInput = z.infer<typeof SparseAssociationInputSchema>;
 export type SparseOrganizationResult = z.infer<typeof SparseOrganizationResultSchema>;
 
@@ -160,12 +163,10 @@ export class ContentOrganizationError extends Error {
 
 function fail(code: string): never { throw new ContentOrganizationError(code); }
 function sameScope(a: Scope, b: Scope): boolean { return a.householdId === b.householdId && a.subjectId === b.subjectId; }
-function valueOf(observation: ContentObservation): string { return (observation.normalizedValue ?? observation.rawValue).trim().toLocaleLowerCase(); }
 function unique(values: string[]): string[] { return [...new Set(values)]; }
 function contentEvidenceIds(content: ContentItem): Set<string> { return new Set(content.evidenceIds); }
 
-export function validateOrganizationInput(raw: unknown): OrganizationInput {
-  const input = OrganizationInputSchema.parse(raw);
+function validateOrganizationRecords(input: OrganizationInput): void {
   const contentById = new Map<string, ContentItem>();
   for(const content of input.contents) {
     if(contentById.has(content.contentId)) fail('DUPLICATE_CONTENT');
@@ -173,16 +174,12 @@ export function validateOrganizationInput(raw: unknown): OrganizationInput {
     if(content.lifecycle === 'withdrawn') continue;
     contentById.set(content.contentId, content);
   }
-  const observationsByContent = new Map<string, ContentObservation[]>();
   for(const observation of input.observations) {
     const content = contentById.get(observation.contentId);
     if(!content) fail('OBSERVATION_FOR_WITHDRAWN_OR_FOREIGN_CONTENT');
     if(!contentEvidenceIds(content).has(observation.evidenceId)) fail('FOREIGN_EVIDENCE');
     if(!observation.supports.some(support => support.evidenceId === observation.evidenceId)) fail('OBSERVATION_PRIMARY_SUPPORT_MISSING');
     for(const support of observation.supports) if(!contentEvidenceIds(content).has(support.evidenceId)) fail('FOREIGN_SUPPORT');
-    const list = observationsByContent.get(observation.contentId) ?? [];
-    list.push(observation);
-    observationsByContent.set(observation.contentId, list);
   }
   const associationIds = new Set<string>();
   for(const association of input.explicitAssociations) {
@@ -194,24 +191,43 @@ export function validateOrganizationInput(raw: unknown): OrganizationInput {
     if(!from || !to) fail('FOREIGN_ASSOCIATION_CONTENT');
     if(association.evidenceRefs.some(ref => !from.evidenceIds.includes(ref) && !to.evidenceIds.includes(ref))) fail('FOREIGN_ASSOCIATION_EVIDENCE');
   }
+}
+
+function withoutRemovedLegacyConfig(raw: unknown): unknown {
+  if(!raw || typeof raw !== 'object' || Array.isArray(raw) || !Object.prototype.hasOwnProperty.call(raw, 'config')) return raw;
+  const record = raw as Record<string, unknown>;
+  const legacyConfig = record.config;
+  if(legacyConfig !== undefined
+    && (!legacyConfig || typeof legacyConfig !== 'object' || Array.isArray(legacyConfig) || Object.keys(legacyConfig).length > 0)) {
+    fail('LEGACY_ORGANIZATION_CONFIG_REMOVED');
+  }
+  const { config: _removed, ...input } = record;
+  return input;
+}
+
+/** Shared scope, lifecycle and Evidence validation; it performs no scoring. */
+export function validateOrganizationInput(raw: unknown): OrganizationInput {
+  const input = OrganizationInputSchema.parse(withoutRemovedLegacyConfig(raw));
+  validateOrganizationRecords(input);
   return input;
 }
 
 export function validateSparseAssociationInput(raw: unknown): SparseAssociationInput {
   const input = SparseAssociationInputSchema.parse(raw);
-  if(input.decisionPolicy.mode !== 'shadow') fail('ACTIVE_DECISION_POLICY_NOT_IMPLEMENTED');
-  validateOrganizationInput({
+  if(input.decisionPolicy.decisionMode === 'calibrated_probability') {
+    fail('CALIBRATED_DECISION_POLICY_NOT_IMPLEMENTED');
+  }
+  validateOrganizationRecords({
     scope: input.scope,
     contents: input.contents,
     observations: input.observations,
     explicitAssociations: input.explicitAssociations,
-    createdAt: input.createdAt,
-    config: {}
+    createdAt: input.createdAt
   });
   const active = new Map(input.contents.filter(content => content.lifecycle === 'active').map(content => [content.contentId, content]));
   const ids = new Set<string>();
   const pairs = new Set<string>();
-  const perSource = new Map<string, number>();
+  const incidentCounts = new Map<string, number>();
   for(const candidate of input.retrievalCandidates) {
     if(ids.has(candidate.candidateId)) fail('DUPLICATE_RETRIEVAL_CANDIDATE');
     ids.add(candidate.candidateId);
@@ -224,9 +240,11 @@ export function validateSparseAssociationInput(raw: unknown): SparseAssociationI
     pairs.add(pair);
     const allowedEvidence = new Set([...from.evidenceIds, ...to.evidenceIds]);
     if(candidate.evidenceRefs.some(ref => !allowedEvidence.has(ref))) fail('FOREIGN_RETRIEVAL_EVIDENCE');
-    const count = (perSource.get(candidate.fromContentId) ?? 0) + 1;
-    perSource.set(candidate.fromContentId, count);
-    if(count > input.decisionPolicy.maxCandidatesPerContent) fail('RETRIEVAL_LIMIT_EXCEEDED');
+    for(const contentId of [candidate.fromContentId, candidate.toContentId]) {
+      const count = (incidentCounts.get(contentId) ?? 0) + 1;
+      incidentCounts.set(contentId, count);
+      if(count > input.decisionPolicy.maxCandidatesPerContent) fail('RETRIEVAL_LIMIT_EXCEEDED');
+    }
   }
   return input;
 }
@@ -236,14 +254,12 @@ class UnionFind {
   constructor(ids: string[]) { ids.forEach(id => this.parent.set(id, id)); }
   find(id: string): string { const parent = this.parent.get(id); if(!parent) fail('FOREIGN_CONTENT'); if(parent === id) return id; const root = this.find(parent); this.parent.set(id, root); return root; }
   union(a: string, b: string): void { const left = this.find(a); const right = this.find(b); if(left !== right) this.parent.set(right, left); }
+  members(id: string): string[] { const root = this.find(id); return [...this.parent.keys()].filter(candidate => this.find(candidate) === root); }
   groups(): Map<string, string[]> { const result = new Map<string, string[]>(); for(const id of this.parent.keys()) { const root = this.find(id); const list = result.get(root) ?? []; list.push(id); result.set(root, list); } return result; }
 }
 
 function observationsFor(contentId: string, observations: ContentObservation[]): ContentObservation[] {
   return observations.filter(observation => observation.contentId === contentId && observation.state === 'candidate');
-}
-function facetValues(contentId: string, facetName: ContentObservation['facet'], observations: ContentObservation[]): string[] {
-  return unique(observationsFor(contentId, observations).filter(observation => observation.facet === facetName).map(valueOf));
 }
 function evidenceFor(contentId: string, observations: ContentObservation[]): string[] {
   return unique(observationsFor(contentId, observations).flatMap(observation => [observation.evidenceId, ...observation.supports.map(support => support.evidenceId)]));
@@ -252,19 +268,6 @@ function hasConflict(left: string, right: string, observations: ContentObservati
   const facets: ContentObservation['facet'][] = ['person', 'time', 'place', 'event', 'theme'];
   return facets.some(name => observations.some(observation => observation.contentId === left && observation.facet === name && observation.state === 'conflicted') || observations.some(observation => observation.contentId === right && observation.facet === name && observation.state === 'conflicted'));
 }
-function overlaps(left: string[], right: string[]): boolean { return left.some(value => right.includes(value)); }
-
-export function scoreAssociation(leftContentId: string, rightContentId: string, observations: ContentObservation[]): { score: number; confidenceBand: AssociationCandidate['confidenceBand']; evidenceRefs: string[]; conflicted: boolean } {
-  const weights: Array<[ContentObservation['facet'], number]> = [['time', 0.25], ['place', 0.20], ['event', 0.25], ['person', 0.20], ['theme', 0.10]];
-  let score = 0;
-  for(const [facetName, weight] of weights) if(overlaps(facetValues(leftContentId, facetName, observations), facetValues(rightContentId, facetName, observations))) score += weight;
-  const conflicted = hasConflict(leftContentId, rightContentId, observations);
-  if(conflicted) score = Math.min(score, 0.54);
-  const confidenceBand = score >= 0.8 ? 'high' : score >= 0.55 ? 'medium' : 'low';
-  return { score: Number(score.toFixed(4)), confidenceBand, evidenceRefs: unique([...evidenceFor(leftContentId, observations), ...evidenceFor(rightContentId, observations)]), conflicted };
-}
-
-function associationId(left: string, right: string): string { return `assoc_${digest([left, right]).slice(7, 31)}`; }
 function storyId(contentIds: string[]): string { return `story_${digest(contentIds.sort()).slice(7, 31)}`; }
 function truncate(value: string, max: number): string { return [...value].slice(0, max).join(''); }
 
@@ -304,86 +307,102 @@ function buildStory(scopeValue: Scope, members: string[], contents: ContentItem[
   }, titleSupports: supports.length ? supports : fallbackSupports, summarySupports: supports.length ? supports : fallbackSupports, state: review ? 'needs_review' : 'ai_candidate' });
 }
 
-export function organizeContent(raw: unknown): OrganizationResult {
-  const input = validateOrganizationInput(raw);
-  const active = input.contents.filter(content => content.lifecycle === 'active');
-  const contentIds = active.map(content => content.contentId);
-  const observations = input.observations;
-  const union = new UnionFind(contentIds);
-  const explicitPairs = new Set<string>();
-  const associations: AssociationCandidate[] = [...input.explicitAssociations];
-  const reviewItems: string[] = [];
-  for(const explicit of input.explicitAssociations) {
-    if(!explicit.toContentId) continue;
-    const pair = [explicit.fromContentId, explicit.toContentId].sort().join('/');
-    explicitPairs.add(pair);
-    if(explicit.status === 'user_confirmed' && ['same_story', 'same_event', 'supports'].includes(explicit.relation)) union.union(explicit.fromContentId, explicit.toContentId);
-  }
-  for(let i = 0; i < contentIds.length; i++) for(let j = i + 1; j < contentIds.length; j++) {
-    const left = contentIds[i]; const right = contentIds[j]; const pair = [left, right].sort().join('/');
-    if(explicitPairs.has(pair)) continue;
-    const scored = scoreAssociation(left, right, observations);
-    const status: AssociationCandidate['status'] = scored.conflicted ? 'needs_review' : scored.score >= input.config.autoAssociationThreshold ? 'ai_auto' : scored.score >= input.config.reviewAssociationThreshold ? 'needs_review' : 'not_selected';
-    const leftContent = active.find(content => content.contentId === left)!;
-    const rightContent = active.find(content => content.contentId === right)!;
-    const association = AssociationCandidateSchema.parse({ associationId: associationId(left, right), fromContentId: left, toContentId: right, relation: 'same_story', source: 'ai_inferred', status, score: scored.score, confidenceBand: scored.confidenceBand, method: input.config.method, evidenceRefs: scored.evidenceRefs.length ? scored.evidenceRefs : unique([...leftContent.evidenceIds, ...rightContent.evidenceIds]), createdAt: input.createdAt });
-    associations.push(association);
-    if(status === 'ai_auto') union.union(left, right);
-    if(status === 'needs_review') reviewItems.push(`NEEDS_REVIEW:${association.associationId}`);
-    if(scored.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
-  }
-  const reviewByRoot = new Set<string>();
-  for(const review of associations.filter(association => association.status === 'needs_review')) { reviewByRoot.add(union.find(review.fromContentId)); if(review.toContentId) reviewByRoot.add(union.find(review.toContentId)); }
-  const stories = [...union.groups().values()].map(members => buildStory(input.scope, members, active, observations,
-    reviewByRoot.has(union.find(members[0])) || observations.some(observation => members.includes(observation.contentId) && observation.state === 'conflicted')));
-  return OrganizationResultSchema.parse({ version: CONTENT_ORGANIZATION_VERSION, scope: input.scope, stories, associations, reviewItems: unique(reviewItems) });
+type AssociationEvidence = { evidenceRefs: string[]; conflicted: boolean };
+
+function associationEvidence(leftContentId: string, rightContentId: string, observations: ContentObservation[]): AssociationEvidence {
+  return {
+    evidenceRefs: unique([...evidenceFor(leftContentId, observations), ...evidenceFor(rightContentId, observations)]),
+    conflicted: hasConflict(leftContentId, rightContentId, observations)
+  };
 }
 
-function sparseDecisionResult(candidate: RetrievalCandidate, score: ReturnType<typeof scoreAssociation>, policyVersion: string, createdAt: string): DecisionPolicyResult {
-  const reasons: string[] = ['uncalibrated_policy'];
-  let action: DecisionPolicyResult['action'] = 'review';
-  let riskLevel: DecisionPolicyResult['riskLevel'] = 'medium';
-  const twoSidedUserTextSameEvent = candidate.stageDecision === 'same'
-    && candidate.relation === 'same_event'
-    && candidate.reasons.includes('two_sided_user_text_support');
-  if(candidate.stageDecision === 'different') {
-    action = 'auto_separate';
-    riskLevel = 'low';
-    reasons.push('stage_different');
-  } else if(candidate.stageDecision === 'unknown') {
-    reasons.push('stage_unknown');
-  } else if(score.conflicted) {
+type GroupImpact = DecisionPolicyResult['groupImpact'];
+
+function retrievalCandidateOrderKey(candidate: RetrievalCandidate): string {
+  const [left, right] = [candidate.fromContentId, candidate.toContentId].sort();
+  return [left, right, candidate.relation, candidate.candidateId].join('\u0000');
+}
+
+function compareRetrievalCandidates(left: RetrievalCandidate, right: RetrievalCandidate): number {
+  const leftKey = retrievalCandidateOrderKey(left);
+  const rightKey = retrievalCandidateOrderKey(right);
+  return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+}
+
+function sparseDecisionResult(
+  candidate: RetrievalCandidate,
+  evidence: AssociationEvidence,
+  policy: DecisionPolicy,
+  groupImpact: GroupImpact,
+  blockedByKnownDifference: boolean,
+  createdAt: string
+): DecisionPolicyResult {
+  const reasons: string[] = [];
+  let action: DecisionPolicyResult['action'] = 'keep_separate';
+  let riskLevel: DecisionPolicyResult['riskLevel'] = 'low';
+  let basis: DecisionPolicyResult['basis'] = 'retrieval_only';
+  let evidenceStrength: DecisionPolicyResult['evidenceStrength'] = 'insufficient';
+  // Evidence rules are deterministic guards, not proof that an input belongs
+  // to a statistically validated distribution. This stays false until a
+  // frozen validation set and calibration artifact exist.
+  const inDistribution = false;
+  const supportedStageEvent = candidate.relation === 'same_event'
+    && candidate.reasons.some(reason => reason === 'stage_a_event_edge' || reason === 'stage_a_event_group');
+  if(blockedByKnownDifference) {
+    action = 'review';
     riskLevel = 'high';
-    reasons.push('association_conflict');
-  } else if(twoSidedUserTextSameEvent) {
-    action = 'auto_link_candidate';
-    riskLevel = 'low';
-    reasons.push('two_sided_user_text_same_event');
-  } else if(score.score >= 0.8) {
-    action = 'auto_link_candidate';
-    riskLevel = 'low';
-    reasons.push('legacy_baseline_high_score');
+    basis = 'conflict_guard';
+    evidenceStrength = 'conflicted';
+    reasons.push('known_difference_blocks_merge');
+  } else if(candidate.stageDecision === 'different' && supportedStageEvent) {
+    action = 'auto_separate';
+    basis = 'stage_relation';
+    evidenceStrength = 'supported';
+    reasons.push('stage_event_different');
+  } else if(candidate.stageDecision === 'same' && supportedStageEvent) {
+    basis = 'stage_relation';
+    evidenceStrength = evidence.conflicted ? 'conflicted' : 'supported';
+    if(evidence.conflicted) {
+      action = 'review';
+      riskLevel = 'high';
+      reasons.push('stage_event_same_with_conflict');
+    } else if(groupImpact === 'bridge_existing_groups') {
+      action = 'review';
+      riskLevel = 'high';
+      reasons.push('stage_event_same_bridges_groups');
+    } else {
+      action = 'auto_link_candidate';
+      reasons.push('stage_event_same');
+    }
+    if(candidate.reasons.includes('two_sided_user_text_support')) reasons.push('two_sided_user_text_support');
+  } else if(candidate.stageDecision === 'unknown') {
+    reasons.push('stage_unknown_keep_separate');
   } else {
-    reasons.push('insufficient_link_evidence');
+    reasons.push('retrieval_only_no_automation');
   }
   return DecisionPolicyResultSchema.parse({
     schemaVersion: HYBRID_SCHEMA_VERSION,
     contractVersion: HYBRID_CONTRACT_VERSION,
-    resultId: `decision_${digest([candidate.candidateId, policyVersion]).slice(7, 31)}`,
+    resultId: `decision_${digest([candidate.candidateId, policy.policyVersion]).slice(7, 31)}`,
     candidateId: candidate.candidateId,
-    policyVersion,
+    policyVersion: policy.policyVersion,
+    decisionMode: policy.decisionMode,
+    basis,
+    evidenceStrength,
+    groupImpact,
     action,
     riskLevel,
-    shadow: true,
-    inDistribution: false,
+    shadow: policy.mode === 'shadow',
+    inDistribution,
+    userActionRequired: policy.mode === 'active' && action === 'review',
     reasons,
     createdAt
   });
 }
 
 /**
- * Hybrid path: only supplied retrieval candidates are evaluated. The legacy
- * all-pairs organizer remains available as a reproducible baseline.
+ * Active organization path: only supplied retrieval candidates are evaluated;
+ * retrieval scores order recall and never authorize a product action.
  */
 export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
   const input = validateSparseAssociationInput(raw);
@@ -391,22 +410,38 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
   const contentIds = active.map(content => content.contentId);
   const contentById = new Map(active.map(content => [content.contentId, content]));
   const union = new UnionFind(contentIds);
+  const stableUnion = new UnionFind(contentIds);
   const explicitPairs = new Set<string>();
   const associations: AssociationCandidate[] = [...input.explicitAssociations];
   const reviewItems: string[] = [];
   const decisionResults: DecisionPolicyResult[] = [];
+  const knownDifferentPairs = new Set(input.retrievalCandidates
+    .filter(candidate => candidate.relation !== 'same_person' && candidate.stageDecision === 'different')
+    .map(candidate => [candidate.fromContentId, candidate.toContentId].sort().join('/')));
+  for(const association of input.explicitAssociations.filter(item => item.status === 'rejected' && item.toContentId)) {
+    knownDifferentPairs.add([association.fromContentId, association.toContentId!].sort().join('/'));
+  }
 
   for(const explicit of input.explicitAssociations) {
     if(!explicit.toContentId) continue;
     explicitPairs.add([explicit.fromContentId, explicit.toContentId].sort().join('/'));
     if(explicit.status === 'user_confirmed' && ['same_story', 'same_event', 'supports'].includes(explicit.relation)) {
       union.union(explicit.fromContentId, explicit.toContentId);
+      stableUnion.union(explicit.fromContentId, explicit.toContentId);
     }
   }
 
+  const stableRoots = new Set([...stableUnion.groups().entries()]
+    .filter(([, members]) => members.length > 1)
+    .map(([root]) => root));
+  const stableAnchors = (members: string[]): Set<string> => new Set(members
+    .map(contentId => stableUnion.find(contentId))
+    .filter(root => stableRoots.has(root)));
+
   let skippedPersonOnlyCount = 0;
   let evaluatedCount = 0;
-  for(const candidate of input.retrievalCandidates) {
+  const orderedCandidates = [...input.retrievalCandidates].sort(compareRetrievalCandidates);
+  for(const candidate of orderedCandidates) {
     if(candidate.relation === 'same_person') {
       skippedPersonOnlyCount += 1;
       decisionResults.push(DecisionPolicyResultSchema.parse({
@@ -415,11 +450,16 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
         resultId: `decision_${digest([candidate.candidateId, input.decisionPolicy.policyVersion]).slice(7, 31)}`,
         candidateId: candidate.candidateId,
         policyVersion: input.decisionPolicy.policyVersion,
-        action: 'review',
-        riskLevel: 'medium',
-        shadow: true,
+        decisionMode: input.decisionPolicy.decisionMode,
+        basis: 'person_reference',
+        evidenceStrength: 'insufficient',
+        groupImpact: 'not_applicable',
+        action: 'keep_separate',
+        riskLevel: 'low',
+        shadow: input.decisionPolicy.mode === 'shadow',
         inDistribution: false,
-        reasons: ['person_relation_not_story_edge', 'uncalibrated_policy'],
+        userActionRequired: false,
+        reasons: ['person_relation_not_story_edge', 'person_matching_disabled'],
         createdAt: input.createdAt
       }));
       continue;
@@ -427,21 +467,30 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
     const pair = [candidate.fromContentId, candidate.toContentId].sort().join('/');
     if(explicitPairs.has(pair)) continue;
     evaluatedCount += 1;
-    const scored = scoreAssociation(candidate.fromContentId, candidate.toContentId, input.observations);
-    const decision = sparseDecisionResult(candidate, scored, input.decisionPolicy.policyVersion, input.createdAt);
+    const evidence = associationEvidence(candidate.fromContentId, candidate.toContentId, input.observations);
+    const leftMembers = union.members(candidate.fromContentId);
+    const rightMembers = union.members(candidate.toContentId);
+    const leftStableRoot = stableUnion.find(candidate.fromContentId);
+    const rightStableRoot = stableUnion.find(candidate.toContentId);
+    const leftAnchors = stableAnchors(leftMembers);
+    const rightAnchors = stableAnchors(rightMembers);
+    const bridgesStableGroups = [...leftAnchors].some(left => [...rightAnchors].some(right => left !== right));
+    const groupImpact: GroupImpact = leftStableRoot === rightStableRoot
+      ? 'not_applicable'
+      : bridgesStableGroups || (stableRoots.has(leftStableRoot) && stableRoots.has(rightStableRoot))
+        ? 'bridge_existing_groups'
+        : stableRoots.has(leftStableRoot) || stableRoots.has(rightStableRoot)
+          ? 'extend_story'
+          : 'singleton_pair';
+    const blockedByKnownDifference = candidate.stageDecision === 'same'
+      && leftMembers.some(left => rightMembers.some(right => knownDifferentPairs.has([left, right].sort().join('/'))));
+    const decision = sparseDecisionResult(candidate, evidence, input.decisionPolicy, groupImpact, blockedByKnownDifference, input.createdAt);
     decisionResults.push(decision);
-    const twoSidedUserTextSameEvent = candidate.stageDecision === 'same'
-      && candidate.relation === 'same_event'
-      && candidate.reasons.includes('two_sided_user_text_support');
-    const status: AssociationCandidate['status'] = candidate.stageDecision === 'different'
-      ? 'not_selected'
-      : candidate.stageDecision === 'unknown' || scored.conflicted
-        ? 'needs_review'
-        : twoSidedUserTextSameEvent || scored.score >= 0.8
-          ? 'ai_auto'
-          : scored.score >= 0.55
-            ? 'needs_review'
-            : 'not_selected';
+    const status: AssociationCandidate['status'] = decision.userActionRequired
+      ? 'needs_review'
+      : !decision.shadow && decision.action === 'auto_link_candidate'
+        ? 'ai_auto'
+        : 'not_selected';
     const from = contentById.get(candidate.fromContentId)!;
     const to = contentById.get(candidate.toContentId)!;
     const association = AssociationCandidateSchema.parse({
@@ -451,16 +500,18 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
       relation: candidate.relation === 'same_event' ? 'same_event' : candidate.relation === 'same_story' ? 'same_story' : 'related',
       source: 'ai_inferred',
       status,
-      score: scored.score,
-      confidenceBand: scored.confidenceBand,
-      method: `${candidate.method}:${ASSOCIATION_RULES_VERSION}`,
-      evidenceRefs: unique([...candidate.evidenceRefs, ...scored.evidenceRefs, ...from.evidenceIds, ...to.evidenceIds]),
+      decisionBasis: decision.basis,
+      evidenceStrength: decision.evidenceStrength,
+      method: `${candidate.method}:${input.decisionPolicy.policyVersion}`,
+      evidenceRefs: unique([...candidate.evidenceRefs, ...evidence.evidenceRefs, ...from.evidenceIds, ...to.evidenceIds]),
       createdAt: input.createdAt
     });
     associations.push(association);
     if(status === 'ai_auto') union.union(candidate.fromContentId, candidate.toContentId);
-    if(status === 'needs_review') reviewItems.push(`NEEDS_REVIEW:${association.associationId}`);
-    if(scored.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
+    if(status === 'needs_review') {
+      reviewItems.push(`NEEDS_REVIEW:${association.associationId}`);
+      if(evidence.conflicted) reviewItems.push(`CONFLICT:${association.associationId}`);
+    }
   }
 
   const reviewByRoot = new Set<string>();
@@ -488,7 +539,8 @@ export function organizeSparseContent(raw: unknown): SparseOrganizationResult {
       evaluatedCount,
       skippedPersonOnlyCount,
       maxCandidatesPerContent: input.decisionPolicy.maxCandidatesPerContent,
-      policyMode: 'shadow'
+      policyMode: input.decisionPolicy.mode,
+      decisionMode: input.decisionPolicy.decisionMode
     }
   });
 }

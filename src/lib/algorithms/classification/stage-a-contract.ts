@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
 export const PROMPT_VERSION = 'sgx-five-facets.13';
+export const STAGE_A_VALIDATION_VERSION = 'stage-a-validation.2';
 export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
 export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -13,7 +14,7 @@ export const BoxSchema = z.object({x:z.number().min(0).max(1),y:z.number().min(0
   .refine(b=>b.x+b.width<=1&&b.y+b.height<=1,'INVALID_REGION');
 export const PhotoSchema = z.object({ photoId:id, scope:ScopeSchema, revision:z.number().int().positive(),
   sourceRef:id, sourceHash:hash, mimeType:z.enum(['image/jpeg','image/png','image/webp']),
-  caption:z.string().max(16000).default(''), textEvidence:z.array(z.object({evidenceId:id,revision:z.number().int().positive(),sourceHash:hash,source:z.enum(['user_text','final_asr']),text:z.string().min(1).max(65536)}).strict()).max(24).optional(), exif:z.object({capturedAt:z.string().datetime({offset:true}).optional(), originalCapture:z.boolean()}).strict().optional(),
+  caption:z.string().max(16000).default(''), ocrText:z.string().min(1).max(16000).optional(), textEvidence:z.array(z.object({evidenceId:id,revision:z.number().int().positive(),sourceHash:hash,source:z.enum(['user_text','final_asr']),text:z.string().min(1).max(65536)}).strict()).max(24).optional(), exif:z.object({capturedAt:z.string().datetime({offset:true}).optional(), originalCapture:z.boolean()}).strict().optional(),
   active:z.boolean() }).strict();
 export const FacetSchema = z.enum(['person','time','place','event','scene']);
 export const ObservationSchema = z.object({ photoId:id,
@@ -37,6 +38,14 @@ export const CorrectionSchema = z.object({ correctionId:id, revision:z.number().
   kind:z.enum(['person','event']), decision:z.enum(['same','different']),left:EndpointSchema,right:EndpointSchema,
   leftPhotoHash:hash,rightPhotoHash:hash,leftFaceBox:BoxSchema.optional(),rightFaceBox:BoxSchema.optional(),active:z.boolean() }).strict()
   .refine(c=>c.kind!=='person'||Boolean(c.leftFaceBox&&c.rightFaceBox),'PERSON_CORRECTION_REQUIRES_REGIONS');
+export const RetrievalHintSchema = z.object({
+  kind:z.enum(['image_text_embedding_topk','face_embedding_topk']),
+  leftPhotoId:id,
+  rightPhotoId:id,
+  rank:z.number().int().positive().max(100),
+  modelId:z.string().min(1).max(256),
+  modelRevision:z.string().min(1).max(256)
+}).strict().refine(value=>value.leftPhotoId!==value.rightPhotoId,'SELF_RETRIEVAL_HINT');
 export const BudgetSchema = z.object({ maxRequests:z.number().int().min(0).max(1000), maxInputTokens:z.number().int().positive(),
   maxOutputTokens:z.number().int().positive(), maxCostCny:z.number().nonnegative(), deadlineAt:z.string().datetime({offset:true}),
   candidatesPerPhoto:z.number().int().min(1).max(12), maxOutputPerRequest:z.number().int().min(256).max(8192),
@@ -44,7 +53,8 @@ export const BudgetSchema = z.object({ maxRequests:z.number().int().min(0).max(1
   maxCallDurationMs:z.number().int().min(1).max(60000).default(60000) }).strict();
 export const RequestSchema = z.object({contractVersion:z.literal(STAGE_A_VERSION),runId:id,scope:ScopeSchema,
   authorizationRevision:id, trigger:z.enum(['upload','information_changed','correction','view']),
-  photos:z.array(PhotoSchema).max(5000),references:z.array(ReferenceSchema).max(100),corrections:z.array(CorrectionSchema).max(1000),budget:BudgetSchema}).strict();
+  photos:z.array(PhotoSchema).max(5000),references:z.array(ReferenceSchema).max(100),corrections:z.array(CorrectionSchema).max(1000),
+  retrievalHints:z.array(RetrievalHintSchema).max(12000).optional(),budget:BudgetSchema}).strict();
 export type Scope=z.infer<typeof ScopeSchema>;
 export type Photo=z.infer<typeof PhotoSchema>;
 export type Observation=z.infer<typeof ObservationSchema>;
@@ -52,6 +62,7 @@ export type Relation=z.infer<typeof RelationSchema>;
 export type Endpoint=z.infer<typeof EndpointSchema>;
 export type Reference=z.infer<typeof ReferenceSchema>;
 export type Correction=z.infer<typeof CorrectionSchema>;
+export type RetrievalHint=z.infer<typeof RetrievalHintSchema>;
 export type Request=z.infer<typeof RequestSchema>;
 export type Budget=z.infer<typeof BudgetSchema>;
 export type Support=z.infer<typeof support>;
@@ -129,6 +140,7 @@ export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate
 export function validateSupports(items:Support[], photos:Photo[]) {
   for(const s of items){const p=photos.find(p=>p.photoId===s.photoId);if(!p)throw new StageError('FOREIGN_SOURCE');
     if(s.source==='caption'&&!p.caption.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
+    if(s.source==='ocr'&&(!p.ocrText||!p.ocrText.includes(s.quote)))throw new StageError('UNSUPPORTED_QUOTE');
     if(s.source==='exif'&&(!p.exif||!stable(p.exif).includes(s.quote)))throw new StageError('UNSUPPORTED_EXIF');
     if(s.source==='user_text'||s.source==='final_asr'){
       if(!s.evidenceId)throw new StageError('TEXT_SUPPORT_REQUIRES_EVIDENCE');
@@ -149,7 +161,8 @@ export function validateObservation(raw:unknown, photo:Photo):Observation {
       time.precision==='decade'?value.replace(/^(\d{3}0)年代$/,'$1s'):value;
     const ocrToken=normalizedValue.match(/^\d{4}/)?.[0];
     const supports=time.supports.map(item=>item.source==='visual'&&ocrToken&&item.quote.includes(ocrToken)&&
-      /文字|字样|显示|印有|写着|标注|叠加|横幅|海报|text|reads|printed|shows|banner/i.test(item.quote)?{...item,source:'ocr' as const}:item);
+      /文字|字样|显示|印有|写着|标注|叠加|横幅|海报|text|reads|printed|shows|banner/i.test(item.quote)&&
+      Boolean(photo.ocrText?.includes(item.quote))?{...item,source:'ocr' as const}:item);
     if(partialYearMonth)return {...time,value:normalizedValue,precision:'year' as const,supports};
     if(time.precision==='year')return {...time,value:normalizedValue,supports};
     if(time.precision==='date'){
