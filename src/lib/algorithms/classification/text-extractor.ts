@@ -5,7 +5,7 @@ import {
   type Scope
 } from './content-organization';
 
-export const DETERMINISTIC_TEXT_EXTRACTOR_VERSION = 'deterministic-text-baseline.3';
+export const DETERMINISTIC_TEXT_EXTRACTOR_VERSION = 'deterministic-text-baseline.4';
 
 export interface TextExtractionRequest {
   scope: Scope;
@@ -39,15 +39,17 @@ function chineseYear(token: string): string | undefined {
   return `${(value >= 30 ? 1900 : 2000) + value}`;
 }
 
-function yearsFrom(text: string): string[] {
+function yearSignalsFrom(text: string): { candidate: string[]; conflicted: string[] } {
   const arabic = text.match(/(?:19|20)\d{2}(?=年|\b)/g) ?? [];
   const chinese = [...text.matchAll(/([〇零一二三四五六七八九]{2}|[〇零一二三四五六七八九]{4})年/g)]
     .map(match => chineseYear(match[1])).filter((value): value is string => Boolean(value));
   const values = unique([...arabic, ...chinese]);
   const correction = text.match(/(?:不对|不是).{0,12}?(?:应该是|是)([〇零一二三四五六七八九]{2,4}|(?:19|20)\d{2})年/);
-  if(!correction) return values;
+  if(!correction) return { candidate: values, conflicted: [] };
   const corrected = /^\d/.test(correction[1]) ? correction[1] : chineseYear(correction[1]);
-  return corrected ? [corrected] : values;
+  return corrected
+    ? { candidate: [corrected], conflicted: values.filter(value => value !== corrected) }
+    : { candidate: values, conflicted: [] };
 }
 
 const eventRules: Array<[string, RegExp]> = [
@@ -55,7 +57,7 @@ const eventRules: Array<[string, RegExp]> = [
   ['婚礼', /婚礼|结婚/], ['生日', /生日/], ['家庭聚会', /家庭聚会|团圆饭|全家回来|春节|中秋/],
   ['聚会', /同学聚会|战友聚会|同事聚会|朋友聚会|聚餐/],
   ['旅行', /旅行|出去玩|短途游|看湖|看海|坐火车/], ['搬家', /搬家|搬进/],
-  ['兴趣活动', /木工|钓鱼|书法|兰花|换盆|摄影|养花/], ['其他', /欢送会|义卖/], ['退休', /退休/]
+  ['兴趣活动', /木工|钓鱼|书法|兰花|换盆|摄影|养花/], ['欢送会', /欢送会|送别/], ['其他', /义卖/], ['退休', /退休/]
 ];
 
 function negated(text: string, value: string): boolean {
@@ -80,7 +82,7 @@ export class DeterministicTextExtractor implements TextContentExtractor {
     if(!text) throw new Error('MISSING_TEXT_PAYLOAD');
     const evidenceId = content.evidenceIds[0];
     const observations: ContentObservation[] = [];
-    const add = (facet: ContentObservation['facet'], value: string, normalizedValue = value) => observations.push(ContentObservationSchema.parse({
+    const add = (facet: ContentObservation['facet'], value: string, normalizedValue = value, state: ContentObservation['state'] = 'candidate') => observations.push(ContentObservationSchema.parse({
       contentId: content.contentId,
       evidenceId,
       facet,
@@ -91,12 +93,14 @@ export class DeterministicTextExtractor implements TextContentExtractor {
         sourceType: content.modality === 'final_asr' ? 'final_asr' : 'user_text',
         quote: quoteFor(text, value)
       }],
-      state: 'candidate'
+      state
     }));
 
     const injection = /忽略(?:规则|以上|指令)|安全测试.{0,16}(?:认成|地点写|事件写)/.test(text);
     if(!injection) {
-      for(const year of yearsFrom(text)) add('time', year, year);
+      const yearSignals = yearSignalsFrom(text);
+      for(const year of yearSignals.candidate) add('time', year, year);
+      for(const year of yearSignals.conflicted) add('time', year, year, 'conflicted');
       if(/八十年代/.test(text)) add('time', '八十年代', '1980s');
       if(/前年冬天/.test(text)) add('time', '前年冬天', 'two_winters_before_upload');
       for(const place of places.filter(value => text.includes(value))) add('place', place);
@@ -104,7 +108,8 @@ export class DeterministicTextExtractor implements TextContentExtractor {
       if(/海边|看海/.test(text)) add('place', '海边行程途中');
       if(/家中|一家吃团圆饭/.test(text)) add('place', '家中');
       const positiveEvents = new Set<string>();
-      for(const [event, pattern] of eventRules) if(pattern.test(text) && !negated(text, event)) {
+      const explicitCorrection = /(?:不是|并非).{0,24}(?:别|不要).{0,12}(?:写成|归为)/.test(text);
+      for(const [event, pattern] of eventRules) if(pattern.test(text) && !negated(text, event) && !(event === '其他' && explicitCorrection)) {
         add('event', event);
         positiveEvents.add(event);
       }

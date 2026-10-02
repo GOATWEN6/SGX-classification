@@ -315,15 +315,17 @@ Flash VLM 负责：
 |单图 / 两图 / 五图提交|8 / 6 / 2|
 |纯文本 / 纯 final ASR|2 / 2|
 |album_upload / family_transfer|14 / 6|
-|same / different / unknown 关系|11 / 7 / 3|
+|same / different / unknown 关系|7 / 11 / 3|
 
 ### 10.1 Exploration 与 Validation
 
-- Exploration：12 个提交、18 张图、13 个关系、4 个 text-only/ASR-only；计划 35 次真实请求；
+- Exploration：12 个提交、18 张图、13 个关系、4 个 text-only/ASR-only；计划 31 次真实 Provider 调用和 4 个确定性产品评估，共 35 个评估单元；
 - T1 Validation：8 个未用于调参的提交、12 张图、8 个关系；固定 20 次真实请求；
-- 核心固定计划仍为 55 次；扩展场景与定点诊断必须另有预登记 manifest，全部真实请求合计硬上限 150 次、总费用不超过 ¥25、自动重试 0；
+- 核心固定计划为 51 次真实 Provider 调用和 4 个确定性产品评估，共 55 个评估单元；扩展场景与定点诊断必须另有预登记 manifest，全部真实请求合计硬上限 150 次、总费用不超过 ¥25、自动重试 0；
 - 授权且具备 reference policy 的人物候选场景开启；未授权素材、姓名和亲属关系不进入自动身份判断；
 - Validation 打开后不得修改当前版本的 truth、Prompt 或规则；失败进入下一版本计划。
+
+这里的关系分母来自当前已验收数据逐对复核。当前矩阵只能形成 7 个独立 `same`、11 个独立 `different` 和 3 个 `unknown`；不得重复同一关系对来伪装成 11 个独立 `same`。若未来要把 `same` 扩到 11，必须在新数据版本中新增至少 4 个唯一且独立复核的同故事关系对，再提升 Spec 与 truth 版本。
 
 ### 10.2 组件 Gate
 
@@ -346,9 +348,9 @@ Embedding 子集：30 query / 62 gallery，20 个有正确候选，10 个无可�
 
 ### 10.3 真实模型与产品 Gate
 
-- Schema/Guard 可消费至少 53/55；Evidence 引用 100% 有效；
-- 7 个 `different` 严重误合并为 0；
-- 11 个 `same` 至少 10 个正确成组；
+- 55 个评估单元中 Schema/Guard 可消费至少 53 个；其中真实 Provider 调用为 51 次、确定性产品评估为 4 个，两类账本分别记录；Evidence 引用 100% 有效；
+- 11 个 `different` 严重误合并为 0；
+- 7 个 `same` 至少 6 个正确成组；
 - 3 个 `unknown` 自动合并为 0；
 - 4 个冲突全部保留双方并只局部复核；
 - 4 个证据不足案例不补造高影响事实；

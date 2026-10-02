@@ -97,12 +97,14 @@ test('deterministic text baseline handles Chinese years, correction, negation, r
     return new DeterministicTextExtractor().extract({ scope: content.scope, content, taxonomyVersion: 'test.1' });
   };
   const corrected = run('那是二〇一七年，不对，应该是二〇一八年春节，全家回来的那次。');
-  assert.deepEqual(corrected.observations.filter(item => item.facet === 'time').map(item => item.normalizedValue), ['2018']);
+  assert.deepEqual(corrected.observations.filter(item => item.facet === 'time' && item.state === 'candidate').map(item => item.normalizedValue), ['2018']);
+  assert.deepEqual(corrected.observations.filter(item => item.facet === 'time' && item.state === 'conflicted').map(item => item.normalizedValue), ['2017']);
   assert.ok(corrected.observations.some(item => item.facet === 'event' && item.rawValue === '家庭聚会'));
 
   const negated = run('这不是退休照，我只是参加同事的欢送会，别写成我的退休。');
   assert.equal(negated.observations.some(item => item.facet === 'event' && item.rawValue === '退休'), false);
-  assert.ok(negated.observations.some(item => item.facet === 'event' && item.rawValue === '其他'));
+  assert.equal(negated.observations.some(item => item.facet === 'event' && item.rawValue === '欢送会'), true);
+  assert.equal(negated.observations.some(item => item.facet === 'person' && item.rawValue === '同事'), true);
 
   const notGraduation = run('这是一九八四年九月我去夜校报到的第一天，不是毕业照。');
   assert.ok(notGraduation.observations.some(item => item.facet === 'event' && item.rawValue === '求学'));

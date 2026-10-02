@@ -14,15 +14,18 @@
 
 ### 持久化下载策略
 
+- 提交 `8c4b887`（`chore(classification): enforce persistent download caches`）已把持久下载缓存约束落入部署脚本、环境变量示例和部署测试；
 - 持久根固定为 `/gemini/code/sgx-classification`；
 - 新增策略版本 `classification-download-persistence.1`；
 - Hugging Face、Transformers、ModelScope、ONNX、Torch、pip、uv、XDG 与 virtualenv 下载缓存全部指向持久根；
 - Worker 启动时校验这些路径必须位于持久根内，否则 fail closed；
 - 正式运行继续使用 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 和 `SGX_ALLOW_MODEL_DOWNLOADS=false`，禁止运行期静默下载。
 
+远程目录边界保持不变：`/gemini/code/sgx-classification` 保存模型、wheel、源码包、许可证、下载收据、manifest、日志和后续正式评测制品；`/quota/sgx-classification` 只能保存可由持久制品离线重建的环境与缓存；`/tmp/sgx-classification/jobs` 只能保存有生命周期上限的任务临时文件。
+
 ### 工程验证
 
-- `npm run test:classification`：`456/456` 通过，`0` 失败，`0` 跳过；
+- `npm run test:classification`：`472/472` 通过，`0` 失败，`0` 跳过；
 - `npm run typecheck`：通过；
 - 部署/回滚 fixture：通过；
 - `git diff --check`：通过；
@@ -56,6 +59,15 @@ SHA-256 为
 从该持久快照解包后的 `32/32` pytest 日志 SHA-256 为
 `b1b2d25b72a9d852e4c6fc7a6b5a142deba99cc5d649de317f7e14a348b19974`；
 测试未联网，`/quota` 只使用现有可离线重建 venv。
+
+### 正式混合评测准备状态
+
+- 当前共享工作树已实现跨 `exploration` / `validation` 的 campaign ledger，以及 pointer / approval v2 绑定与相关测试；这些改动尚未提交，不属于 `8c4b887`，也不能按已发布能力对外描述；
+- campaign 总硬上限维持为 `150` 次真实 Provider 调用、总费用不超过 `¥25`、自动重试 `0`；单案例失败继续其他独立案例，授权、预算、模型或 scope 级错误停止全局执行；
+- 经当前数据逐对复核，关系固定分母更正为 `same / different / unknown = 7 / 11 / 3`；旧的 `11 / 7 / 3` 口径不再使用；
+- 核心正式计划为 `51` 次真实 Provider 调用加 `4` 个确定性产品评估，共 `55` 个评估单元。两类调用分别记账，确定性评估不占 Provider 调用额度；
+- 本轮没有执行新的付费 Provider 调用，正式 campaign 尚未生成或运行；
+- `472/472` 只证明当前工程契约与门禁行为，不构成真实家庭图片准确率、人物身份可靠性、真实老人语音准确率或产品就绪证据。
 
 ### ASR 失败、修复与结果
 
@@ -107,9 +119,10 @@ SHA-256 为
 
 ## 下一步 Gate
 
-1. 用当前真实配置重建全栈交付包，包含架构、接口、环境变量、持久盘布局、启动/回退命令和证据索引；
-2. 运行本地 Node 契约测试、TypeScript typecheck、部署 fixture、Python 远端测试和交付包自检；
-3. 冻结 20 个提交/固定分母的混合链评测清单，解决 `51` 次模型调用与 `4` 条确定性产品评估的记账口径；
-4. 在已批准的 `150` 次、`¥25`、`0` 自动重试上限内执行一次正式 VLM 混合链评测；
-5. 全栈工程师接入对象存储、业务数据库、outbox/lease/CAS 和真实相册页面后，进入 T1 产品联调；
-6. SFace 预训练权重的商业/训练数据来源审查完成前，只用于内部评估。
+1. 冻结并生成 formal campaign，包含 `exploration` / `validation` manifest、pointer、approval、dataset root 和累计账本绑定；
+2. 在任何付费调用前，把 formal campaign 完整复制到 `/gemini/code/sgx-classification` 持久盘并复核 hash、权限、`150` 次 / `¥25` / `0` 重试上限；
+3. 提交并复核当前尚未提交的 campaign ledger、pointer / approval v2 与失败分类改动，再运行本地 Node 契约测试、TypeScript typecheck、部署 fixture 和交付包自检；
+4. Gate 通过后，按 `51` 次真实 Provider 调用加 `4` 个确定性产品评估的固定计划执行正式混合链评测；
+5. 用当前真实配置重建全栈交付包，包含架构、接口、环境变量、持久盘布局、启动/回退命令和证据索引；
+6. 全栈工程师接入对象存储、业务数据库、outbox/lease/CAS 和真实相册页面后，进入 T1 产品联调；
+7. SFace 预训练权重的商业/训练数据来源审查完成前，只用于内部评估。

@@ -27,7 +27,8 @@
     "classification:artifacts": "node scripts/classification-artifact-registry.mjs",
     "classification:semantic-score": "node scripts/classification-semantic-score.mjs",
     "classification:lab": "next dev -H 127.0.0.1",
-    "classification:eval": "node scripts/classification-stage-a.mjs --eval"
+    "classification:eval": "node scripts/classification-stage-a.mjs --eval",
+    "classification:formal-deterministic": "node scripts/classification-formal-deterministic.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.30",

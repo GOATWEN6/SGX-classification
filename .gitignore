@@ -44,6 +44,8 @@ yarn-error.log*
 # data files (keep structure, not content)
 data/*.json
 !data/.gitkeep
+.formal-evaluations/
+classification-lab-data.local/
 
 # archives
 *.zip

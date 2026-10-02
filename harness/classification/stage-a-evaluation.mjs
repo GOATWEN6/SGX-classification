@@ -16,6 +16,7 @@ const evaluationPolicy=z.object({facets:z.array(contract.FacetSchema).min(1).ref
 const relationPair=z.tuple([id,id]).refine(([left,right])=>left!==right,'SELF_RELATION_PAIR');
 export const ManifestSchema=z.object({version:z.literal('sgx-eval.1'),batchId:id,status:z.enum(['draft','ready']),partition:z.enum(['exploration','holdout']),
   provider:z.enum(['qwen','glm']),model:z.string().min(1),datasetRootDigest:sha.optional(),providerUseReviewRef:z.string().min(1),
+  sourceRevision:z.object({version:z.literal('sgx-formal-source-revision.1'),gitCommit:z.string().regex(/^[a-f0-9]{40}$/),trackedTreeClean:z.literal(true),generatorVersion:z.literal('sgx-formal-v2-generator.1')}).strict().optional(),
   prices:z.object({inputCnyPerMillion:z.number().nonnegative(),outputCnyPerMillion:z.number().nonnegative(),source:z.string().url(),checkedAt:z.string().datetime()}).strict(),
   caps,truth:z.object({path:z.string().min(1),sha256:sha}).strict(),
   photos:z.array(z.object({photo:contract.PhotoSchema,path:z.string().min(1),split:z.enum(['reference','exploration','holdout']),leakageGroup:id,
@@ -46,6 +47,7 @@ export async function preflight(manifestPath){
   const raw=await readFile(manifestPath);const manifest=ManifestSchema.parse(JSON.parse(raw));
   const root=path.dirname(path.resolve(manifestPath));const blockers=[];
   if(manifest.status!=='ready')blockers.push('MANIFEST_DRAFT');
+  if(manifest.batchId.startsWith('sgx_formal_v2_')&&!manifest.sourceRevision)blockers.push('SOURCE_REVISION_REQUIRED');
   if(Date.now()-Date.parse(manifest.prices.checkedAt)>7*86400000||Date.parse(manifest.prices.checkedAt)>Date.now()+60000)blockers.push('PRICING_RECHECK_REQUIRED');
   unique(manifest.photos.map(p=>p.photo.photoId),'DUPLICATE_PHOTO');unique(manifest.tasks.map(t=>t.taskId),'DUPLICATE_TASK');unique(manifest.tasks.map(t=>t.request.runId),'DUPLICATE_RUN');
   const gallery=new Map(manifest.photos.map(p=>[p.photo.photoId,p]));

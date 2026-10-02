@@ -144,7 +144,7 @@ export default function ClassificationRealSmokePage() {
       <div className={styles.modeCard}>
         <strong>真实 API · 受控额度</strong>
         <span>{status ? `${status.remainingRequests}/${status.maxRequests} 次剩余` : '读取中'}</span>
-        <small>{status ? `已记账 ¥${status.usedCostCny.toFixed(4)} / ¥${status.maxCostCny.toFixed(2)}` : '0 自动重试 · 不做人脸匹配'}</small>
+        <small>{status ? `已记账 ¥${status.usedCostCny.toFixed(4)} / ¥${status.maxCostCny.toFixed(2)}` : '0 自动重试 · 单图冒烟'}</small>
       </div>
     </header>
 
@@ -174,9 +174,9 @@ export default function ClassificationRealSmokePage() {
         <div className={styles.row}><span>模型</span><strong>{status?.model ?? '—'}</strong></div>
         <div className={styles.row}><span>Prompt</span><strong>{status?.promptVersion ?? '—'}</strong></div>
         <div className={styles.row}><span>自动重试</span><strong>0</strong></div>
-        <div className={styles.row}><span>人脸匹配</span><strong>关闭</strong></div>
+        <div className={styles.row}><span>人物候选</span><strong>本页单图不做跨图匹配</strong></div>
         <div className={styles.row}><span>阶段</span><strong>T0 可行性</strong></div>
-        <p className={styles.help}>结果用于验证真实模型链路与功能可行性，不代表真实家庭场景准确率已经达标。</p>
+        <p className={styles.help}>正式多图批次会在逐图授权并绑定 person consent 后开启匿名人物候选；姓名和亲属关系仍需用户确认。本页结果只验证单图真实模型链路，不代表真实家庭场景准确率已经达标。</p>
       </aside>
     </section>
 
