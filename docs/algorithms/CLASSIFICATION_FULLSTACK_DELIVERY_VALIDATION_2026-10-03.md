@@ -14,7 +14,7 @@
 |人物候选|YuNet/SFace 输出匿名 128 维人脸向量，不输出姓名或关系|同上|
 |ASR|SenseVoiceSmall + FunASR 1.4.16 + kaldi-native-fbank 1.22.3 处理 PCM WAV 并返回中文文本|同上及 `component-smoke-asr-20261003-r2.result.json`|
 |统一服务|五个 feature endpoint 在同一进程内均返回 200，最终 `/readyz` 为 `ready`|HTTP r2 结果 SHA-256 `ba1d9babca1d8772a7b2a1f789842bc996a5f25b3e6174a2fa68cc0a510587b9`|
-|Python 代码|当前 r4 源码快照在目标环境单元/契约测试 `32/32` 通过|`feature-service-source-20261003-r4.pytest.log`|
+|Python 代码|当前 r5 源码快照在目标环境单元/契约测试 `32/32` 通过|`feature-service-source-20261003-r5.pytest.log`|
 
 ## 2. 运行配置
 
@@ -28,12 +28,12 @@
   `9099dff907e2ac93c25be57eb1f3087d0d6c7946853b2379f9edc6a2062aef56`
 - `pip check`：无破损依赖。
 - 当前源码快照：
-  `/gemini/code/sgx-classification/shared/downloads/source-packages/sgx-feature-service-source-20261003-r4.tar.gz`
+  `/gemini/code/sgx-classification/shared/downloads/source-packages/sgx-feature-service-source-20261003-r5.tar.gz`
 - 源码快照 SHA-256：
-  `48625ac441958779ad851ed649b89c60a03d67735c0bcc4ff3b0a7d387217fb6`
-- r4 测试日志 SHA-256：
-  `2f6e8ffe38ba683dd75f1eb11ef90897fa88788101d5279f8d2b48d8c86c778d`
-- r4 测试过程未联网；`/quota` 中仅使用现有可离线重建 venv。
+  `2e66e369c07a286f3c7b6e2d48de4ceb5db9fe0ebd21cd3907d8bfcd90b872da`
+- r5 测试日志 SHA-256：
+  `b1b2d25b72a9d852e4c6fc7a6b5a142deba99cc5d649de317f7e14a348b19974`
+- r5 测试过程未联网；`/quota` 中仅使用现有可离线重建 venv。
 - vGPU：`B1.gpu.small`，5.81 GiB，单并发。
 
 全能力冷路径约 112 秒，包含 Chinese-CLIP 和 SenseVoice 首次权重加载。

@@ -26,7 +26,7 @@
 - `npm run typecheck`：通过；
 - 部署/回滚 fixture：通过；
 - `git diff --check`：通过；
-- VirtAI Feature Service 当前 r4 源码快照 pytest：`32/32` 通过；使用 Python 3.10 隔离 venv，从持久 wheelhouse 离线安装依赖；
+- VirtAI Feature Service 当前 r5 源码快照 pytest：`32/32` 通过；使用 Python 3.10 隔离 venv，从持久 wheelhouse 离线安装依赖；
 - Python 测试 wheelhouse 共 24 个文件、10,799,860 bytes，并保存逐文件 SHA-256、摘要和测试日志。
 - 已生成全栈集成候选包 `v0.1.1-20261002`，共 255 个文件、2,650,940 bytes；本地密钥扫描与 ZIP 完整性检查通过；
 - 交付包 SHA-256 为 `767dc190f1c78609668d995dc8608dc24a7b4ba2b6950a8cca052f75b4e53abd`；已上传到持久目录 `/gemini/code/sgx-classification/shared/downloads/deliveries/` 并在远端复核 hash 与 ZIP 完整性；旧 `v0.1.0` 未覆盖。
@@ -49,12 +49,12 @@
 （SHA-256 `699e1b49c6195d83f475889d4767670b4a9a91ef5d786ff09b664e14c255a575`）。
 复制采用加法式操作，staging、下载收据、许可证和旧失败记录均保留。
 
-当前 Feature Service 源码以不可覆盖的 r4 快照保存到
-`/gemini/code/sgx-classification/shared/downloads/source-packages/sgx-feature-service-source-20261003-r4.tar.gz`，
+当前 Feature Service 源码以不可覆盖的 r5 快照保存到
+`/gemini/code/sgx-classification/shared/downloads/source-packages/sgx-feature-service-source-20261003-r5.tar.gz`，
 SHA-256 为
-`48625ac441958779ad851ed649b89c60a03d67735c0bcc4ff3b0a7d387217fb6`。
+`2e66e369c07a286f3c7b6e2d48de4ceb5db9fe0ebd21cd3907d8bfcd90b872da`。
 从该持久快照解包后的 `32/32` pytest 日志 SHA-256 为
-`2f6e8ffe38ba683dd75f1eb11ef90897fa88788101d5279f8d2b48d8c86c778d`；
+`b1b2d25b72a9d852e4c6fc7a6b5a142deba99cc5d649de317f7e14a348b19974`；
 测试未联网，`/quota` 只使用现有可离线重建 venv。
 
 ### ASR 失败、修复与结果

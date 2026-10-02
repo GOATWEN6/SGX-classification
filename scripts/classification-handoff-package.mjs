@@ -17,7 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const packageName = 'sgx-classification-fullstack-integration-candidate-v0.2.0-20261003';
+const packageName = 'sgx-classification-fullstack-integration-candidate-v0.2.1-20261003';
 const outIndex = process.argv.indexOf('--out');
 const outArgument = outIndex >= 0 ? process.argv[outIndex + 1] : 'dist';
 if (!outArgument) throw new Error('--out requires a path');
@@ -107,7 +107,7 @@ for (const [source, destination] of rootDocuments) {
 
 const metadata = {
   packageName,
-  packageVersion: '0.2.0',
+  packageVersion: '0.2.1',
   status: 'internal_release_candidate',
   createdAt: new Date().toISOString(),
   source: {
