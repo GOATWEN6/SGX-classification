@@ -1,5 +1,11 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-10-02：新增云端 worker-pull 控制平面契约
+> [`classification-worker-control-plane.schema.json`](classification-worker-control-plane.schema.json)。
+> 它定义 lease、heartbeat、complete、fail 和 cancel-ack 的版本、scope、授权 revision、输入 hash、
+> attempt/lease identity、结果 artifact 与 usage。VirtAI worker 是可重启计算节点；产品后端必须用事务
+> CAS 决定是否接收完成结果。Schema 不实现生产鉴权、队列、对象存储或数据库，也不允许浏览器直接调用。
+
 > 2026-09-30：E3a Stage A → Lab composition adapter 已实现。
 > [`classification-hybrid.schema.json`](classification-hybrid.schema.json) 的 `ContentObservation`
 > 现在支持可选 `temporal` 与 `placeKind`，`ObservationSupport` 支持可选 `sourceType`，并允许一个

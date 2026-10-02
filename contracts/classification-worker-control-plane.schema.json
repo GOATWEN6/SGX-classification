@@ -1,0 +1,335 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-worker-control-plane:v1",
+  "$comment": "Worker-pull protocol between the product control plane and an untrusted/restartable SGX compute worker. Authentication, signed URL issuance and transactional CAS are implemented by the product backend.",
+  "definitions": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "DateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["householdId", "subjectId"],
+      "properties": {
+        "householdId": { "$ref": "#/definitions/Id" },
+        "subjectId": { "$ref": "#/definitions/Id" }
+      }
+    },
+    "WorkerVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gitCommit",
+        "contractVersion",
+        "providerVersion",
+        "promptVersion",
+        "guardVersion",
+        "adapterVersion",
+        "taxonomyVersion",
+        "ocrVersion",
+        "embeddingVersion"
+      ],
+      "properties": {
+        "gitCommit": { "type": "string", "minLength": 7, "maxLength": 64, "pattern": "^[a-f0-9]+$" },
+        "contractVersion": { "$ref": "#/definitions/Id" },
+        "providerVersion": { "$ref": "#/definitions/Id" },
+        "promptVersion": { "$ref": "#/definitions/Id" },
+        "guardVersion": { "$ref": "#/definitions/Id" },
+        "adapterVersion": { "$ref": "#/definitions/Id" },
+        "taxonomyVersion": { "$ref": "#/definitions/Id" },
+        "ocrVersion": { "$ref": "#/definitions/Id" },
+        "embeddingVersion": { "$ref": "#/definitions/Id" }
+      }
+    },
+    "WorkerCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modalities", "features", "maxImagesPerJob", "personMatchingEnabled"],
+      "properties": {
+        "modalities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["image", "user_text", "final_asr"] }
+        },
+        "features": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["hash", "phash", "exif", "quality", "ocr", "image_embedding", "text_embedding", "vlm_extract", "vlm_relate", "story_summary"] }
+        },
+        "maxImagesPerJob": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "personMatchingEnabled": { "type": "boolean" }
+      }
+    },
+    "LeaseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "workerId", "maxJobs", "versions", "capabilities"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "workerId": { "$ref": "#/definitions/Id" },
+        "maxJobs": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "versions": { "$ref": "#/definitions/WorkerVersions" },
+        "capabilities": { "$ref": "#/definitions/WorkerCapabilities" }
+      }
+    },
+    "DownloadArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "downloadUrl", "expiresAt", "sha256", "byteLength", "mimeType"],
+      "properties": {
+        "artifactId": { "$ref": "#/definitions/Id" },
+        "downloadUrl": { "type": "string", "format": "uri", "minLength": 1, "maxLength": 4096 },
+        "expiresAt": { "$ref": "#/definitions/DateTime" },
+        "sha256": { "$ref": "#/definitions/Sha256" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+        "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "InlineText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "sha256"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 50000 },
+        "sha256": { "$ref": "#/definitions/Sha256" }
+      }
+    },
+    "EvidenceLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "contentId", "modality", "revision", "sourceHash", "lifecycleState"],
+      "properties": {
+        "evidenceId": { "$ref": "#/definitions/Id" },
+        "contentId": { "$ref": "#/definitions/Id" },
+        "modality": { "enum": ["image", "user_text", "final_asr"] },
+        "revision": { "type": "integer", "minimum": 1 },
+        "sourceHash": { "$ref": "#/definitions/Sha256" },
+        "lifecycleState": { "const": "active" },
+        "bindingId": { "$ref": "#/definitions/Id" },
+        "artifact": { "$ref": "#/definitions/DownloadArtifact" },
+        "inlineText": { "$ref": "#/definitions/InlineText" }
+      },
+      "oneOf": [
+        {
+          "properties": { "modality": { "const": "image" } },
+          "required": ["artifact"]
+        },
+        {
+          "properties": { "modality": { "enum": ["user_text", "final_asr"] } },
+          "required": ["inlineText"]
+        }
+      ]
+    },
+    "UploadTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "uploadUrl", "expiresAt", "maxByteLength", "mimeType"],
+      "properties": {
+        "artifactId": { "$ref": "#/definitions/Id" },
+        "uploadUrl": { "type": "string", "format": "uri", "minLength": 1, "maxLength": 4096 },
+        "expiresAt": { "$ref": "#/definitions/DateTime" },
+        "maxByteLength": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+        "mimeType": { "const": "application/json" }
+      }
+    },
+    "LeaseGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobId",
+        "runId",
+        "leaseToken",
+        "leaseExpiresAt",
+        "jobRevision",
+        "attemptRevision",
+        "scope",
+        "authorizationRevision",
+        "deadlineAt",
+        "inputHash",
+        "executionProfileDigest",
+        "evidence",
+        "resultUpload"
+      ],
+      "properties": {
+        "jobId": { "$ref": "#/definitions/Id" },
+        "runId": { "$ref": "#/definitions/Id" },
+        "leaseToken": { "type": "string", "minLength": 32, "maxLength": 512 },
+        "leaseExpiresAt": { "$ref": "#/definitions/DateTime" },
+        "jobRevision": { "type": "integer", "minimum": 1 },
+        "attemptRevision": { "type": "integer", "minimum": 1 },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "deadlineAt": { "$ref": "#/definitions/DateTime" },
+        "inputHash": { "$ref": "#/definitions/Sha256" },
+        "executionProfileDigest": { "$ref": "#/definitions/Sha256" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 300,
+          "items": { "$ref": "#/definitions/EvidenceLease" }
+        },
+        "resultUpload": { "$ref": "#/definitions/UploadTarget" }
+      }
+    },
+    "LeaseResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "leases"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "leases": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/definitions/LeaseGrant" }
+        }
+      }
+    },
+    "RunIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workerId",
+        "jobId",
+        "runId",
+        "leaseToken",
+        "jobRevision",
+        "attemptRevision",
+        "authorizationRevision",
+        "inputHash",
+        "executionProfileDigest"
+      ],
+      "properties": {
+        "workerId": { "$ref": "#/definitions/Id" },
+        "jobId": { "$ref": "#/definitions/Id" },
+        "runId": { "$ref": "#/definitions/Id" },
+        "leaseToken": { "type": "string", "minLength": 32, "maxLength": 512 },
+        "jobRevision": { "type": "integer", "minimum": 1 },
+        "attemptRevision": { "type": "integer", "minimum": 1 },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "inputHash": { "$ref": "#/definitions/Sha256" },
+        "executionProfileDigest": { "$ref": "#/definitions/Sha256" }
+      }
+    },
+    "HeartbeatRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity", "progress", "stage"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" },
+        "progress": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "stage": { "enum": ["downloading", "features", "retrieval", "vlm_extract", "vlm_relate", "organizing", "uploading"] }
+      }
+    },
+    "HeartbeatResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "leaseExpiresAt", "control"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "leaseExpiresAt": { "$ref": "#/definitions/DateTime" },
+        "control": { "enum": ["continue", "cancel", "authorization_changed", "deadline_exceeded"] }
+      }
+    },
+    "Usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endToEndLatencyMs", "providerLatencyMs", "inputTokens", "outputTokens", "costCny", "providerCalls"],
+      "properties": {
+        "endToEndLatencyMs": { "type": "integer", "minimum": 0 },
+        "providerLatencyMs": { "type": "integer", "minimum": 0 },
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "costCny": { "type": "number", "minimum": 0 },
+        "providerCalls": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ResultArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "sha256", "byteLength", "mimeType"],
+      "properties": {
+        "artifactId": { "$ref": "#/definitions/Id" },
+        "sha256": { "$ref": "#/definitions/Sha256" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+        "mimeType": { "const": "application/json" }
+      }
+    },
+    "CompleteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity", "status", "versions", "resultArtifact", "usage"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" },
+        "status": { "enum": ["succeeded", "needs_review"] },
+        "versions": { "$ref": "#/definitions/WorkerVersions" },
+        "resultArtifact": { "$ref": "#/definitions/ResultArtifact" },
+        "usage": { "$ref": "#/definitions/Usage" }
+      }
+    },
+    "FailRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity", "errorCode", "stage", "retryable", "providerCalled", "usage"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" },
+        "errorCode": {
+          "enum": [
+            "DOWNLOAD_FAILED",
+            "HASH_MISMATCH",
+            "UNSUPPORTED_MEDIA",
+            "FEATURE_SERVICE_UNAVAILABLE",
+            "OCR_FAILED",
+            "EMBEDDING_FAILED",
+            "PROVIDER_TIMEOUT",
+            "PROVIDER_RATE_LIMITED",
+            "PROVIDER_INVALID_OUTPUT",
+            "RESULT_UPLOAD_FAILED",
+            "VERSION_MISMATCH",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "stage": { "enum": ["lease", "downloading", "features", "retrieval", "vlm_extract", "vlm_relate", "organizing", "uploading"] },
+        "retryable": { "type": "boolean" },
+        "providerCalled": { "type": "boolean" },
+        "usage": { "$ref": "#/definitions/Usage" }
+      }
+    },
+    "CancelAckRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity", "reason", "temporaryFilesDeleted"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" },
+        "reason": { "enum": ["cancelled", "authorization_changed", "deadline_exceeded", "evidence_inactive"] },
+        "temporaryFilesDeleted": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/LeaseRequest" }
+  ]
+}
