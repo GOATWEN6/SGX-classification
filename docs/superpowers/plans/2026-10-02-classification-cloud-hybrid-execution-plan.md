@@ -3,7 +3,7 @@
 > 日期：2026-10-02  
 > 对应 Spec：`sgx-classification-cloud-hybrid.1.0.0`  
 > 当前分支：`codex/classification-contract-v1`  
-> 总体状态：执行中；远端公钥安装是当前外部阻塞
+> 总体状态：执行中；SSH、隔离目录、源码 staging 和无模型契约测试已完成，当前阻塞转为模型制品冻结、激活 release 与常驻 Worker
 
 ## 完成标准
 
@@ -54,21 +54,21 @@ Gate：model manifest 和 dependency lock 可审查；没有未核验权重或 l
 1. 创建 `/gemini/code/sgx-classification/releases/<git-sha>` 与 `shared/`；
 2. 创建独立 Python venv，不污染系统 Python；
 3. 部署 Node worker 与 localhost feature service；
-4. 模型优先引用只读挂载，缺失模型才按 manifest 下载到平台允许的持久位置；
+4. 模型优先引用只读挂载，缺失模型才按 manifest 下载；模型快照、wheel、源码包、许可证和所有下载缓存必须直接落到 `/gemini/code/sgx-classification` 的持久目录，不能先把 `/quota` 或 `/tmp` 当作唯一副本；
 5. 写入非秘密配置；密钥只从 VirtAI secret/env 注入；
 6. 先启动 `/healthz`、`/readyz`、`/version`；
-7. 验证 `current` 原子切换和上一 release 回滚。
+7. 从持久 wheelhouse 离线重建 `/quota` venv，并验证 `current` 原子切换和上一 release 回滚；容器恢复后不得重新联网获取已冻结依赖或模型。
 
 Gate：离线启动通过；停止/重启后代码、manifest 仍在，唯一业务状态不依赖容器。
 
-## Phase 4：实现三个正式 adapter
+## Phase 4：冻结正式 adapter 并接入 Worker
 
-1. `TextSemanticAdapter`：纯文字和纯 final ASR 的结构化语义；
-2. `OcrAdapter`：区域、文字、置信候选、source hash、model version；
-3. `EmbeddingAdapter`：image/text embedding、版本、维度、失败降级；
-4. `CandidateRetriever`：先 scope filter，再精确 Top-K，多路 union；
-5. `FeatureServiceClient`：超时、取消、错误码、版本不匹配；
-6. 所有 adapter 输出进入现有 Stage A / organization 主链，不建立第二条平行产品链。
+1. 已有源码边界：OCR、image/text embedding、匿名人物候选和 fail-closed ASR；
+2. 冻结每个 adapter 的模型 artifact、license、revision、hash、依赖锁和目标环境 smoke；
+3. 实现 `FeatureServiceClient`：超时、取消、错误码、版本不匹配；
+4. 实现 `CandidateRetriever`：先 scope filter，再精确 Top-K，多路 union；
+5. 所有 adapter 输出进入现有 Stage A / organization 主链，不建立第二条平行产品链；
+6. 首版 Worker 控制面仍只租赁 `image/user_text/final_asr`；原始音频先经过独立 ASR 前置任务，若同一 lease 要携带 audio/face feature，必须升级协议。
 
 Gate：Fake/fixture 聚焦测试、全量 classification regression、typecheck、build、secret scan 通过。
 
@@ -90,9 +90,9 @@ Gate：OCR、embedding Gate 通过；模型选择和未选理由记录完整。
 - 模型：`qwen3.7-flash-2026-07-15`；
 - 12 个提交、35 次计划请求；
 - exploration 可拆为 20 + 15；
-- 人物身份匹配关闭；
+- 人物候选只在授权且具备 reference policy 的场景开启；姓名和亲属关系不自动确认；
 - 自动重试 0；
-- 费用与调用计入总硬上限 60 次 / ¥5；
+- 核心计划为 55 次；扩展诊断必须单独预登记，全部真实请求总硬上限 150 次 / ¥25；
 - 单例错误继续其他独立案例，授权/预算/model/scope 错误停止全批。
 
 允许修复真正的共因：Prompt、adapter、Guard、绑定或组织规则。每次修复提升版本并保存旧 run。
@@ -153,8 +153,8 @@ Gate：产品负责人按 10 个代表故事盲审；无 P0/P1。
 
 ## 当前下一动作
 
-1. 等待公钥安装，然后执行 Phase 1；
-2. 同时完成 Phase 0 的 diff 审查和小提交；
-3. 预检通过后按资源事实完成 Phase 2，而不是预先安装所有候选；
-4. 首个付费请求只会在 Phase 4、5 通过且 run manifest 冻结后发生。
-
+1. 冻结模型来源、license、revision、SHA-256 和目标环境 dependency lock；
+2. 在既有隔离根目录创建不可变 release，完成真实 adapter 的离线 smoke、`/readyz`、`/version` 和回滚；
+3. 完成常驻 Worker、FeatureServiceClient 与产品控制面无模型联调；
+4. 通过零付费 OCR/embedding Gate 后冻结 run manifest，再执行真实模型 exploration；
+5. exploration 修复收敛后冻结新版本并运行独立 validation，随后完成生命周期、并发和页面验收。

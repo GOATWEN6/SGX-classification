@@ -20,6 +20,9 @@ try {
     '--resolveJsonModule', '--strict', '--skipLibCheck', '--noEmit', 'false', '--incremental', 'false', ...files]);
   const tests = (await readdir(path.join(root, 'harness/classification')))
     .filter(f => f.endsWith('.test.mjs')).map(f => `harness/classification/${f}`);
+  const workerTests = (await readdir(path.join(root, 'deploy/classification-worker/tests')))
+    .filter(f => f.endsWith('.test.mjs')).map(f => `deploy/classification-worker/tests/${f}`);
+  tests.push(...workerTests);
   if (!tests.length) throw new Error('No classification tests found');
   const demoIndex = process.argv.indexOf('--demo');
   run(demoIndex >= 0 ? ['harness/classification/demo.mjs', process.argv[demoIndex + 1] ?? 'success'] : ['--test', ...tests],

@@ -5,6 +5,8 @@
 > 当前范围：T0 算法/数据门禁 + T1 本地产品 Alpha
 > 下游责任：全栈工程师从本手册进入 T2；T3 使用另一套跨家庭独立数据
 
+> **历史快照提示（2026-10-02）**：本文保留 2026-09-27 本地 Alpha 的实际状态与历史证据，不再作为当前 T2 接口或部署说明。当前全栈接入以 [全栈接入手册 v2](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md) 和 [云端混合计算服务冻结 Spec](../superpowers/specs/2026-10-02-classification-cloud-hybrid-service-spec.md) 为准。本文后文出现的 `.12`、旧硬分数和“尚未接入”均应按其历史日期理解，不得覆盖当前 `.13` 实现状态。
+
 ## 1. 交付结论
 
 当前仓库已经具备一条可在本机浏览器运行的图文分类主链：
@@ -89,7 +91,7 @@ flowchart TD
 |有界 exact 召回基线|`src/lib/algorithms/classification/exact-retrieval.ts`|
 |T0 离线门禁|`src/lib/algorithms/classification/t0-real-media.ts`|
 
-## 4. Prompt、模型、规则与评分器的当前边界
+## 4. Prompt、模型、规则与评分器的 2026-09-27 边界
 
 |环节|T1 实际执行|版本/证据|可以声称什么|
 |---|---|---|---|
@@ -102,9 +104,11 @@ flowchart TD
 |旧规则分|时间 .25、地点 .20、事件 .25、人物 .20、主题 .10|`association-rules.1`|可复现 baseline；不是概率|
 |标题/摘要|确定性模板|`titleCandidate` / `summaryCandidate`|只验证呈现链；不代表生成质量|
 
-仓库另有真实 Stage A Provider，但它没有接入本地实验台：
+2026-10-03 状态更正：仓库已存在 `stage_a_real` 执行服务和 `/classification-lab/real` 页面路径，当前 Prompt 为 `sgx-five-facets.13`；Feature Service 的 RapidOCR、Chinese-CLIP、YuNet/SFace 和 SenseVoice/FunASR 已完成目标服务器 artifact 冻结、离线加载和同进程 HTTP 冒烟。产品数据库/对象存储、正式控制面、常驻 Worker 和固定分母 VLM 评测仍未完成，不能据此宣称生产闭环或真实准确率达标。
 
-- Prompt/Guard 版本：`sgx-five-facets.12`；`.12` 只完成过保存响应的历史离线 replay，尚未获得新的付费调用证据，且原 `/private/tmp` replay 目录当前已不可访问；
+以下记录仅用于解释 2026-09-27 快照：
+
+- Prompt/Guard 版本：当时为 `sgx-five-facets.12`；`.12` 的运行记录继续作为历史 provenance 保留，当前实现不得回退到该版本；
 - 系统 Prompt：`src/lib/algorithms/classification/stage-a-provider.ts` 的 `SYSTEM_PROMPT`；
 - 结构与版本：`src/lib/algorithms/classification/stage-a-contract.ts`；
 - 调用方式：图片与不可信 caption/EXIF/文字 Evidence 作为 user content，返回严格 JSON；
@@ -286,7 +290,7 @@ npm run classification:t0-preflight -- \
 - [Immich](https://github.com/immich-app/immich)，AGPL-3.0：只参考增量索引、人物聚类与纠错产品流程；未复制源码、未引入服务。
 - [LibrePhotos](https://github.com/LibrePhotos/librephotos)，根仓库 MIT：只参考照片管理、搜索和人物/事件组织；模型与子依赖许可必须另审。
 - [pgvector](https://github.com/pgvector/pgvector)，PostgreSQL License：T2 已使用 PostgreSQL 时可作为向量候选；尚未选型或安装。
-- OpenCLIP/SigLIP、PaddleOCR、OpenCV YuNet/SFace 仅是 H2 Spike 候选。正式采用前必须记录代码许可、权重许可、来源、hash、商用边界和数据基准。
+- 当前内部候选为 RapidOCR/PP-OCRv5 mobile、ModelScope Chinese-CLIP、OpenCV YuNet/SFace 和 SenseVoiceSmall/FunASR。代码许可、权重来源、不可变 revision、hash 与运行证据已记录；固定数据基准、SFace 商业/训练数据来源和真实用户分布仍是 release Gate。SigLIP2 保留为后续多语对照，不是本版 active artifact。
 
 本轮动作日志、T0 manifest 和本地实验台是 SGX 特定契约与实现，没有复制外部项目代码。
 
@@ -305,7 +309,7 @@ npm run classification:t0-preflight -- \
 ## 12. 已知限制与禁止误读
 
 1. 确定性 Provider 不读取图片语义，只把图片作为 `content_type=照片`；不得用其输出报告图片分类准确率。
-2. 真实 Stage A、OCR、embedding、近重复和 VLM router 尚未接入实验台。
+2. 当前已存在真实 Stage A 页面接线和 Feature Service adapter 源码；尚缺的是冻结模型制品、Worker 串联、远端性能 Gate 和产品控制面联调。
 3. 本地任务同步执行，没有生产队列、租约、重试 worker、分布式锁或多实例一致性。
 4. T1 的 actor 校验只验证请求 actor 与原始 envelope actor 一致；它不是生产登录鉴权。
 5. 本地删除不等于物理擦除，T2 必须完成对象存储删除和派生索引清理。
@@ -323,7 +327,7 @@ npm run classification:t0-preflight -- \
 1. checkout 本分支并运行第 5 节本地实验台；
 2. 用 2 张非敏感测试图 + 用户说明 + final ASR 完成人工 smoke；
 3. 运行 `npm run test:classification`、typecheck、build 和 secret scan；以当次测试 runner 的固定分母为准，不把旧测试数量写成操作要求；
-4. 阅读 `classification-ingestion-v2.schema.json`、`classification-hybrid.schema.json` 与本文件；
+4. 阅读 `classification-ingestion-v2.schema.json`、`classification-worker-control-plane.schema.json` 与 [全栈接入手册 v2](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)；
 5. 先实现 store/object/auth adapter，保持 Provider 为 deterministic；
 6. 再实现 queue/worker 与取消、晚到结果拒收；
 7. 用相同 contract 接真实 Provider，禁止浏览器持有 provider key；

@@ -1,11 +1,11 @@
 # SGX 自动分类与归纳：云端混合计算服务冻结 Spec
 
-> 状态：Frozen for T0/T1 implementation  
+> 状态：Owner-approved architecture / implementation in progress
 > Spec version：`sgx-classification-cloud-hybrid.1.0.0`  
 > 日期：2026-10-02  
-> 适用范围：30–50 名首批用户的智能相册上传与家庭双端互传；输入包括图片、用户原文和 final ASR  
+> 适用范围：最多 10 名内部用户的真实产品联调；输入包括图片、用户原文、原始音频和 final ASR
 > 当前语义基线：`qwen3.7-flash-2026-07-15` / Prompt `sgx-five-facets.13`  
-> 当前阻塞：VirtAI 专用公钥尚未安装到远端账号；只读资源预检尚未完成
+> 当前服务器状态：SSH、三根隔离目录、源码 staging 和无模型契约测试已完成；正式模型、激活 release 和常驻 Worker 尚未完成
 
 ## 1. 本 Spec 冻结什么
 
@@ -16,6 +16,15 @@
 - 任何把 embedding cosine、旧 `0.25/0.55/0.80` 或模型自报 confidence 直接解释为真实概率的实现。
 
 历史阈值只能用于回放旧结果，不能决定新内容是否自动合并、是否进入 Memory 或是否要求用户逐项确认。
+
+### 1.1 2026-10-02 Owner 已确认事项
+
+- 正式调用采用 worker-pull：产品后端保存任务，VirtAI Worker 主动领取并回传结果；SSH 只用于部署和调试；
+- 本轮交付目标为“最多 10 名内部用户可真实使用”，暂不承诺公网生产高可用；
+- 产品现有文件存储是原图、音频和文件的权威来源，VirtAI 只持有可清理的任务临时副本；
+- 原始音频可以由云端 ASR 产生 final ASR；已有 final ASR 时直接复用，不重复转写；
+- 人物候选能力开启，但姓名、亲属关系和长期 Memory 仍受独立确认门控制；
+- 单个非关键组件失败时保留可用的部分结果；授权、scope、hash 或跨家庭隔离失败时立即停止。
 
 ## 2. 产品目标和边界
 
@@ -40,7 +49,7 @@
 
 本阶段不承诺：
 
-- 人脸身份匹配或亲属关系推断；
+- 未经授权或确认的人脸实名、亲属关系推断；
 - 真实家庭分布准确率；
 - 正式老照片 OCR 准确率；
 - ASR 模型准确率；
@@ -159,6 +168,19 @@ Flash VLM 负责：
 
 正常新增不得做全图库两两 VLM 比较。Embedding 只决定候选顺序，不直接证明同一事件，不用固定 cosine 阈值自动合并。
 
+### 4.3 部分成功和安全停止
+
+默认按组件降级，不因一个次要能力失败而废弃整批输入：
+
+- OCR 失败：继续使用图片、用户原文、final ASR 和按需 VLM；
+- embedding 失败：停止跨历史库自动关联，本次提交仍可分类和归纳；
+- 人脸候选失败：继续处理时间、地点、场景、事件和主题；
+- ASR 失败：保留原音频并标记转写待处理，不生成虚构文本；
+- VLM 失败：保存已完成的本地特征和规则结果，任务标记为部分完成；
+- 授权失效、scope 不一致、文件 hash 不一致、跨家庭内容混入或文件损坏：停止受影响任务，不接收迟到结果。
+
+补算只针对缺失组件，并由同一 `runId`、Evidence hash、授权 revision 和模型版本约束；不得重复计费或重复创建 StoryUnit。
+
 ## 5. Open-Source Source Gate
 
 |能力|首选|许可证/约束|使用方式|首轮对照|
@@ -192,16 +214,35 @@ Flash VLM 负责：
     manifests/
   current -> releases/<git-sha>
   shared/
+    cache/
     config/nonsecret.env
+    downloads/
     manifests/
-    wheels/
+    models/
+    wheelhouse/
+    tools/
+  staging/
+    models/
+    packages/
 
-${TMPDIR:-/tmp}/sgx-classification/<jobId>/
+/quota/sgx-classification/
+  venvs/
+  cache/
+  runs/
+  locks/
+  staging/
+
+/tmp/sgx-classification/jobs/<jobId>/
 ```
 
 部署规则：
 
 - `releases/<git-sha>` 不可变；`current` 原子切换；保留上一版本用于回滚；
+- 所有网络下载内容都写入 `/gemini/code/sgx-classification`：模型快照、权重、wheel、源码包、许可证、model card 与 Hugging Face/ModelScope/ONNX/Torch/pip/uv 下载缓存不得把 `/quota` 或 `/tmp` 作为唯一副本；
+- `/quota/sgx-classification` 只放从持久 wheelhouse、模型库和 release 离线重建的 venv、编译产物与生成缓存；单任务输入只写 `/tmp/sgx-classification/jobs`；
+- 三个 SGX 根目录及其受管子目录一律 `0700`，拒绝软链接、路径覆盖和指向其他项目的环境变量；
+- 平台实测 `/gemini/code` 元数据操作较慢，因此不在其中展开 Python venv；运行 venv 从持久 wheelhouse 重建到 `/quota`；
+- 采集阶段必须显式绑定持久 cache/download/staging 路径；冻结后以 `offline_only` 启动，Worker 对落到 `/quota` 的模型/依赖下载缓存 fail closed；
 - `/gemini/data-*` 和 `/gemini/pretrain*` 按平台文档视为只读；
 - 不假设 `/gemini/output` 在推理容器可写；
 - 唯一结果、数据库和队列不得放在容器根目录；
@@ -280,8 +321,8 @@ ${TMPDIR:-/tmp}/sgx-classification/<jobId>/
 
 - Exploration：12 个提交、18 张图、13 个关系、4 个 text-only/ASR-only；计划 35 次真实请求；
 - T1 Validation：8 个未用于调参的提交、12 张图、8 个关系；固定 20 次真实请求；
-- 总计划 55 次，硬上限 60 次，总费用上限 ¥5，自动重试 0，人物身份匹配关闭；
-- 额外 5 次只用于预登记工程诊断，不进入语义分母；
+- 核心固定计划仍为 55 次；扩展场景与定点诊断必须另有预登记 manifest，全部真实请求合计硬上限 150 次、总费用不超过 ¥25、自动重试 0；
+- 授权且具备 reference policy 的人物候选场景开启；未授权素材、姓名和亲属关系不进入自动身份判断；
 - Validation 打开后不得修改当前版本的 truth、Prompt 或规则；失败进入下一版本计划。
 
 ### 10.2 组件 Gate
@@ -348,4 +389,3 @@ Embedding 子集：30 query / 62 gallery，20 个有正确候选，10 个无可�
 7. 交付接口、Schema、错误码、部署配置、资源基准、冻结测试集、完整报告和回滚命令。
 
 即使全部通过，结论也只能是：在冻结合成多模态产品场景上，真实模型、OCR、embedding、证据规则、故事组织和生命周期通过 T0/T1 功能验证。真实家庭分布效果仍需 T2 后的受控 T3 Pilot。
-

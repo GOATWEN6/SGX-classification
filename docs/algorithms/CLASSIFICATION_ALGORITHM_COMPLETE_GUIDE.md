@@ -1,10 +1,10 @@
 # SGX 图文分类与归纳算法：完整架构、Prompt、规则与评分器
 
-> 当前统一阅读入口 · 文档版本：1.2.0 · 更新日期：2026-09-29<br>
-> 当前代码版本：`classification-lab.1` + `classification-stage-a.1` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.13`<br>
+> 当前统一阅读入口 · 文档版本：1.3.0 · 更新日期：2026-10-02<br>
+> 当前代码版本：`classification-stage-a.1` + `classification-hybrid.2` + `content-organization.3` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.13` / `stage-a-validation.2`<br>
 > 产品目标、完整输入输出流程、五项审计和下一轮真实模型 Gate 见：[2026-10-01 产品目标与真实验证 Gate](CLASSIFICATION_PRODUCT_OBJECTIVE_AND_REAL_VALIDATION_GATE_2026-10-01.md)<br>
 > 当前问题、原因和修订执行顺序见：[当前问题总表与下一阶段执行计划](CLASSIFICATION_CURRENT_ISSUES_AND_EXECUTION_PLAN_2026-09-29.md)<br>
-> 全栈接入与运行命令见：[T0/T1 全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)
+> 当前全栈接口、签名上传、Worker 控制面与验收 Gate 见：[全栈接入手册 v2](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)
 
 ## 1. 先看结论
 
@@ -21,13 +21,13 @@
 |统一内容与 StoryUnit 组织链|已实现 bounded retrieval、稀疏组织与测试|`ContentItem + ContentObservation + RetrievalCandidate → StoryUnit`|
 |T1 本地产品链|已实现 loopback BFF、实验页与动作审计|`Browser upload → Evidence → Provider base result → LabAction → current view`|
 
-当前还缺三段从 T0/T1 到生产的接线：
+当前还缺三段从集成候选到产品内测的发布工作：
 
-1. 把真实 Stage A、OCR、embedding 和 VLM router 接入实验台 Provider；
-2. 把本地文件适配器替换为生产数据库、对象存储、队列和正式鉴权；
-3. 先使用冻结合成 r5 完成 T0/T1 功能验收；真实家庭素材留作后续真实分布与泛化评估。
+1. OCR 已有远端工程基线；继续冻结 embedding、人物候选和 ASR 的模型制品、依赖、license、hash 与远端资源基准；
+2. Worker、Feature Service、Top-K、Stage A/VLM 和故事组织已有参考实现与回归；由全栈接产品数据库、对象存储、正式鉴权、任务租约和结果 CAS；
+3. 使用冻结的 20 个产品提交矩阵完成 exploration、独立 validation、生命周期、并发和本地页面验收；真实家庭素材留作后续真实分布与泛化评估。
 
-因此，当前 `StoryUnit` 的标题、摘要和关联分数是规则生成的工程候选，不是已经验证的真实 AI 摘要或概率。
+因此，本地 deterministic 链的 `StoryUnit` 标题和摘要仍是规则生成的工程候选；当前 active 组织策略不再用旧硬分数决定自动合并。真实 Stage A/VLM 输出也只是有 Evidence 来源的候选，不是已经确认的事实或概率。
 
 ## 2. 六张主图
 
@@ -70,13 +70,13 @@
 - [Mermaid 源码](../../figures/sgx-classification-product-memory-handoff.mmd)
 - [独立 Markdown 预览](../../figures/sgx-classification-product-memory-handoff.md)
 
-### 2.6 下一阶段：混合召回、按需 VLM 与渐进自动化
+### 2.6 当前混合召回、按需 VLM 与渐进自动化
 
 - [完整下一阶段 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)
 - [Mermaid 源码](../../figures/sgx-classification-hybrid-retrieval-adaptive-flow.mmd)
 - [独立 Markdown 预览](../../figures/sgx-classification-hybrid-retrieval-adaptive-flow.md)
 
-该目标架构先用本地 hash、EXIF、OCR 和 image-text embedding 生成少量候选，再让 VLM 只处理歧义关系和组级摘要。现有 `association-rules.1` 的 `0.80/0.55` 会作为可复现实验基线保留，不作为未来生产概率或人工确认门槛。
+该架构已在参考 Worker 中把 OCR 和 image-text embedding 派生特征送入 Stage A：先生成少量 Top-K 候选，再让 VLM 处理抽取和歧义关系。真实 embedding artifact 尚未冻结，所以当前证明的是接线和行为边界。`association-rules.1` 的 `0.80/0.55` 仅用于历史回放兼容，不是 active 产品概率或人工确认门槛。
 
 ## 3. 输入数据到底是什么
 
@@ -165,20 +165,13 @@ reference 或 correction 变化不会强制重新做单图视觉抽取，但会�
 - 只由图片内指令型 OCR 支持的事件、地点、时间或场景会被删除，不把攻击文字本身升级为事实冲突；
 - event 和 scene 必须通过运行时受控词表，越界标签在进入组织层前拒绝。
 
-`visual` 和 `ocr` quote 当前没有独立 OCR 或像素级验证，只能视为模型给出的来源描述，后续仍需评测或人工复核。这些本地规则只做格式规范化和有限来源校验，不会凭空补充新事实。
+`ocr` quote 只有在哈希绑定的 OCR 派生文本中逐字存在时才会被接受；`visual` 仍是模型对像素的观察，不是像素法证结论。两者都需要在真实数据上评测。这些本地规则只做格式规范化和来源约束，不会凭空补充新事实。
 
 ### 4.4 第二阶段：候选检索与双图 `relate`
 
-系统不会让模型比较所有照片组合。确定性候选检索先为每张受影响照片排序：
+系统不会让模型比较所有照片组合。候选检索先使用 embedding Top-K；无 embedding 或需要补充召回时，再按分类通道排序：已确认 reference、事件+时间+地点、事件+时间、事件+地点、事件、时间+地点、时间、地点、无元数据。这里没有加权总分，也不把相似度变成关系概率。
 
-|候选信号|工程排序加分|
-|---|---:|
-|候选图已有已确认 reference|`+8`|
-|事件类型相同|`+3`|
-|时间值相同|`+2`|
-|地点 label 相同|`+1`|
-
-每张照片最多选择 `candidatesPerPhoto` 张历史照片。候选过多时还会保留一个低分 fallback，并记录 `selected`、`omitted` 和 `coverage=truncated`。这些分数只决定“哪些照片送去比较”，不是相似概率或产品置信度。
+每张照片最多选择 `candidatesPerPhoto` 张历史照片。候选过多时会保留一个发现性 fallback，并记录 `selected`、`omitted` 和 `coverage=truncated`。这些顺序只决定“哪些照片值得送去比较”，不能直接授权合并。
 
 模型对每个候选照片对返回：
 
@@ -309,46 +302,35 @@ GLM 使用 `thinking: { type: 'disabled' }`。当前没有显式设置 `temperat
 - 单靠一张图片通常不能证明它是 screenshot；
 - `theme` 目前需要其他来源或后续适配器，不能从当前五维结果中假装已经得到。
 
-## 8. 两套容易混淆的“分数”
+## 8. 当前决策规则与历史分数
 
-### 8.1 Stage A 候选排序分
+当前 `classification-active-evidence-rules.1` 不使用数字阈值。embedding 和分类通道只召回候选，是否组织由可解释证据状态决定：
 
-`+8/+3/+2/+1` 只决定哪些历史照片进入双图模型比较。它没有概率含义，也没有“高于某值就自动确认”的规则。
+|证据状态|动作|
+|---|---|
+|用户明确确认或拒绝|作为权威约束执行|
+|Stage A `same_event`，无冲突，且不会桥接两个稳定组|`auto_link_candidate`|
+|Stage A `different`|`auto_separate`|
+|Stage A `same` 但存在冲突或会桥接稳定组|`review`|
+|Stage A `unknown`|保持分开|
+|只有 retrieval/embedding 相近|保持分开|
 
-### 8.2 Content Organization 工程关联分
+结果记录 `basis`、`evidenceStrength`、`groupImpact`、`riskLevel` 和原因；不会伪装成概率。用户显式关系不参加 AI 判断：用户确认的 `same_story/same_event` 直接作为硬约束，用户拒绝也持续覆盖 AI。
 
-`organizeContent()` 对两个 ContentItem 的规范化观察做精确重合加权：
-
-```text
-时间重合 +0.25
-地点重合 +0.20
-事件重合 +0.25
-人物重合 +0.20
-主题重合 +0.10
-```
-
-有冲突时总分上限为 `0.54`。默认状态规则是：
-
-|分数|状态|是否合并进 StoryUnit|
-|---:|---|---|
-|`score >= 0.80`|`ai_auto`|是|
-|`0.55 <= score < 0.80`|`needs_review`|否|
-|`score < 0.55`|`not_selected`|否|
-
-这是一套尚未校准的确定性工程规则，不是模型 confidence，也不是正式产品验收阈值。用户显式关系不参加打分：用户确认的 `same_story/same_event` 直接作为硬约束，用户拒绝也持续覆盖 AI。
+旧的 `+8/+3/+2/+1` 候选分和 `0.80/0.55` 内容重合阈值仍可读取历史 artifact，但 active 稀疏组织器不再写入或依赖它们。只有未来完成固定数据集校准后，才可以引入版本化的概率策略。
 
 ## 9. StoryUnit 如何生成
 
-当前 StoryUnit 生成不调用模型：
+当前规则 StoryUnit 生成不调用模型：
 
-- 标题候选顺序：第一个 event → 第一个 theme → 第一个 place → `未命名故事`；
+- 标题候选顺序：地点+第一个 event → 第一个 theme → 第一个 place → 场景记录 → `待整理内容`；
 - 标题最多 32 字；
-- 摘要模板：`包含 N 项内容，涉及……`；
+- 摘要按内容数量、事件、时间、地点、主题和有文字证据的人物组成；
 - 摘要最多 120 字；
-- 标题与摘要必须保存 `evidenceRefs`；
+- 标题与摘要必须保存 `titleSupports/summarySupports`；
 - 详情页设计要求保留用户原文，AI 文案不能覆盖原始内容。
 
-这条规则链已有代码、测试和 `Stage A → ContentObservation` 适配器。当前尚未完成的是：让实验台在运行时消费真实 Stage A Provider 的输出，并接入正式相册 UI 与生产存储。
+这条规则链已有代码、测试和 `Stage A → ContentObservation` 适配器；参考 Worker 已把 OCR、embedding、Stage A 和组织链串起来，`/classification-lab/real` 也有真实 Stage A 入口。当前尚未完成的是最终 embedding/face/ASR 模型发布，以及正式相册 UI、产品存储和控制面的产品接入。
 
 ## 10. 评测数据如何冻结
 
@@ -598,18 +580,17 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 
 用户已经明确要求降低图片两两模型调用、减少人工确认并保证长期泛化，因此执行顺序更新为：
 
-1. **已完成**：冻结混合召回与渐进自动化契约，保留旧规则作为 baseline；
-2. **已完成**：实现 Stage A 到 `ContentObservation` 的适配器；
-3. **已完成**：让新组织器消费稀疏候选边，并提供 bounded exact top-K；
-4. **已完成工程入口**：本地 T1 实验台、动作审计和全栈 adapter 边界；
-5. **当前待办**：独立复核最新 6 例暴露的 truth 口径，再冻结 `.12` Prompt、taxonomy、Guard 和评分器；
-6. 把同一真实 Stage A Provider 接到 `/classification-lab`，完成本地上传、结果、复核、删除和撤权验收；
-7. 获得新批次授权后，对 14 组 `t1_validation` 一次性运行固定分母验收，不用 validation 结果继续调参；
-8. 在隔离环境做 pHash、EXIF、OCR、SigLIP/OpenCLIP 和 exact/ANN 召回 Spike，减少图片两两 VLM 调用；
-9. 实现只处理 ambiguous/merge-impact 的 VLM router 和组级摘要，并用 exploration/holdout 校准 scorer；
-10. 建立版本化 FamilyReferenceStore，再由全栈接入生产 Job、相册 UI、批量复核、物理删除传播和 MemoryCandidate。
+1. **已完成**：冻结 evidence-rule、稀疏 Top-K、按需 VLM 和渐进自动化设计，旧硬分数只作历史 baseline；
+2. **已完成工程入口**：Prompt `.13`、真实 Stage A 页面入口、Worker 控制面 Schema 和 Feature Service adapter 源码；
+3. **部分完成**：OCR artifact 和远端工程基线已记录；继续冻结 embedding、人物候选、ASR 的制品、依赖锁和 license/hash，并通过 `/readyz`、`/version` 与资源基准；
+4. **已完成参考实现**：常驻 Worker 已串起下载、Feature Service、Top-K、Stage A/VLM、组织、结果上传和 complete/fail/cancel-ack；下一步由全栈实现产品控制面并联调；
+5. 按冻结的 20 个产品提交矩阵完成 exploration 与独立 validation，禁止查看 validation 后原地改 truth、Prompt 或规则；
+6. 完成撤权、删除、晚到拒收、重启恢复、并发、部分成功和成本审计；
+7. 在 `/classification-lab/real` 做产品人工验收并形成 P0/P1/P2 台账；
+8. **本包已交付契约与参考实现**：由全栈落地产品 API、签名 URL、对象存储、数据库、lease/outbox、监控与回滚；
+9. 建立版本化 FamilyReferenceStore，最后通过独立 MemoryCandidate Gate 接长期 Memory。
 
-详细任务、停止条件和暂定 Gate 见 [混合召回与渐进自动化 Spec](../superpowers/specs/2026-09-27-classification-hybrid-retrieval-adaptive-automation-spec.md)；T0/T1 的实际运行和全栈替换点见 [全栈交接手册](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)。
+详细任务、停止条件和暂定 Gate 见 [云端混合计算服务冻结 Spec](../superpowers/specs/2026-10-02-classification-cloud-hybrid-service-spec.md)；产品 API、Worker、签名 URL 和全栈替换点见 [全栈接入手册 v2](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)。
 
 2026-09-29 后续的具体执行顺序、评分器 v2、真实实验台 Provider 和付费授权边界见 [下一阶段执行计划](../superpowers/plans/2026-09-29-classification-next-execution-plan.md)。
 
@@ -623,7 +604,7 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 |候选检索、关系和归组|[`stage-a-association.ts`](../../src/lib/algorithms/classification/stage-a-association.ts)|
 |可信 Evidence 适配|[`stage-a-adapter.ts`](../../src/lib/algorithms/classification/stage-a-adapter.ts)|
 |StoryUnit 与内容组织|[`content-organization.ts`](../../src/lib/algorithms/classification/content-organization.ts)|
-|T0/T1 全栈交接、HTTP 与本地运行|[`CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md`](CLASSIFICATION_T0_T1_FULLSTACK_HANDOFF.md)|
+|当前全栈接入、HTTP、Worker 与验收 Gate|[`CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md`](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)|
 |Manifest、Truth、Approval 与评分器|[`stage-a-evaluation.mjs`](../../harness/classification/stage-a-evaluation.mjs)|
 |批次执行与报告|[`stage-a-eval.mjs`](../../harness/classification/stage-a-eval.mjs)|
 |当前 r5 与真实模型工程证据|[`CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md`](CLASSIFICATION_T0_REAL_MODEL_REPORT_2026-09-29.md)|
@@ -636,10 +617,10 @@ Stage A 当前固定返回 `semanticValidation=not_evaluated`，并声明 `organ
 
 ## 18. 阅读时最容易误解的七件事
 
-1. `0.80/0.55` 是内容组织规则阈值，不是模型置信度或真实准确率门槛。
+1. `0.80/0.55` 是已停用的历史内容组织 baseline，不是当前产品规则、模型置信度或真实准确率门槛。
 2. `unknownFacets.person` 表示既没有人脸也没有文字人物提及，不表示“看到了人但不知道姓名”。
 3. `same event` 是同一次真实事件，不是同一个事件类别。
 4. `scan/upload` 时间不能当作老照片里故事发生的时间。
 5. Fake、合成数据验收和真实 API 工程探针分别证明不同事情，不能互相替代。
 6. AI 自动关联仍然是候选；用户确认和长期 Memory 是另一层权威状态。
-7. 正常路径不会把整个图库全量两两发给 VLM；当前 StoryUnit 规则层的全量两两枚举也将在下一阶段改为稀疏候选输入。
+7. 正常路径不会把整个图库全量两两发给 VLM；active StoryUnit 组织器只处理有界 retrieval candidates。

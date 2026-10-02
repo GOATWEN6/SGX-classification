@@ -1,5 +1,13 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-10-02：混合召回与内容组织契约升级为
+> [`classification-hybrid.schema.json`](classification-hybrid.schema.json) v2（`schemaVersion=2.0`、
+> `contractVersion=classification-hybrid.2`）。v2 要求显式 `decisionMode`，当前仅开放
+> `evidence_rules`；未实现且未完成真实校准的 `calibrated_probability` 在 shadow 和 active
+> 两种模式下均拒收。旧数据继续由只读的
+> [`classification-hybrid-v1.schema.json`](classification-hybrid-v1.schema.json) 验证，不能伪装成 v2。
+> v2 的 embedding 相似度只负责召回候选，不作为合并概率或自动确认事实。
+
 > 2026-10-02：新增云端 worker-pull 控制平面契约
 > [`classification-worker-control-plane.schema.json`](classification-worker-control-plane.schema.json)。
 > 它定义 lease、heartbeat、complete、fail 和 cancel-ack 的版本、scope、授权 revision、输入 hash、

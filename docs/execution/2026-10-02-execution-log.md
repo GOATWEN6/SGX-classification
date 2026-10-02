@@ -11,20 +11,35 @@
 - 要求配置前先参考成熟开源项目并结合 30–50 用户首批规模；
 - 要求执行真实模型的完整 T0/T1 功能验证，并留下全栈调用接口；
 - 真实模型实验采用预注册分母、费用和停止条件，不把合成数据称为真实准确率。
+- 正式产品调用采用 worker-pull；SSH 只用于部署和调试；
+- 本轮交付为最多 10 名内部用户可真实使用的云端服务，不承诺公网生产高可用；
+- 产品现有文件存储保存权威素材，VirtAI 只保留任务临时副本；
+- 同时支持原始音频经云端 ASR 和直接复用产品 final ASR；
+- 人物候选能力开启，实名、关系和长期 Memory 仍使用独立确认门；
+- 采用组件级部分成功；授权、scope、hash 与跨家庭隔离失败时安全停止。
 
 ## 已完成事实
 
 ### 专用 SSH 身份
 
-- 已生成 ED25519 专用密钥；私钥只保存在本机 `~/.ssh/sgx_virtai_ed25519`，未写入仓库、报告或聊天；
-- 公钥 fingerprint：`SHA256:HX/+ADTvjcGYVLkJp2kSE2ZUBTUVpOygRLTo1XcdfEI`；
-- 已使用 `BatchMode=yes` 试连远端；主机可达，但账号尚未安装该公钥，返回 `Permission denied (password,publickey)`；
-- 因此尚未创建远端目录、安装依赖、读取模型或执行远端测试。
+- 已用受保护的 SGX 专用身份通过 `BatchMode=yes` 连接远端；私钥未写入仓库、报告或日志；
+- 已创建并核验三根 `0700` 隔离目录：`/gemini/code/sgx-classification`、`/quota/sgx-classification`、`/tmp/sgx-classification/jobs`；
+- 已上传无凭据源码包到独立 staging，未激活正式 release，也未覆盖其他项目目录；
+- 当前 `releases/` 与正式 `shared/models/` 仍为空，没有常驻分类服务进程。
+
+### 远端适配器契约 Gate
+
+- 最新 feature-service staging 包 SHA-256：`9d8ea75e69d93d9dd347b7bd2d4f5defdbb6982b5f26b36010dd28f9a5f1ac58`；
+- 首轮远端 pytest 暴露测试夹具把 image/text embedding 写成不同模型，与共享跨模态模型约束冲突：9 failed、11 passed；
+- 修正夹具后重新生成独立包并复测：20/20 passed；首轮失败包和记录保留，未覆盖；
+- 该 Gate 证明本地文件路径、契约、错误处理和可选人物端点可运行，不证明真实 ONNX/embedding/ASR 模型已加载。
 
 ### Source Gate
 
 - OCR 首选 RapidOCR + PP-OCRv5，ONNX Runtime CPU 优先；官方 PaddleOCR server 作为精度对照；
-- embedding 首选 SigLIP2 Base 224，Chinese-CLIP ViT-B/16 影子对照；
+- feature-service 同时支持冻结的 SigLIP2 和 ModelScope Chinese-CLIP profile；最终主模型必须经中文召回、延迟和显存固定基准选择；
+- 人物候选采用 YuNet 检测 + SFace embedding 的独立 profile，输出未命名候选，不直接输出姓名或关系；
+- ASR 候选为 SenseVoiceSmall，仍需冻结权重、运行时和音频解码依赖；
 - 向量先用 PostgreSQL + pgvector，按家庭和主体过滤后精确 Top-K；
 - 不在首批引入 Qdrant、BentoML、Ray Serve 或本地大 VLM；
 - 只参考 Immich/LibrePhotos 的架构边界，不复制未完成 license 审核的代码。
@@ -39,7 +54,7 @@
 
 ### 本地工程门禁
 
-- `npm run test:classification`：416/416 通过；
+- `npm run test:classification`：426/426 通过；
 - `npm run typecheck`：通过；
 - `npm run test:classification:secret`：通过；
 - `JWT_SECRET` 使用进程级占位值时 `npm run build`：通过；占位值未持久化；
@@ -58,12 +73,10 @@
 - 20 个产品提交、53 条 Evidence、30 张图；
 - 21 个关系：11 same、7 different、3 unknown；
 - exploration 35 次真实请求，validation 20 次；
-- 总计划 55 次，硬上限 60 次、总费用上限 ¥5、0 自动重试、人物身份匹配关闭；
+- 当前用户授权硬上限扩展为 150 次、总费用不超过 ¥25、0 自动重试；人物候选功能开启；正式 run manifest 仍需冻结实际计划分母，不能把上限当成必须消耗的次数；
 - OCR 与 embedding 先执行零付费组件 Gate；
 - validation 打开后不回改当前版本 truth、Prompt 或规则。
 
 ## 当前阻塞和下一步
 
-唯一外部阻塞是远端账号尚未接受专用公钥。公钥安装后立即执行只读资源预检，依据真实 GPU/CPU、路径和已有模型冻结 deployment manifest；在此之前不盲装整套推理栈。
-
-本地并行下一步是审查并提交当前 evidence-rule 改动，随后修正 truth v2.1，开始 text/OCR/embedding adapter。首个付费请求必须等 adapter 与零费用 Gate 完成并冻结 run manifest。
+当前 P0 阻塞是正式模型 artifact、依赖 lock、激活 release、常驻 Worker 和产品 control-plane 尚未形成一条可调用链。下一步先冻结模型来源、revision、hash 和许可证，完成真实 OCR/embedding/face/ASR 加载与性能 Gate，再激活 release；付费 VLM 批次必须使用新的固定 run manifest 和现有 150 次/¥25/0 自动重试授权。
