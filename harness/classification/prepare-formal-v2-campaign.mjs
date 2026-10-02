@@ -242,7 +242,7 @@ function buildRunnerRequest(taskId, photos, deadlineAt, caps) {
       deadlineAt,
       candidatesPerPhoto: 1,
       maxOutputPerRequest: 4096,
-      stageOutputTokens: { extract: 4096, relate: 1024 },
+      stageOutputTokens: { extract: 4096, relate: 2048 },
       maxCallDurationMs: 60_000,
     },
   };
@@ -315,8 +315,8 @@ function buildDeterministicSemanticTruth(bundle) {
 
 function phaseRunnerCaps(phase) {
   return phase === 'exploration'
-    ? { maxRequests: 31, maxInputTokens: 5_000_000, maxOutputTokens: 87_040, maxCostCny: 15, maxDurationSeconds: 1800, maxRetries: 0 }
-    : { maxRequests: 20, maxInputTokens: 4_000_000, maxOutputTokens: 57_344, maxCostCny: 10, maxDurationSeconds: 1800, maxRetries: 0 };
+    ? { maxRequests: 31, maxInputTokens: 5_000_000, maxOutputTokens: 100_352, maxCostCny: 15, maxDurationSeconds: 1800, maxRetries: 0 }
+    : { maxRequests: 20, maxInputTokens: 4_000_000, maxOutputTokens: 65_536, maxCostCny: 10, maxDurationSeconds: 1800, maxRetries: 0 };
 }
 
 function validatePersonOverlay(raw, bundles) {

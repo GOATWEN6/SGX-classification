@@ -236,6 +236,17 @@ test('provider reports truncated JSON distinctly and sends the stage output cap'
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('shapeGuide')));
   assert.ok(!body.messages[1].content.some(item=>item.type==='text'&&item.text.includes('"format"')));
 });
+test('relation request ends with a compact relation-only output directive',async()=>{
+  let body;const p=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+    transport:async(_url,init)=>{body=JSON.parse(init.body);return new Response(JSON.stringify({id:'local_relate_prompt',model:'qwen3.7-flash-2026-07-15',
+      usage:{prompt_tokens:100,completion_tokens:20},choices:[{finish_reason:'stop',message:{content:'{"relations":[]}'}}]}),{status:200});},
+    inputCnyPerMillion:0.2,outputCnyPerMillion:0.8});
+  await p.invoke({stage:'relate',photos:[photo('a'),photo('b')],context:{maxOutputTokens:2048}},new AbortController().signal);
+  assert.equal(body.max_tokens,2048);
+  assert.match(body.messages[0].content,/FINAL OUTPUT MODE: relate/);
+  assert.match(body.messages[0].content,/Do not repeat, summarize or return observations/);
+  assert.match(body.messages[0].content,/at most 24 Chinese characters/);
+});
 test('provider reports safe schema issue paths instead of only INVALID_OUTPUT',async()=>{
   const p1=photo('a','武汉');const value={observations:[observation(p1,{place:'武汉'})]};value.observations[0].places[0]['canonical?']=false;
   const provider=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
@@ -278,7 +289,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.13\/stage-a-validation\.2$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.14\/stage-a-validation\.2$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{
