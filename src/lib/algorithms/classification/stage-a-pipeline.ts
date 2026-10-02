@@ -3,6 +3,7 @@ import { Budget, ExtractSchema, Photo, RelateSchema, RequestSchema, Scope, STAGE
 import { CallRecord, TaskBudget, VisionProvider } from './stage-a-provider';
 export interface AuthorizationSnapshot {scope:Scope;authorizationRevision:string;allowedPhotoIds:string[];allowPersonMatching:boolean;
   photoVersions:Record<string,string>;contextRevision:string;reviewContextHash:string;active:boolean;}
+export interface StageExecutionPolicy {relationPairAllowlist?:[string,string][];}
 export interface AlgorithmSnapshot {scope:Scope;revision:number;version:string;authorizationRevision:string;contextHash:string;
   observations:Record<string,CachedObservation>;edges:Edge[];groups:Group[];referencesHash:string;correctionsHash:string;reviewItems:string[];candidateTraces:ReturnType<typeof candidates>['traces'];pendingPhotoIds:string[];workflowStatus:StageResult['workflowStatus'];}
 export interface SnapshotStore {get(key:string):AlgorithmSnapshot|undefined;compareAndSet(key:string,expected:number,value:AlgorithmSnapshot):boolean;}
@@ -19,7 +20,7 @@ export interface StageResult {contractVersion:string;providerVersion:string;runI
 export class ClassificationEngine {
   private generations=new Map<string,symbol>();
   constructor(private readonly provider:VisionProvider|undefined,private readonly store:SnapshotStore=new MemorySnapshotStore()){}
-  async process(input:unknown,getAuthorization:()=>AuthorizationSnapshot,signal?:AbortSignal):Promise<StageResult>{
+  async process(input:unknown,getAuthorization:()=>AuthorizationSnapshot,signal?:AbortSignal,executionPolicy?:StageExecutionPolicy):Promise<StageResult>{
     const r=RequestSchema.parse(input);const started=Date.now();const key=digest(r.scope);const budget=new TaskBudget(r.budget);
     const version=this.provider?.version??'unconfigured';
     const result:StageResult={contractVersion:STAGE_A_VERSION,providerVersion:version,runId:r.runId,scope:r.scope,workflowStatus:'failed',evidenceStatus:'not_run',semanticValidation:'not_evaluated',
@@ -91,7 +92,10 @@ export class ClassificationEngine {
         }
       }
       const validReferences=resolveReferences(active,observations,r.references);
-      const selected=candidates([...impacted],active,observations,validReferences,r.budget.candidatesPerPhoto,r.retrievalHints??[]);result.candidateTraces=selected.traces;
+      const selected=executionPolicy?.relationPairAllowlist
+        ? explicitEvaluationPairs(executionPolicy.relationPairAllowlist,active,observations)
+        : candidates([...impacted],active,observations,validReferences,r.budget.candidatesPerPhoto,r.retrievalHints??[]);
+      result.candidateTraces=selected.traces;
       if(!stopFurtherCalls)for(const pair of selected.pairs){
         const photos=pair.map(id=>current.get(id)!);
         const oldPair=edges.filter(e=>[e.left.photoId,e.right.photoId].sort().join('/')===pair.join('/'));
@@ -135,4 +139,21 @@ export class ClassificationEngine {
       outputTokens:budget.outputTokens,costCny:budget.costCny,latencyMs:Date.now()-started});}
     return result;
   }
+}
+
+function explicitEvaluationPairs(allowlist:[string,string][],photos:Photo[],observations:Record<string,CachedObservation>){
+  const activeIds=new Set(photos.filter(photo=>photo.active&&observations[photo.photoId]).map(photo=>photo.photoId));
+  const seen=new Set<string>();const pairs:[string,string][]=[];
+  for(const value of allowlist){
+    const pair=[...value].sort() as [string,string];
+    if(pair[0]===pair[1])throw new StageError('SELF_RELATION_PAIR');
+    if(!pair.every(id=>activeIds.has(id)))throw new StageError('INVALID_RELATION_PAIR');
+    const key=pair.join('/');if(seen.has(key))throw new StageError('DUPLICATE_RELATION_PAIR');seen.add(key);pairs.push(pair);
+  }
+  const traces=[...activeIds].sort().map(photoId=>{
+    const selected=pairs.filter(pair=>pair.includes(photoId)).map(pair=>pair[0]===photoId?pair[1]:pair[0]).sort();
+    const omitted=[...activeIds].filter(id=>id!==photoId&&!selected.includes(id)).sort();
+    return {photoId,eligible:activeIds.size-1,selected,omitted,coverage:'complete' as const,reason:'explicit_evaluation_pair_allowlist'};
+  });
+  return {pairs,traces};
 }

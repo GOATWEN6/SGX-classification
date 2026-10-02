@@ -1,35 +1,21 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { z } from 'zod';
+import {
+  EvaluationCampaignPointer,
+  EvaluationCampaignPointerSchema,
+  EVALUATION_CAMPAIGN_POINTER_VERSION,
+  evaluationCampaignDataRoot,
+  readCampaignLedger,
+  validateCampaignBindings,
+} from './evaluation-campaign';
 
-export const REAL_BATCH_POINTER_VERSION = 'classification-real-batch-pointer.1';
-
-const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const dateTime = z.string().datetime({ offset: true });
-const RealBatchPointerSchema = z.object({
-  version: z.literal(REAL_BATCH_POINTER_VERSION),
-  batchId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
-  manifestPath: z.string().min(1),
-  approvalPath: z.string().min(1),
-  outputPath: z.string().min(1),
-  manifestHash: hash,
-  datasetRootDigest: hash,
-  model: z.literal('qwen3.7-flash-2026-07-15'),
-  maxRequests: z.number().int().min(1).max(150),
-  maxCostCny: z.number().positive().max(25),
-  automaticRetries: z.literal(0),
-  allowPersonMatching: z.boolean(),
-  expiresAt: dateTime,
-  authorizationEvidenceRef: z.string().min(1)
-}).strict();
-
-export type RealBatchPointer = z.infer<typeof RealBatchPointerSchema>;
+export const REAL_BATCH_POINTER_VERSION = EVALUATION_CAMPAIGN_POINTER_VERSION;
+export type RealBatchPointer = EvaluationCampaignPointer;
 
 function dataRoot(env: NodeJS.ProcessEnv): string {
-  return path.resolve(env.CLASSIFICATION_LAB_DATA_DIR || path.join(tmpdir(), 'sgx-classification-lab'));
+  return evaluationCampaignDataRoot(env);
 }
 
 export function realBatchPointerPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -51,7 +37,7 @@ async function verifiedPath(root: string, target: string): Promise<string> {
 }
 
 async function loadPointer(env: NodeJS.ProcessEnv): Promise<RealBatchPointer> {
-  const pointer = RealBatchPointerSchema.parse(JSON.parse(await readFile(realBatchPointerPath(env), 'utf8')));
+  const pointer = EvaluationCampaignPointerSchema.parse(JSON.parse(await readFile(realBatchPointerPath(env), 'utf8')));
   if(Date.now() >= Date.parse(pointer.expiresAt)) throw new Error('REAL_BATCH_APPROVAL_EXPIRED');
   return pointer;
 }
@@ -60,25 +46,48 @@ function sha256(bytes: Buffer): string {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
+async function loadBoundBatch(env: NodeJS.ProcessEnv): Promise<{
+  pointer: RealBatchPointer;
+  root: string;
+  manifestPath: string;
+  approvalPath: string;
+  outputPath: string;
+}> {
+  const pointer = await loadPointer(env);
+  const root = dataRoot(env);
+  const manifestPath = await verifiedPath(root, pointer.manifestPath);
+  const approvalPath = await verifiedPath(root, pointer.approvalPath);
+  const outputPath = path.resolve(pointer.outputPath);
+  if(!inside(root, outputPath)) throw new Error('REAL_BATCH_PATH_FORBIDDEN');
+  const [manifestBytes, approvalBytes] = await Promise.all([readFile(manifestPath), readFile(approvalPath)]);
+  const manifestHash = sha256(manifestBytes);
+  if(manifestHash !== pointer.manifestHash) throw new Error('REAL_BATCH_MANIFEST_CHANGED');
+  validateCampaignBindings({
+    pointer,
+    manifest: JSON.parse(manifestBytes.toString('utf8')),
+    manifestHash,
+    approval: JSON.parse(approvalBytes.toString('utf8')),
+    approvalBytes,
+  });
+  return { pointer, root, manifestPath, approvalPath, outputPath };
+}
+
 export async function getAuthorizedRealBatchStatus(env: NodeJS.ProcessEnv = process.env): Promise<{
   configured: true;
   pointer: RealBatchPointer;
   started: boolean;
   ledger?: unknown;
+  campaignLedger?: unknown;
 }> {
-  const pointer = await loadPointer(env);
-  const root = dataRoot(env);
-  const manifestPath = await verifiedPath(root, pointer.manifestPath);
-  if(sha256(await readFile(manifestPath)) !== pointer.manifestHash) throw new Error('REAL_BATCH_MANIFEST_CHANGED');
-  const outputPath = path.resolve(pointer.outputPath);
-  if(!inside(root, outputPath)) throw new Error('REAL_BATCH_PATH_FORBIDDEN');
+  const { pointer, outputPath } = await loadBoundBatch(env);
+  const campaignLedger = await readCampaignLedger(pointer.campaignId, env);
   try {
     const ledger = JSON.parse(await readFile(path.join(outputPath, 'ledger.json'), 'utf8'));
-    return { configured: true, pointer, started: true, ledger };
+    return { configured: true, pointer, started: true, ledger, ...(campaignLedger ? { campaignLedger } : {}) };
   } catch(error) {
     if((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    try { await access(outputPath); return { configured: true, pointer, started: true }; }
-    catch { return { configured: true, pointer, started: false }; }
+    try { await access(outputPath); return { configured: true, pointer, started: true, ...(campaignLedger ? { campaignLedger } : {}) }; }
+    catch { return { configured: true, pointer, started: false, ...(campaignLedger ? { campaignLedger } : {}) }; }
   }
 }
 
@@ -87,16 +96,10 @@ export async function runAuthorizedRealBatch(env: NodeJS.ProcessEnv = process.en
   signal: NodeJS.Signals | null;
   pointer: RealBatchPointer;
 }> {
-  if(!env.SGX_D4_API_KEY) throw new Error('MODEL_NOT_CONFIGURED');
-  const pointer = await loadPointer(env);
-  const root = dataRoot(env);
-  const manifestPath = await verifiedPath(root, pointer.manifestPath);
-  const approvalPath = await verifiedPath(root, pointer.approvalPath);
-  const outputPath = path.resolve(pointer.outputPath);
-  if(!inside(root, outputPath)) throw new Error('REAL_BATCH_PATH_FORBIDDEN');
-  if(sha256(await readFile(manifestPath)) !== pointer.manifestHash) throw new Error('REAL_BATCH_MANIFEST_CHANGED');
+  const { pointer, root, manifestPath, approvalPath, outputPath } = await loadBoundBatch(env);
   try { await access(outputPath); throw new Error('REAL_BATCH_ALREADY_STARTED'); }
   catch(error) { if((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  if(!env.SGX_D4_API_KEY) throw new Error('MODEL_NOT_CONFIGURED');
 
   const logRoot = path.join(root, 'real-batch', 'logs');
   await mkdir(logRoot, { recursive: true, mode: 0o700 });
@@ -108,7 +111,8 @@ export async function runAuthorizedRealBatch(env: NodeJS.ProcessEnv = process.en
     '--manifest', manifestPath,
     '--out', outputPath,
     '--execute',
-    '--approval', approvalPath
+    '--approval', approvalPath,
+    '--pointer', realBatchPointerPath(env),
   ], {
     cwd: process.cwd(),
     env,

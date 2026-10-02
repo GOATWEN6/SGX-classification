@@ -114,7 +114,11 @@ export class ApiVisionProvider implements VisionProvider {
     if(this.mode==='real_api'&&!credential)throw new StageError('MODEL_NOT_CONFIGURED');
     const response=await (this.options.transport??fetch)(endpoint,{method:'POST',headers:{'content-type':'application/json',...(credential?{authorization:`Bearer ${credential}`}:{})},
       body:JSON.stringify(body),signal,redirect:'error'});
-    if(!response.ok)throw new StageError(response.status===429?'RATE_LIMITED':response.status>=500?'PROVIDER_UNAVAILABLE':'PROVIDER_REJECTED');
+    if(!response.ok)throw new StageError(
+      response.status===401||response.status===403?'CALL_NOT_AUTHORIZED':
+      response.status===429?'RATE_LIMITED':
+      response.status>=500?'PROVIDER_UNAVAILABLE':'PROVIDER_REJECTED'
+    );
     const reader=response.body?.getReader();if(!reader)throw new StageError('INVALID_OUTPUT');
     let size=0;const chunks:Uint8Array[]=[];
     while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>1_000_000){await reader.cancel();throw new StageError('RESPONSE_LIMIT');}chunks.push(part.value);}

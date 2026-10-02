@@ -33,6 +33,15 @@ test('preflight accounts for stage-specific output reservations against the batc
   f.manifest.caps.maxOutputTokens=9000;f.manifest.tasks[0].request.budget.maxOutputTokens=9000;await f.save();
   const b=await preflight(f.manifestPath);assert.equal(b.summary.coldCacheOutputTokenReservation,9216);assert.equal(b.summary.capMayStopBeforeCompletion,true);
 });
+test('preflight and scoring honor an exact relation pair allowlist',async t=>{
+  const f=await fixture(t);f.manifest.tasks[0].relationPairs=[];await f.save();
+  let b=await preflight(f.manifestPath);assert.equal(b.summary.coldCacheRequestEstimate,2);assert.equal(b.summary.coldCacheImageOccurrences,2);
+  let score=scoreTask(b.manifest.tasks[0],undefined,f.truth);assert.equal(score.eventPairs.expectedSame,0);assert.equal(score.personPairs.expectedSame,0);
+  f.manifest.tasks[0].relationPairs=[['a','b']];await f.save();b=await preflight(f.manifestPath);
+  assert.equal(b.summary.coldCacheRequestEstimate,3);score=scoreTask(b.manifest.tasks[0],undefined,f.truth);assert.equal(score.eventPairs.expectedSame,1);
+  f.manifest.tasks[0].relationPairs=[['a','b'],['b','a']];await f.save();await assert.rejects(preflight(f.manifestPath),/DUPLICATE_RELATION_PAIR/);
+  f.manifest.tasks[0].relationPairs=[['a','foreign']];await f.save();await assert.rejects(preflight(f.manifestPath),/INVALID_RELATION_PAIR/);
+});
 test('preflight rejects split leakage, material modification and missing independent truth',async t=>{
   const f=await fixture(t);f.manifest.photos[1].split='holdout';await f.save();await assert.rejects(preflight(f.manifestPath),/SPLIT_LEAKAGE/);
   f.manifest.photos[1].split='exploration';await f.save();await writeFile(path.join(f.root,'fixture.png'),'changed');await assert.rejects(preflight(f.manifestPath),/PHOTO_HASH_MISMATCH/);
@@ -107,6 +116,76 @@ test('evaluation report renders safe provider schema diagnostics',async t=>{
   assert.equal(child.status,2,child.stderr);const report=await readFile(path.join(out,'REPORT.md'),'utf8');assert.match(report,/## 工程诊断/);
   assert.match(report,/observations\.0\.places\.0/);assert.match(report,/canonical\?/);assert.ok(!report.includes('test_only_not_external_permission'));
 });
+test('case-local invalid output preserves the denominator and continues the next independent task without retry',async t=>{
+  const f=await fixture(t);const [a,b]=f.manifest.tasks[0].request.photos;
+  f.manifest.tasks=[
+    {...structuredClone(f.manifest.tasks[0]),taskId:'invalid_a',stateSequenceId:'sequence_a',request:{...structuredClone(f.s.req),runId:'run_invalid_a',photos:[a]},evaluatePhotoIds:['a']},
+    {...structuredClone(f.manifest.tasks[0]),taskId:'dependent_a',stateSequenceId:'sequence_a',request:{...structuredClone(f.s.req),runId:'run_dependent_a',authorizationRevision:'auth2',photos:[a]},evaluatePhotoIds:['a']},
+    {...structuredClone(f.manifest.tasks[0]),taskId:'valid_b',request:{...structuredClone(f.s.req),runId:'run_valid_b',authorizationRevision:'auth2',photos:[b]},evaluatePhotoIds:['b']}
+  ];
+  await f.save();const prepared=await preflight(f.manifestPath);const approval={version:'sgx-eval-approval.1',batchId:prepared.manifest.batchId,manifestHash:prepared.manifestHash,
+    approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',expiresAt:new Date(Date.now()+60000).toISOString(),provider:prepared.manifest.provider,model:prepared.manifest.model,
+    photoIds:prepared.usedPhotoIds,caps:prepared.manifest.caps,allowExternalImages:true,allowPersonMatching:false};
+  const approvalPath=path.join(f.root,'case-approval.json');await writeFile(approvalPath,JSON.stringify(approval));const callsPath=path.join(f.root,'case-calls.jsonl'),loader=path.join(f.root,'case-stub.cjs');
+  await writeFile(loader,`const {appendFileSync}=require('node:fs');
+    const base=process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification';
+    const {ApiVisionProvider}=require(base+'/stage-a-provider.js');const {StageError}=require(base+'/stage-a-contract.js');
+    ApiVisionProvider.prototype.invoke=async function(call){const p=call.photos[0];appendFileSync(${JSON.stringify(callsPath)},p.photoId+'\\n');
+      if(p.photoId==='a')throw new StageError('INVALID_OUTPUT');
+      return {value:{observations:[{photoId:p.photoId,people:[],mentions:[],times:[],places:[],events:[],scenes:[{label:'室内',supports:[{photoId:p.photoId,source:'visual',quote:'controlled local observation'}]}],unknownFacets:['person','time','place','event'],conflicts:[]}]},usage:{inputTokens:100,outputTokens:50},responseId:'local_'+p.photoId,model:'qwen3.5-flash-2026-02-23'};};`);
+  const out=path.join(f.root,'case-results');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
+    '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,2,child.stderr);const ledger=JSON.parse(await readFile(path.join(out,'ledger.json'),'utf8'));
+  assert.equal(ledger.globalStop,undefined);assert.deepEqual(ledger.caseFailures,[{taskId:'invalid_a',codes:['INVALID_OUTPUT']}]);
+  assert.equal(ledger.tasks[0].reason,'INVALID_OUTPUT');assert.equal(ledger.tasks[1].status,'not_run');assert.equal(ledger.tasks[1].reason,'DEPENDENCY_FAILED');
+  assert.equal(ledger.tasks[2].status,'succeeded');
+  assert.deepEqual((await readFile(callsPath,'utf8')).trim().split('\n'),['a','b']);
+});
+test('global authorization error stops later tasks after one provider attempt',async t=>{
+  const f=await fixture(t);const [a,b]=f.manifest.tasks[0].request.photos;
+  f.manifest.tasks=[
+    {...structuredClone(f.manifest.tasks[0]),taskId:'unauthorized_a',request:{...structuredClone(f.s.req),runId:'run_unauthorized_a',photos:[a]},evaluatePhotoIds:['a']},
+    {...structuredClone(f.manifest.tasks[0]),taskId:'never_b',request:{...structuredClone(f.s.req),runId:'run_never_b',authorizationRevision:'auth2',photos:[b]},evaluatePhotoIds:['b']}
+  ];
+  await f.save();const prepared=await preflight(f.manifestPath);const approval={version:'sgx-eval-approval.1',batchId:prepared.manifest.batchId,manifestHash:prepared.manifestHash,
+    approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',expiresAt:new Date(Date.now()+60000).toISOString(),provider:prepared.manifest.provider,model:prepared.manifest.model,
+    photoIds:prepared.usedPhotoIds,caps:prepared.manifest.caps,allowExternalImages:true,allowPersonMatching:false};
+  const approvalPath=path.join(f.root,'global-approval.json');await writeFile(approvalPath,JSON.stringify(approval));const callsPath=path.join(f.root,'global-calls.jsonl'),loader=path.join(f.root,'global-stub.cjs');
+  await writeFile(loader,`const {appendFileSync}=require('node:fs');const base=process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification';
+    const {ApiVisionProvider}=require(base+'/stage-a-provider.js');const {StageError}=require(base+'/stage-a-contract.js');
+    ApiVisionProvider.prototype.invoke=async function(call){appendFileSync(${JSON.stringify(callsPath)},call.photos[0].photoId+'\\n');throw new StageError('CALL_NOT_AUTHORIZED');};`);
+  const out=path.join(f.root,'global-results');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
+    '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
+  assert.equal(child.status,2,child.stderr);const ledger=JSON.parse(await readFile(path.join(out,'ledger.json'),'utf8'));
+  assert.equal(ledger.globalStop,'CALL_NOT_AUTHORIZED');assert.equal(ledger.tasks[0].reason,undefined);assert.equal(ledger.tasks[0].status,'failed');
+  assert.equal(ledger.tasks[1].status,'not_run');assert.equal(ledger.tasks[1].reason,'CALL_NOT_AUTHORIZED');assert.equal((await readFile(callsPath,'utf8')).trim(),'a');
+});
+test('formal pointer execution reserves and finalizes the cumulative campaign ledger',async t=>{
+  const f=await fixture(t);const datasetRootDigest=`sha256:${'d'.repeat(64)}`;f.manifest.datasetRootDigest=datasetRootDigest;await f.save();
+  const prepared=await preflight(f.manifestPath);const expiresAt=new Date(Date.now()+60000).toISOString();
+  const approval={version:'sgx-eval-approval.2',campaignId:'formal_campaign',phase:'exploration',batchId:prepared.manifest.batchId,
+    manifestHash:prepared.manifestHash,datasetRootDigest,approvedBy:'local_test_fixture',authorizationEvidenceRef:'test_only_not_external_permission',
+    expiresAt,provider:prepared.manifest.provider,model:prepared.manifest.model,photoIds:prepared.usedPhotoIds,caps:prepared.manifest.caps,
+    campaignCaps:{maxRequests:150,maxCostCny:25,maxRetries:0},allowExternalImages:true,allowPersonMatching:true};
+  const approvalBytes=Buffer.from(`${JSON.stringify(approval)}\n`),approvalPath=path.join(f.root,'formal-approval.json');await writeFile(approvalPath,approvalBytes);
+  const out=path.join(f.root,'formal-results'),pointer={version:'classification-real-batch-pointer.2',campaignId:approval.campaignId,phase:'exploration',
+    batchId:approval.batchId,manifestPath:f.manifestPath,approvalPath,outputPath:out,manifestHash:prepared.manifestHash,approvalHash:bytesHash(approvalBytes),
+    datasetRootDigest,provider:approval.provider,model:approval.model,batchCaps:{maxRequests:approval.caps.maxRequests,maxCostCny:approval.caps.maxCostCny,maxRetries:0},
+    campaignCaps:approval.campaignCaps,allowPersonMatching:true,expiresAt,authorizationEvidenceRef:approval.authorizationEvidenceRef};
+  const pointerPath=path.join(f.root,'formal-pointer.json');await writeFile(pointerPath,`${JSON.stringify(pointer)}\n`);
+  const loader=path.join(f.root,'formal-stub.cjs');await writeFile(loader,`global.fetch=()=>{throw new Error('NETWORK_FORBIDDEN_IN_TEST');};
+    const {ApiVisionProvider}=require(process.env.CLASSIFICATION_BUILD_DIR+'/src/lib/algorithms/classification/stage-a-provider.js');
+    ApiVisionProvider.prototype.invoke=async function(call){const supports=call.photos.map(p=>({photoId:p.photoId,source:'visual',quote:'controlled local observation'}));
+      const value=call.stage==='extract'?{observations:call.photos.map(p=>({photoId:p.photoId,people:[],mentions:[],times:[],places:[],events:[],scenes:[{label:'室内',supports:[supports[0]]}],unknownFacets:['person','time','place','event'],conflicts:[]}))}:
+        {relations:[{kind:'event',left:{photoId:call.photos[0].photoId},right:{photoId:call.photos[1].photoId},decision:'unknown',supports,rationale:'controlled unknown'}]};
+      return {value,usage:{inputTokens:100,outputTokens:50},responseId:'formal_local',model:'qwen3.5-flash-2026-02-23'};};`);
+  const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,'--manifest',f.manifestPath,
+    '--out',out,'--execute','--approval',approvalPath,'--pointer',pointerPath],{encoding:'utf8',env:{...process.env,SGX_D4_API_KEY:'test_only_dummy',
+      CLASSIFICATION_LAB_DATA_DIR:f.root,CLASSIFICATION_EVAL_ALLOW_EPHEMERAL_TEST_ROOT:'1'}});
+  assert.equal(child.status,0,child.stderr);const campaignLedger=JSON.parse(await readFile(path.join(f.root,'real-batch','campaigns','formal_campaign','campaign-ledger.json'),'utf8'));
+  assert.equal(campaignLedger.state,'active');assert.equal(campaignLedger.batches[0].status,'completed');assert.equal(campaignLedger.batches[0].actual.requests,3);
+  await assert.rejects(readFile(path.join(f.root,'real-batch','campaigns','formal_campaign','campaign.lock')),error=>error.code==='ENOENT');
+});
 test('incremental tasks score against the evidence available at that task, without future-label leakage',async t=>{
   const f=await fixture(t);const early=structuredClone(f.truth.photos);for(const p of early){p.facets.time=[];p.expectedUnknownFacets.push('time');}
   f.truth.taskOverrides=[{taskId:'early',photos:early}];const earlyScore=scoreTask({...f.manifest.tasks[0],taskId:'early'},undefined,f.truth);
@@ -160,7 +239,7 @@ for(const [name,usage] of [['input',{inputTokens:50000,outputTokens:100}],['outp
     const out=path.join(f.root,'results');const child=spawnSync(process.execPath,['--require',loader,new URL('./stage-a-eval.mjs',import.meta.url).pathname,
       '--manifest',f.manifestPath,'--out',out,'--execute','--approval',approvalPath],{encoding:'utf8',env:process.env});
     assert.equal(child.status,2,child.stderr);const ledger=JSON.parse(await readFile(path.join(out,'ledger.json'),'utf8'));
-    assert.equal(ledger.stopped,'RESERVATION_OVERRUN');assert.equal(ledger.tasks.length,2);assert.equal(ledger.tasks[0].status,'failed');
+    assert.equal(ledger.globalStop,'RESERVATION_OVERRUN');assert.deepEqual(ledger.caseFailures,[]);assert.equal(ledger.tasks.length,2);assert.equal(ledger.tasks[0].status,'failed');
     assert.equal(ledger.tasks[1].status,'not_run');assert.equal(ledger.tasks[1].reason,'RESERVATION_OVERRUN');
     assert.equal(ledger.totals.requests,1);assert.equal(ledger.totals.inputTokens,usage.inputTokens);assert.equal(ledger.totals.outputTokens,usage.outputTokens);
     assert.equal((await readFile(callsPath,'utf8')).trim().split('\n').length,1);

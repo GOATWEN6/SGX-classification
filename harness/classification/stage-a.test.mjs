@@ -101,6 +101,16 @@ test('embedding Top-K only reorders bounded candidates and never turns similarit
   assert.deepEqual(trace.selected,['p3']);assert.equal(trace.reason,'embedding_topk_then_categorical');
   assert.equal(groupMembers(r,'event').length,4);
 });
+test('formal evaluation pair allowlist executes only pre-registered relations',async()=>{
+  const photos=Array.from({length:4},(_,i)=>photo(`p${i}`,''));const s=setup(photos);
+  const allowlist=[['p0','p3'],['p1','p2']];
+  const r=await s.engine.process(s.req,s.getAuth,undefined,{relationPairAllowlist:allowlist});
+  const relationCalls=s.calls.filter(call=>JSON.parse(call.body.messages[1].content[0].text).stage==='relate');
+  assert.equal(r.usage.requests,6);assert.equal(relationCalls.length,2);
+  assert.deepEqual(relationCalls.map(call=>JSON.parse(call.body.messages[1].content[0].text).untrustedContext.requestedPairs[0]).sort(),allowlist.sort());
+  assert.equal(r.candidateTraces.find(item=>item.photoId==='p0').reason,'explicit_evaluation_pair_allowlist');
+  assert.deepEqual(r.candidateTraces.find(item=>item.photoId==='p0').selected,['p3']);
+});
 test('budget zero / unconfigured model are explicit failures, never Fake success',async()=>{
   const s=two();s.req.budget.maxRequests=0;const r=await run(s);assert.equal(r.workflowStatus,'failed');assert.equal(s.calls.length,0);assert.ok(r.errors.some(e=>e.code==='BUDGET_EXHAUSTED'));
   const engine=new ClassificationEngine(undefined);s.req.budget.maxRequests=10;const empty=await engine.process(s.req,s.getAuth);assert.equal(empty.evidenceStatus,'not_run');assert.ok(empty.errors.some(e=>e.code==='MODEL_NOT_CONFIGURED'));
@@ -180,6 +190,13 @@ test('real provider requires grant without fetching credentials or images',async
   let credentialCalls=0,imageCalls=0;const p=new ApiVisionProvider({provider:'qwen',model:'x',resolver:async()=>{imageCalls++;return {bytes:png,mimeType:'image/png'};},credential:()=>{credentialCalls++;return 'never_used';},inputCnyPerMillion:0.2,outputCnyPerMillion:2});
   await assert.rejects(p.invoke({stage:'extract',photos:[photo('a')],context:{}},new AbortController().signal),/CALL_NOT_AUTHORIZED/);assert.equal(credentialCalls,0);assert.equal(imageCalls,0);
 });
+for(const [status,code] of [[401,'CALL_NOT_AUTHORIZED'],[403,'CALL_NOT_AUTHORIZED'],[429,'RATE_LIMITED'],[503,'PROVIDER_UNAVAILABLE']]){
+  test(`provider classifies HTTP ${status} as ${code}`,async()=>{
+    const provider=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+      transport:async()=>new Response('',{status}),inputCnyPerMillion:0.2,outputCnyPerMillion:0.8});
+    await assert.rejects(provider.invoke({stage:'extract',photos:[photo('a')],context:{}},new AbortController().signal),error=>error.code===code);
+  });
+}
 test('provider reports truncated JSON distinctly and sends the stage output cap',async()=>{
   let body;const p=new ApiVisionProvider({provider:'qwen',model:'qwen3.7-flash-2026-07-15',resolver:async()=>({bytes:png,mimeType:'image/png'}),
     transport:async(_url,init)=>{body=JSON.parse(init.body);return new Response(JSON.stringify({id:'local_truncated',model:'qwen3.7-flash-2026-07-15',

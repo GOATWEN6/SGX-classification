@@ -5,6 +5,7 @@ import path from 'node:path';
 const require=createRequire(import.meta.url);
 const {z}=require('zod');
 export const contract=require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/stage-a-contract.js`);
+const {EvaluationCampaignApprovalSchema}=require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/evaluation-campaign.js`);
 const id=z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 const sha=z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const bytesHash=b=>`sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -12,13 +13,15 @@ const caps=z.object({maxRequests:z.number().int().positive().max(1000),maxInputT
   maxCostCny:z.number().nonnegative(),maxDurationSeconds:z.number().int().positive().max(3600),maxRetries:z.literal(0)}).strict();
 const evaluationPolicy=z.object({facets:z.array(contract.FacetSchema).min(1).refine(values=>new Set(values).size===values.length,'DUPLICATE_FACET'),
   personPairs:z.boolean(),eventPairs:z.boolean(),identityCandidates:z.boolean()}).strict();
+const relationPair=z.tuple([id,id]).refine(([left,right])=>left!==right,'SELF_RELATION_PAIR');
 export const ManifestSchema=z.object({version:z.literal('sgx-eval.1'),batchId:id,status:z.enum(['draft','ready']),partition:z.enum(['exploration','holdout']),
-  provider:z.enum(['qwen','glm']),model:z.string().min(1),providerUseReviewRef:z.string().min(1),
+  provider:z.enum(['qwen','glm']),model:z.string().min(1),datasetRootDigest:sha.optional(),providerUseReviewRef:z.string().min(1),
   prices:z.object({inputCnyPerMillion:z.number().nonnegative(),outputCnyPerMillion:z.number().nonnegative(),source:z.string().url(),checkedAt:z.string().datetime()}).strict(),
   caps,truth:z.object({path:z.string().min(1),sha256:sha}).strict(),
   photos:z.array(z.object({photo:contract.PhotoSchema,path:z.string().min(1),split:z.enum(['reference','exploration','holdout']),leakageGroup:id,
     externalConsentRef:z.string().min(1),personConsentRef:z.string().optional()}).strict()).min(1),
   tasks:z.array(z.object({taskId:id,stateSequenceId:id.optional(),request:contract.RequestSchema,evaluatePhotoIds:z.array(id).min(1),expectedUnchangedPhotoIds:z.array(id).default([]),
+    relationPairs:z.array(relationPair).max(66).optional(),
     evaluation:evaluationPolicy.optional()}).strict()).min(1).max(100)
 }).strict();
 const region=z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),width:z.number().positive().max(1),height:z.number().positive().max(1)}).strict()
@@ -31,9 +34,10 @@ const BaseTruthSchema=z.object({version:z.literal('sgx-truth.1'),reviewedBy:z.st
   expectedUnknownFacets:facetSet,expectedConflicts:facetSet
 }).strict()).min(1)}).strict();
 export const TruthSchema=BaseTruthSchema.extend({taskOverrides:z.array(z.object({taskId:id,photos:BaseTruthSchema.shape.photos}).strict()).default([])}).strict();
-export const ApprovalSchema=z.object({version:z.literal('sgx-eval-approval.1'),batchId:id,manifestHash:sha,approvedBy:z.string().min(1),
+const ApprovalV1Schema=z.object({version:z.literal('sgx-eval-approval.1'),batchId:id,manifestHash:sha,approvedBy:z.string().min(1),
   authorizationEvidenceRef:z.string().min(1),expiresAt:z.string().datetime(),provider:z.enum(['qwen','glm']),model:z.string().min(1),
   photoIds:z.array(id).min(1),caps,allowExternalImages:z.literal(true),allowPersonMatching:z.boolean()}).strict();
+export const ApprovalSchema=z.union([ApprovalV1Schema,EvaluationCampaignApprovalSchema]);
 function ensure(ok,code){if(!ok)throw new Error(code);}
 const unique=(values,code)=>ensure(new Set(values).size===values.length,code);
 
@@ -64,6 +68,10 @@ export async function preflight(manifestPath){
   let upperRequests=0,imageOccurrences=0,outputTokenReservation=0;const usedIds=new Set();const priorSequenceTasks=new Map();
   for(const task of manifest.tasks){
     const r=task.request;const active=r.photos.filter(p=>p.active);const activeIds=new Set(active.map(p=>p.photoId));unique(r.photos.map(p=>p.photoId),'DUPLICATE_TASK_PHOTO');
+    if(task.relationPairs){
+      unique(task.relationPairs.map(([left,right])=>[left,right].sort().join('/')),'DUPLICATE_RELATION_PAIR');
+      for(const [left,right] of task.relationPairs)ensure(activeIds.has(left)&&activeIds.has(right),'INVALID_RELATION_PAIR');
+    }
     for(const p of r.photos){const item=gallery.get(p.photoId);ensure(item&&p.sourceHash===item.photo.sourceHash&&p.sourceRef===item.photo.sourceRef&&p.mimeType===item.photo.mimeType,'UNAPPROVED_PHOTO');
       ensure(contract.sameScope(p.scope,r.scope)&&contract.sameScope(item.photo.scope,r.scope),'CROSS_SCOPE');ensure(item.split==='reference'||item.split===manifest.partition,'WRONG_PARTITION');usedIds.add(p.photoId);}
     for(const p of active){ensure(truth.photos.some(t=>t.photoId===p.photoId),'MISSING_TRUTH');}
@@ -80,7 +88,7 @@ export async function preflight(manifestPath){
       }
       priorSequenceTasks.set(task.stateSequenceId,task);
     }
-    const pairs=Math.min(active.length*(active.length-1)/2,active.length*r.budget.candidatesPerPhoto);
+    const pairs=task.relationPairs?.length??Math.min(active.length*(active.length-1)/2,active.length*r.budget.candidatesPerPhoto);
     const calls=r.trigger==='view'?0:active.length+pairs;upperRequests+=calls;imageOccurrences+=r.trigger==='view'?0:active.length+2*pairs;
     if(r.trigger!=='view')outputTokenReservation+=active.length*(r.budget.stageOutputTokens?.extract??r.budget.maxOutputPerRequest)+pairs*(r.budget.stageOutputTokens?.relate??r.budget.maxOutputPerRequest);
     // This is a cold-cache planning ceiling, not an assertion that a changed view can never trigger work.
@@ -146,8 +154,10 @@ export function scoreTask(task,result,truth,previous){
   const retrieval={person:{evaluated:evaluation.personPairs,samePairs:0,selected:0,missed:0},event:{evaluated:evaluation.eventPairs,samePairs:0,selected:0,missed:0}};
   const selected=(a,b)=>(result?.candidateTraces??[]).some(t=>(t.photoId===a&&t.selected.includes(b))||(t.photoId===b&&t.selected.includes(a)))||
     (result?.snapshot?.edges??[]).some(e=>[e.left.photoId,e.right.photoId].includes(a)&&[e.left.photoId,e.right.photoId].includes(b));
+  const allowedPairs=task.relationPairs?new Set(task.relationPairs.map(([left,right])=>[left,right].sort().join('/'))):undefined;
   for(let i=0;i<actual.length;i++)for(let j=i+1;j<actual.length;j++){
     const a=actual[i],b=actual[j];if(!target.has(a.photoId)&&!target.has(b.photoId))continue;
+    if(allowedPairs&&!allowedPairs.has([a.photoId,b.photoId].sort().join('/')))continue;
     if(evaluation.eventPairs){const same=Boolean(a.eventInstance&&a.eventInstance===b.eventInstance);countPair(event,same,groupId('event',a.photoId),groupId('event',b.photoId));
       if(same){retrieval.event.samePairs++;retrieval.event[selected(a.photoId,b.photoId)?'selected':'missed']++;}}
     if(evaluation.personPairs)for(const af of a.faces)for(const bf of b.faces){const same=af.personId===bf.personId;const ap=faceMatches.get(a.photoId)?.get(af.faceId),bp=faceMatches.get(b.photoId)?.get(bf.faceId);
@@ -163,5 +173,5 @@ export function scoreTask(task,result,truth,previous){
   return {taskId:task.taskId,plannedPhotos:target.size,failedPhotos:failures,evaluation,facets,unknown,conflicts,personPairs:person,eventPairs:event,
     historicalRetrieval:retrieval,identities,unchangedObservationChecks:unchanged,workflowStatus:result?.workflowStatus??'not_run',
     labelMetric:`enabled facets only: ${evaluation.facets.join(',')}; ${evaluation.facets.includes('person')?'person detection via greedy IoU>=0.5':'person facet not evaluated'}; no model-written ground truth`,
-    groupingMetric:'all cross-photo truth pairs involving evaluation photos, including candidate misses and failures'};
+    groupingMetric:allowedPairs?'only pre-registered relationPairs, including candidate misses and failures':'all cross-photo truth pairs involving evaluation photos, including candidate misses and failures'};
 }
