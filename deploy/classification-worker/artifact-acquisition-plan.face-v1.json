@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "sgx-artifact-acquisition-plan.1.1",
+  "planId": "opencv-zoo-yunet-sface-47534e2-20261003",
+  "state": "planned_not_acquired",
+  "claimBoundary": "This file records immutable official sources, Git LFS identities, expected hashes and persistent destinations. It does not prove acquisition, license review, runtime loading, identity accuracy or product readiness.",
+  "persistencePolicy": "classification-download-persistence.1",
+  "persistentRoot": "/gemini/code/sgx-classification",
+  "stagingRoot": "/gemini/code/sgx-classification/staging/models/opencv-zoo/47534e27c9851bb1128ccc0102f1145e27f23f98",
+  "verifiedModelRoot": "/gemini/code/sgx-classification/shared/models/opencv-zoo/47534e27c9851bb1128ccc0102f1145e27f23f98",
+  "runtimeNetworkAllowed": false,
+  "automaticRetries": 0,
+  "upstream": {
+    "repository": "https://github.com/opencv/opencv_zoo",
+    "commit": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+    "treeApi": "https://api.github.com/repos/opencv/opencv_zoo/git/trees/47534e27c9851bb1128ccc0102f1145e27f23f98?recursive=1",
+    "yunetReadme": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/README.md",
+    "yunetLicense": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/LICENSE",
+    "sfaceReadme": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/README.md",
+    "sfaceLicense": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/LICENSE",
+    "sfaceClarificationIssue": "https://github.com/opencv/opencv_zoo/issues/313",
+    "commercialActivationGap": "The SFace directory is Apache-2.0, but training-data and commercial-use provenance remain under explicit compliance review. The artifact is limited to controlled internal evaluation until that review closes."
+  },
+  "artifacts": [
+    {
+      "role": "face_detection",
+      "modelId": "opencv-zoo/face_detection_yunet_2023mar",
+      "fileName": "face_detection_yunet_2023mar.onnx",
+      "gitBlobSha": "2d8804a5986e229f1fde3a1994feacc66c91b58b",
+      "gitLfsOid": "sha256:8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "sourceUrl": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "persistentStagingPath": "/gemini/code/sgx-classification/staging/models/opencv-zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "expectedSha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "expectedBytes": 232589,
+      "license": "MIT"
+    },
+    {
+      "role": "face_embedding",
+      "modelId": "opencv-zoo/face_recognition_sface_2021dec",
+      "fileName": "face_recognition_sface_2021dec.onnx",
+      "gitBlobSha": "5817e559d509b2c1d5069f3c49a388bc45d4395f",
+      "gitLfsOid": "sha256:0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "sourceUrl": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+      "persistentStagingPath": "/gemini/code/sgx-classification/staging/models/opencv-zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+      "expectedSha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "expectedBytes": 38696353,
+      "dimensions": 128,
+      "license": "Apache-2.0",
+      "activationBoundary": "internal_eval_only"
+    }
+  ],
+  "promotionGate": {
+    "allExpectedHashesMatch": true,
+    "provenanceFilesPersisted": [
+      "git-tree.json",
+      "yunet.lfs-pointer",
+      "sface.lfs-pointer",
+      "face_detection_yunet/LICENSE",
+      "face_detection_yunet/README.md",
+      "face_recognition_sface/LICENSE",
+      "face_recognition_sface/README.md"
+    ],
+    "offlineRuntimeLoadRequired": true,
+    "consentGateRequired": true,
+    "anonymousCandidateOnly": true,
+    "fixedDenominatorBenchmarkRequired": true,
+    "commercialComplianceReviewRequired": true
+  }
+}

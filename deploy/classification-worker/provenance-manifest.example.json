@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "sgx-classification-provenance.1",
+  "freezeState": "example_not_deployable",
+  "releaseId": "0000000000000000000000000000000000000000",
+  "createdAt": "2026-10-02T00:00:00.000Z",
+  "environment": {
+    "os": "Ubuntu 22.04 x86_64 glibc",
+    "architecture": "x86_64",
+    "python": "3.10.12",
+    "gpuDevice": "B1.gpu.small 5.81GiB CC8.6",
+    "gpuIndex": 0
+  },
+  "runtimePackages": [
+    {
+      "name": "RapidOCR",
+      "version": "replace-with-locked-version",
+      "sourceUrl": "https://github.com/RapidAI/RapidOCR",
+      "artifactSha256": null,
+      "runtimeLicense": {
+        "scope": "runtime_code_only",
+        "spdxId": "Apache-2.0",
+        "licenseUrl": "https://github.com/RapidAI/RapidOCR/blob/main/LICENSE",
+        "copyrightNotice": "Record the notice shipped with the locked package.",
+        "verificationState": "repository_license_reviewed"
+      }
+    },
+    {
+      "name": "transformers",
+      "version": "replace-with-locked-version",
+      "sourceUrl": "https://github.com/huggingface/transformers",
+      "artifactSha256": null,
+      "runtimeLicense": {
+        "scope": "runtime_code_only",
+        "spdxId": "Apache-2.0",
+        "licenseUrl": "https://github.com/huggingface/transformers/blob/main/LICENSE",
+        "copyrightNotice": "Record the notice shipped with the locked package.",
+        "verificationState": "repository_license_reviewed"
+      }
+    }
+  ],
+  "models": [
+    {
+      "capability": "ocr",
+      "modelId": "PP-OCRv5 Chinese mobile",
+      "revision": "replace-after-artifact-acquisition",
+      "sourceUrl": "https://github.com/PaddlePaddle/PaddleOCR",
+      "transportState": "pending_transport",
+      "artifacts": [],
+      "modelCopyright": {
+        "holder": null,
+        "noticeUrl": null,
+        "verificationState": "pending"
+      },
+      "modelLicense": {
+        "spdxId": null,
+        "licenseUrl": null,
+        "verificationState": "pending",
+        "commercialUseReview": "pending"
+      },
+      "runtimePackageRefs": ["RapidOCR"],
+      "preprocessing": {
+        "colorSpace": "replace-after-freeze"
+      },
+      "dimensions": null
+    },
+    {
+      "capability": "image_text_embedding",
+      "modelId": "google/siglip2-base-patch16-224",
+      "revision": "0ad8c6e0ff16615356a08a1ad8c8bbc8930c434e",
+      "sourceUrl": "https://huggingface.co/google/siglip2-base-patch16-224",
+      "transportState": "pending_transport",
+      "artifacts": [],
+      "modelCopyright": {
+        "holder": "Google; confirm exact notice from acquired artifact",
+        "noticeUrl": "https://huggingface.co/google/siglip2-base-patch16-224",
+        "verificationState": "source_metadata_reviewed_artifact_pending"
+      },
+      "modelLicense": {
+        "spdxId": "Apache-2.0",
+        "licenseUrl": "https://huggingface.co/google/siglip2-base-patch16-224",
+        "verificationState": "source_metadata_reviewed_artifact_pending",
+        "commercialUseReview": "pending"
+      },
+      "runtimePackageRefs": ["transformers"],
+      "preprocessing": {
+        "imageSize": 224,
+        "normalization": "replace-after-freeze",
+        "textTokenizer": "replace-after-freeze"
+      },
+      "dimensions": 768
+    }
+  ]
+}

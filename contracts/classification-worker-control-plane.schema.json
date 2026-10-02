@@ -225,6 +225,63 @@
         "executionProfileDigest": { "$ref": "#/definitions/Sha256" }
       }
     },
+    "ExecutionContextBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobId",
+        "runId",
+        "jobRevision",
+        "attemptRevision",
+        "scope",
+        "authorizationRevision",
+        "inputHash",
+        "executionProfileDigest"
+      ],
+      "properties": {
+        "jobId": { "$ref": "#/definitions/Id" },
+        "runId": { "$ref": "#/definitions/Id" },
+        "jobRevision": { "type": "integer", "minimum": 1 },
+        "attemptRevision": { "type": "integer", "minimum": 1 },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "inputHash": { "$ref": "#/definitions/Sha256" },
+        "executionProfileDigest": { "$ref": "#/definitions/Sha256" }
+      }
+    },
+    "ExecutionContextRequest": {
+      "$comment": "The backend authorizes this request from the worker service identity and rechecks the lease token inside RunIdentity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" }
+      }
+    },
+    "ExecutionContextResponse": {
+      "$comment": "job and guard are immutable trusted snapshots validated again by the Stage A runtime. No credential or signed media URL is allowed inside execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "contextVersion", "binding", "execution"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "contextVersion": { "const": "classification-worker-stage-a-context.1" },
+        "binding": { "$ref": "#/definitions/ExecutionContextBinding" },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["job", "guard", "placeKindPolicy"],
+          "properties": {
+            "job": { "type": "object", "minProperties": 1 },
+            "guard": { "type": "object", "minProperties": 1 },
+            "placeKindPolicy": { "type": "object", "minProperties": 1 }
+          }
+        }
+      }
+    },
     "HeartbeatRequest": {
       "type": "object",
       "additionalProperties": false,

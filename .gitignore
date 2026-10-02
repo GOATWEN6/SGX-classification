@@ -11,6 +11,11 @@ dist/
 
 # testing
 coverage/
+.pytest_cache/
+
+# Python generated files
+__pycache__/
+*.py[cod]
 
 # misc
 .DS_Store

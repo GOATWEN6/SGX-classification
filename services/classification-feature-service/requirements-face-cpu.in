@@ -1,0 +1,11 @@
+-r requirements.in
+
+# Optional YuNet + SFace profile. The integrated T0/T1 service deliberately
+# reuses the exact opencv-python distribution required by RapidOCR. Installing
+# opencv-python-headless beside it would make both distributions own the same
+# cv2 files. If OCR and face are split into separate processes later, the face
+# process may freeze a headless-only lock instead.
+# The two ONNX artifacts are supplied from the reviewed OpenCV Zoo acquisition
+# manifest (MIT YuNet and Apache-2.0 SFace); the package must never download them.
+numpy==1.26.4
+opencv-python==4.11.0.86

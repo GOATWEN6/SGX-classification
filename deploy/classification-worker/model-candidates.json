@@ -1,60 +1,140 @@
 {
-  "manifestVersion": "sgx-model-candidates.1",
-  "status": "candidate_unbenchmarked",
-  "createdAt": "2026-10-02T00:00:00.000Z",
-  "claimBoundary": "Source Gate candidates only. Selection requires the frozen OCR and embedding benchmark; this file is not a production model manifest.",
+  "manifestVersion": "sgx-model-candidates.3",
+  "status": "internal_release_candidate",
+  "updatedAt": "2026-10-03T03:55:00.000+08:00",
+  "claimBoundary": "These artifacts passed fixed component and loopback HTTP execution smokes on the verified VirtAI target. They do not establish real-user accuracy, person identity reliability, production SLA, user benefit or unrestricted commercial suitability.",
+  "verifiedRemoteFacts": {
+    "os": "Ubuntu 22.04",
+    "architecture": "x86_64",
+    "python": "3.10.12",
+    "persistentProjectRoot": "/gemini/code/sgx-classification",
+    "candidateModelRoot": "/gemini/code/sgx-classification/shared/models/candidates",
+    "runtimeProjectRoot": "/quota/sgx-classification",
+    "scratchProjectRoot": "/tmp/sgx-classification/jobs",
+    "cudaDeviceCount": 1,
+    "gpu": "B1.gpu.small",
+    "gpuMemoryGiB": 5.81,
+    "computeCapability": "8.6"
+  },
+  "registry": {
+    "path": "/gemini/code/sgx-classification/shared/manifests/candidate-model-registry-20261003-r1.json",
+    "sha256": "699e1b49c6195d83f475889d4767670b4a9a91ef5d786ff09b664e14c255a575"
+  },
+  "dependencyFreeze": {
+    "path": "/gemini/code/sgx-classification/shared/manifests/feature-service-all-py310-20261003-r2.freeze-final-r2.txt",
+    "sha256": "9099dff907e2ac93c25be57eb1f3087d0d6c7946853b2379f9edc6a2062aef56",
+    "pipCheckPath": "/gemini/code/sgx-classification/shared/manifests/feature-service-all-py310-20261003-r2.pip-check-final-r2.txt",
+    "pipCheckSha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+  },
   "candidates": [
     {
       "capability": "ocr",
-      "priority": 1,
-      "runtime": "RapidOCR",
-      "runtimeVersion": "3.9.x",
-      "modelId": "PP-OCRv5 Chinese mobile",
-      "modelRevision": "RapidOCR-v3.9.2-PP-OCRv5",
-      "sourceUrl": "https://github.com/RapidAI/RapidOCR",
-      "license": "Apache-2.0",
-      "expectedDevice": "cpu",
-      "sha256": null,
-      "selectionState": "benchmark_required"
-    },
-    {
-      "capability": "ocr",
-      "priority": 2,
-      "runtime": "PaddleOCR",
-      "runtimeVersion": "3.x",
-      "modelId": "PP-OCRv5 Chinese server",
-      "modelRevision": "freeze-after-download",
-      "sourceUrl": "https://github.com/PaddlePaddle/PaddleOCR",
-      "license": "Apache-2.0",
-      "expectedDevice": "gpu_or_cpu",
-      "sha256": null,
-      "selectionState": "comparison_only"
+      "selectionState": "internal_release_candidate",
+      "runtime": {
+        "name": "RapidOCR",
+        "version": "3.9.2",
+        "sourceUrl": "https://github.com/RapidAI/RapidOCR",
+        "license": "Apache-2.0"
+      },
+      "model": {
+        "modelId": "rapidocr/PP-OCRv5-ch-mobile",
+        "revision": "rapidocr-3.9.2-ppocrv5-mobile",
+        "path": "/gemini/code/sgx-classification/shared/models/candidates/rapidocr/3.9.2/ppocrv5-mobile",
+        "device": "cpu"
+      },
+      "evidence": {
+        "path": "/gemini/code/sgx-classification/shared/manifests/component-smoke-ocr-face-20261003-r1.result.json",
+        "sha256": "9f3cac19dc5ba0906438b3241bc5cac6b7f96cb81e1434d41b56098295cf4f3f"
+      }
     },
     {
       "capability": "image_text_embedding",
-      "priority": 1,
-      "runtime": "transformers",
-      "runtimeVersion": "freeze-after-preflight",
-      "modelId": "google/siglip2-base-patch16-224",
-      "modelRevision": "0ad8c6e0ff16615356a08a1ad8c8bbc8930c434e",
-      "sourceUrl": "https://huggingface.co/google/siglip2-base-patch16-224",
-      "license": "Apache-2.0",
-      "expectedDevice": "gpu_preferred_cpu_supported",
-      "sha256": null,
-      "selectionState": "benchmark_required"
+      "selectionState": "internal_release_candidate",
+      "runtime": {
+        "name": "ModelScope direct model class",
+        "version": "1.40.1",
+        "sourceUrl": "https://github.com/modelscope/modelscope",
+        "license": "Apache-2.0"
+      },
+      "model": {
+        "modelId": "damo/multi-modal_clip-vit-base-patch16_zh",
+        "revision": "e6d9ca1cf467fb979d8511ed8349d29bdfd8ea1b",
+        "path": "/gemini/code/sgx-classification/shared/models/candidates/modelscope/damo--multi-modal_clip-vit-base-patch16_zh/e6d9ca1cf467fb979d8511ed8349d29bdfd8ea1b",
+        "device": "cuda:0",
+        "dtype": "float16",
+        "dimensions": 512,
+        "license": "Apache-2.0"
+      },
+      "evidence": {
+        "path": "/gemini/code/sgx-classification/shared/manifests/component-smoke-embedding-20261003-r3.result.json",
+        "sha256": "ebfba453cde477aa67b02386cfc7a4cd217146dc9af4b69ddd115aff3bcdb949"
+      }
     },
     {
-      "capability": "image_text_embedding",
-      "priority": 2,
-      "runtime": "cn_clip",
-      "runtimeVersion": "freeze-after-preflight",
-      "modelId": "OFA-Sys/Chinese-CLIP-ViT-B-16",
-      "modelRevision": "freeze-after-download",
-      "sourceUrl": "https://github.com/OFA-Sys/Chinese-CLIP",
-      "license": "MIT",
-      "expectedDevice": "gpu_preferred_cpu_supported",
-      "sha256": null,
-      "selectionState": "shadow_comparison"
+      "capability": "anonymous_face_candidate",
+      "selectionState": "internal_evaluation_candidate",
+      "runtime": {
+        "name": "OpenCV FaceDetectorYN + FaceRecognizerSF",
+        "version": "4.11.0.86",
+        "sourceUrl": "https://github.com/opencv/opencv",
+        "license": "Apache-2.0"
+      },
+      "models": {
+        "detector": {
+          "modelId": "opencv-zoo/face_detection_yunet_2023mar",
+          "revision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+          "license": "MIT",
+          "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+        },
+        "embedding": {
+          "modelId": "opencv-zoo/face_recognition_sface_2021dec",
+          "revision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+          "license": "Apache-2.0",
+          "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+          "dimensions": 128
+        },
+        "path": "/gemini/code/sgx-classification/shared/models/candidates/opencv-zoo/47534e27c9851bb1128ccc0102f1145e27f23f98"
+      },
+      "productBoundary": "Outputs anonymous candidate vectors only. Names, kinship and stable person identity require consent and product confirmation policy. Never use this profile for authentication.",
+      "releaseBlocker": "Commercial/training-data provenance review remains open for SFace pretrained weights.",
+      "evidence": {
+        "path": "/gemini/code/sgx-classification/shared/manifests/component-smoke-ocr-face-20261003-r1.result.json",
+        "sha256": "9f3cac19dc5ba0906438b3241bc5cac6b7f96cb81e1434d41b56098295cf4f3f"
+      }
+    },
+    {
+      "capability": "asr",
+      "selectionState": "internal_release_candidate",
+      "runtime": {
+        "name": "FunASR",
+        "version": "1.4.16",
+        "sourceUrl": "https://github.com/modelscope/FunASR",
+        "license": "MIT",
+        "fbank": {
+          "name": "kaldi-native-fbank",
+          "version": "1.22.3",
+          "sourceUrl": "https://github.com/csukuangfj/kaldi-native-fbank",
+          "license": "Apache-2.0",
+          "wheelSha256": "c710b62442a43720db853cbafbf57ea3f920b593128dfb8fb88e08d6a8225772"
+        }
+      },
+      "model": {
+        "modelId": "iic/SenseVoiceSmall",
+        "revision": "7bf452403abd7353a300cd760f7adae7701c92c1",
+        "path": "/gemini/code/sgx-classification/shared/models/candidates/modelscope/iic--SenseVoiceSmall/7bf452403abd7353a300cd760f7adae7701c92c1",
+        "device": "cuda:0",
+        "license": "Apache-2.0"
+      },
+      "evidence": {
+        "path": "/gemini/code/sgx-classification/shared/manifests/component-smoke-asr-20261003-r2.result.json",
+        "sha256": "fd9fa96147e3814e006228c3d6e8d3f3e1fe6b6fe1bdcdd3896e2cd51ae20c82"
+      }
     }
-  ]
+  ],
+  "integratedEvidence": {
+    "path": "/gemini/code/sgx-classification/shared/manifests/component-smoke-feature-service-http-20261003-r2.result.json",
+    "sha256": "ba1d9babca1d8772a7b2a1f789842bc996a5f25b3e6174a2fa68cc0a510587b9",
+    "status": "passed",
+    "totalColdPathLatencyMs": 112300.88
+  }
 }

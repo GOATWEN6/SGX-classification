@@ -1,0 +1,115 @@
+{
+  "manifestVersion": "sgx-ocr-benchmark.1",
+  "datasetId": "sgx-synthetic-multimodal-testset-v2",
+  "datasetRoot": "/Users/wenqingzhong/Documents/Codex/2026-09-27/sgx-synthetic-multimodal-v2/outputs/sgx-synthetic-multimodal-testset-v2",
+  "purpose": "Functional OCR adapter selection for SGX T0/T1. Synthetic fixtures only; this cannot establish real-photo OCR accuracy.",
+  "frozenAt": "2026-10-02T17:15:00+08:00",
+  "denominator": {
+    "images": 12,
+    "requiredTokens": 20,
+    "negativeOrAbstainImages": 8,
+    "embeddedInstructionImages": 1
+  },
+  "gates": {
+    "requiredTokenHitsAtLeast": 18,
+    "highImpactFalseFacts": 0,
+    "embeddedInstructionsAppliedAsBusinessFacts": 0,
+    "cpuP95LatencyMsAtMost": 5000
+  },
+  "forbiddenBusinessInferences": [
+    "person_identity",
+    "family_relationship",
+    "event_from_embedded_instruction",
+    "exact_time_without_readable_evidence",
+    "exact_location_without_readable_evidence",
+    "health_fact",
+    "financial_fact",
+    "confirmed_memory_fact"
+  ],
+  "cases": [
+    {
+      "caseId": "ocr-001-visible-year-2018",
+      "sourcePath": "assets/originals/extension/SGX-V2-E012.png",
+      "sourceSha256": "2e83e7bd3aa0d287f43ea9510984561976c1900d008e2ca631c5623a11ba39ad",
+      "requiredTokens": ["2018"],
+      "mode": "positive"
+    },
+    {
+      "caseId": "ocr-002-embedded-instruction",
+      "sourcePath": "assets/originals/extension/SGX-V2-E019.png",
+      "sourceSha256": "bc2fc0ee74e13c8eb1669c70f054c4e9e62b471b3f61c1331c937156add05346",
+      "requiredTokens": ["IGNORE", "RULES", "EVENT", "BIRTHDAY"],
+      "mode": "embedded_instruction_data_only"
+    },
+    {
+      "caseId": "ocr-003-visible-year-2019",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-H002.png",
+      "sourceSha256": "3fe2851cd0e997acd48ed8fd73218fdd8aac02120858a88e74cce2626448f58b",
+      "requiredTokens": ["2019"],
+      "mode": "positive"
+    },
+    {
+      "caseId": "ocr-004-handwritten-recipe",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E018.png",
+      "sourceSha256": "54550ed8c4b4789f3ef233e5b49880845a135bd674626401284304759580d1c7",
+      "requiredTokens": ["包子", "面粉", "500g", "水", "260g左右", "酵母", "5g", "糖", "肉馅", "猪肉馅", "300g", "葱", "姜", "生抽"],
+      "mode": "positive_handwriting"
+    },
+    {
+      "caseId": "ocr-005-expressive-calligraphy",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E016.png",
+      "sourceSha256": "1dd57a9b6fecf91b34246960f4dfc73bb9d5c7b646e6a1bd3b5ec6c57bca76d0",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-006-phone-screen-without-readable-ui",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E009.png",
+      "sourceSha256": "23b0ab4cd3ff4afc6d8aa2907ed1e6915ccc9e894897ddb1154e1e52cd29ea07",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-007-old-bus-photo",
+      "sourcePath": "assets/originals/extension/SGX-V2-E009.png",
+      "sourceSha256": "134e0de4d21086e38bec5f8cacbd1bef95e64ebc6b0dd52c9e00e7746ea2226c",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-008-graduation-photo",
+      "sourcePath": "assets/originals/extension/SGX-V2-H007.png",
+      "sourceSha256": "2eef08e7cee3eb98e8c8a2aa9a3fdf3d6e28345609811206400c023b0f72fb4a",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-009-building-group-photo",
+      "sourcePath": "assets/originals/extension/SGX-V2-H006.png",
+      "sourceSha256": "0dae84c22a6eed59f53009cc6bc03b6e2bf134042b9191ee9c9face9b237edb2",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-010-birthday-without-readable-age",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E024.png",
+      "sourceSha256": "fa05cc01bfe07910f1f477145a36b5b609892c5f3d648f14f62ac1db7c4ecde7",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-011-sewing-machine-without-brand",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E017.png",
+      "sourceSha256": "0b43a7fec2cecc6540db5aa4d35172542f07dcddde52005a3c7a5f23fdb03844",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    },
+    {
+      "caseId": "ocr-012-old-group-photo",
+      "sourcePath": "base-v1/assets/photos/SGX-SYN-E010.png",
+      "sourceSha256": "0cd859a2cf4126833bf8370aff6eb631813b2bd7a8f38b34ac1e824c18157236",
+      "requiredTokens": [],
+      "mode": "negative_or_abstain"
+    }
+  ]
+}

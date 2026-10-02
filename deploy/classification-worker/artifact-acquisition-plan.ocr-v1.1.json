@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "sgx-artifact-acquisition-plan.1.1",
+  "supersedes": "artifact-acquisition-plan.ocr-v1.json",
+  "planId": "rapidocr-3.9.2-ppocrv5-mobile-20261003",
+  "state": "planned_not_acquired",
+  "claimBoundary": "This file records immutable official sources, expected hashes and persistent destinations. It does not prove acquisition, license review, runtime loading or model quality.",
+  "persistencePolicy": "classification-download-persistence.1",
+  "persistentRoot": "/gemini/code/sgx-classification",
+  "stagingRoot": "/gemini/code/sgx-classification/staging/models/rapidocr/3.9.2",
+  "verifiedModelRoot": "/gemini/code/sgx-classification/shared/models/rapidocr/3.9.2/ppocrv5-mobile",
+  "runtimeNetworkAllowed": false,
+  "automaticRetries": 0,
+  "upstream": {
+    "repository": "https://github.com/RapidAI/RapidOCR",
+    "release": "https://github.com/RapidAI/RapidOCR/releases/tag/v3.9.2",
+    "releaseTag": "v3.9.2",
+    "defaultModelManifest": "https://raw.githubusercontent.com/RapidAI/RapidOCR/v3.9.2/python/rapidocr/default_models.yaml",
+    "runtimeLicense": "https://raw.githubusercontent.com/RapidAI/RapidOCR/v3.9.2/LICENSE",
+    "modelLicenseMappingAtRelease": null,
+    "releaseLicenseGap": "MODEL_LICENSES.md is absent from the v3.9.2 tag and its tagged URL returned HTTP 404 during the 2026-10-03 acquisition attempt.",
+    "postReleaseModelLicenseMapping": "https://raw.githubusercontent.com/RapidAI/RapidOCR/main/python/MODEL_LICENSES.md",
+    "postReleaseReadme": "https://raw.githubusercontent.com/RapidAI/RapidOCR/main/README.md",
+    "upstreamClarification": "https://github.com/RapidAI/RapidOCR/discussions/736",
+    "modelCoverageGap": "The post-release MODEL_LICENSES.md Section 6 enumerates the bundled PP-OCRv6 and legacy classifier artifacts, not the three selected PP-OCRv5 artifacts. The later README makes a broader hosted-model statement, so internal evaluation may preserve both records, while commercial release legal review remains pending."
+  },
+  "artifacts": [
+    {
+      "role": "detection",
+      "fileName": "ch_PP-OCRv5_det_mobile.onnx",
+      "sourceUrl": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx",
+      "persistentStagingPath": "/gemini/code/sgx-classification/staging/models/rapidocr/3.9.2/ppocrv5-mobile/ch_PP-OCRv5_det_mobile.onnx",
+      "expectedSha256": "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae"
+    },
+    {
+      "role": "recognition",
+      "fileName": "ch_PP-OCRv5_rec_mobile.onnx",
+      "sourceUrl": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile.onnx",
+      "persistentStagingPath": "/gemini/code/sgx-classification/staging/models/rapidocr/3.9.2/ppocrv5-mobile/ch_PP-OCRv5_rec_mobile.onnx",
+      "expectedSha256": "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5"
+    },
+    {
+      "role": "textline_orientation",
+      "fileName": "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+      "sourceUrl": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/cls/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+      "persistentStagingPath": "/gemini/code/sgx-classification/staging/models/rapidocr/3.9.2/ppocrv5-mobile/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+      "expectedSha256": "54379ae5174d026780215fc748a7f31910dee36818e63d49e17dc598ecc82df7"
+    }
+  ],
+  "promotionGate": {
+    "allExpectedHashesMatch": true,
+    "provenanceFilesPersisted": [
+      "LICENSE",
+      "default_models.yaml",
+      "MODEL_LICENSES.main-20261003.md",
+      "README.main-20261003.md",
+      "release-license-gap.json"
+    ],
+    "offlineRuntimeLoadRequired": true,
+    "benchmarkRequired": true
+  }
+}

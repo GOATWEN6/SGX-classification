@@ -4,6 +4,9 @@
   "gitCommit": "replace-with-full-git-sha",
   "createdAt": "2026-10-02T00:00:00.000Z",
   "contractVersion": "classification-worker-control-plane.v1",
+  "deploymentRoot": "/gemini/code/sgx-classification",
+  "runtimeRoot": "/quota/sgx-classification",
+  "scratchRoot": "/tmp/sgx-classification/jobs",
   "algorithmVersions": {
     "prompt": "sgx-five-facets.13",
     "guard": "replace-after-freeze",
@@ -13,22 +16,23 @@
   },
   "models": {
     "ocr": {
-      "modelId": "replace-after-benchmark",
-      "revision": "replace-after-benchmark",
-      "sha256": "sha256:replace-after-download",
-      "license": "replace-after-license-check"
+      "runtimePackageRef": "provenance.json#runtimePackages/0",
+      "modelArtifactRef": "provenance.json#models/0"
     },
     "embedding": {
-      "modelId": "replace-after-benchmark",
-      "revision": "replace-after-benchmark",
-      "sha256": "sha256:replace-after-download",
-      "license": "replace-after-license-check",
-      "dimensions": 0
+      "runtimePackageRef": "provenance.json#runtimePackages/1",
+      "modelArtifactRef": "provenance.json#models/1"
     },
     "vlm": {
       "provider": "qwen",
-      "modelId": "qwen3.7-flash-2026-07-15"
+      "modelId": "qwen3.7-flash-2026-07-15",
+      "serviceTermsReviewState": "replace-after-review"
     }
+  },
+  "provenanceManifest": {
+    "path": "manifests/provenance.json",
+    "schema": "sgx-classification-provenance.1",
+    "sha256": null
   },
   "dependencyLocks": {
     "node": "package-lock.json",
@@ -37,5 +41,16 @@
   "preflightReportDigest": null,
   "ocrBenchmarkDigest": null,
   "embeddingBenchmarkDigest": null,
-  "rollbackRelease": null
+  "rollbackRelease": null,
+  "verification": {
+    "verifiedMarkerRequired": true,
+    "markerPath": "VERIFIED",
+    "requiredChecks": [
+      "offline-startup",
+      "version",
+      "readyz",
+      "provenance",
+      "dependency-locks"
+    ]
+  }
 }

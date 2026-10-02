@@ -1,0 +1,15 @@
+-r requirements.in
+
+# OCR profile. onnxruntime wheel compatibility must be checked against the
+# target Linux architecture and glibc before the hashed lock is generated.
+numpy==1.26.4
+onnxruntime==1.20.1
+rapidocr==3.9.2
+
+# Resolver/runtime compatibility pins for the integrated OCR + face process.
+# OpenCV 4.12+ requires NumPy 2 on this platform, while the frozen adapters use
+# NumPy 1.26.4. OmegaConf 2.0 metadata is rejected by modern pip; 2.3.1 is the
+# reviewed version in the unified target environment and satisfies RapidOCR's
+# !=2.2.1 requirement.
+opencv-python==4.11.0.86
+omegaconf==2.3.1

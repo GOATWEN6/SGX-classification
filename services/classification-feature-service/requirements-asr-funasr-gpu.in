@@ -1,0 +1,10 @@
+# Target-environment direct pins for the reviewed SenseVoiceSmall runtime.
+# Install from the persistent offline wheelhouses only after resolution.
+funasr==1.4.16
+# FunASR's reviewed CPU fbank fallback. This avoids adding a second CUDA-linked
+# torchaudio distribution to the frozen torch environment.
+kaldi-native-fbank==1.22.3
+modelscope==1.40.1
+numpy==1.26.4
+torch==2.6.0
+transformers==4.57.6

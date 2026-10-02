@@ -43,6 +43,17 @@ const identity = {
   executionProfileDigest: sha('b'),
 };
 
+const executionContextBinding = {
+  jobId: identity.jobId,
+  runId: identity.runId,
+  jobRevision: identity.jobRevision,
+  attemptRevision: identity.attemptRevision,
+  scope: { householdId: 'household-1', subjectId: 'subject-1' },
+  authorizationRevision: identity.authorizationRevision,
+  inputHash: identity.inputHash,
+  executionProfileDigest: identity.executionProfileDigest,
+};
+
 test('worker lease request and response carry frozen capability and evidence identity', async () => {
   const [validateRequest, validateResponse] = await Promise.all([
     validator('LeaseRequest'),
@@ -122,6 +133,41 @@ test('worker completion binds result artifact, versions, usage and immutable run
 
   const stale = { ...complete, extra: true };
   assert.equal(validate(stale), false);
+});
+
+test('execution context is a frozen lease-bound request and response', async () => {
+  const [validateRequest, validateResponse] = await Promise.all([
+    validator('ExecutionContextRequest'),
+    validator('ExecutionContextResponse'),
+  ]);
+  const request = {
+    protocolVersion: 'classification-worker-control-plane.v1',
+    requestId: 'request-context-1',
+    identity,
+  };
+  assert.equal(validateRequest(request), true, JSON.stringify(validateRequest.errors));
+
+  const response = {
+    protocolVersion: 'classification-worker-control-plane.v1',
+    requestId: request.requestId,
+    contextVersion: 'classification-worker-stage-a-context.1',
+    binding: executionContextBinding,
+    execution: {
+      job: { version: 'classification-lab-job.2' },
+      guard: { version: 'classification-lab-guard.1' },
+      placeKindPolicy: { policyVersion: 'classification-place-kind.1' },
+    },
+  };
+  assert.equal(validateResponse(response), true, JSON.stringify(validateResponse.errors));
+
+  assert.equal(validateResponse({
+    ...response,
+    binding: { ...response.binding, authorizationRevision: 'stale-auth' },
+  }), true, 'schema validates shape; runtime binding comparison rejects stale values');
+  assert.equal(validateResponse({
+    ...response,
+    execution: { ...response.execution, apiKey: 'forbidden' },
+  }), false, 'execution envelope remains closed to credential fields');
 });
 
 test('worker failure and cancel acknowledgement preserve cost and cleanup evidence', async () => {

@@ -1,0 +1,15 @@
+-r requirements.in
+
+# Frozen Chinese image/text embedding candidate. The production adapter loads
+# the reviewed local model class directly and never imports ModelScope's generic
+# pipeline/preprocessor registries or permits runtime downloads.
+# Torch 2.6 keeps torch.load(weights_only=True) as the default for this frozen
+# state-dict snapshot.
+torch==2.6.0
+modelscope==1.40.1
+numpy==1.26.4
+Pillow==11.3.0
+six==1.17.0
+addict==2.4.0
+attrs==25.4.0
+PyYAML==6.0.3

@@ -1,0 +1,6 @@
+-r requirements.in
+
+# Optional embedding profile. Keep separate from the first OCR deployment
+# until its CPU/RAM benchmark passes.
+torch==2.6.0
+transformers==4.50.3

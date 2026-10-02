@@ -1,0 +1,6 @@
+# Direct runtime dependencies only. Generate a platform-specific transitive lock
+# with hashes after the target Linux architecture and glibc are known.
+fastapi==0.142.2
+pydantic==2.12.5
+uvicorn==0.53.0
+Pillow==11.3.0
