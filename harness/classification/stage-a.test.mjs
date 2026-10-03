@@ -383,6 +383,32 @@ test('relation support binds a uniquely matching text evidence id and still reje
   const rejected=await run(ambiguous);
   assert.ok(rejected.errors.some(error=>error.code==='TEXT_SUPPORT_REQUIRES_EVIDENCE'));
 });
+test('text evidence keeps verbatim grounding across full-width punctuation and whitespace normalization',async()=>{
+  const a=photo('punct_a','社区花园活动'),b=photo('punct_b','社区花园活动');
+  a.textEvidence=[{evidenceId:'punct_text',revision:1,sourceHash:a.sourceHash,source:'user_text',text:'这是同一天社区花园活动刚开始, 我们先分苗。'}];
+  const aObservation=observation(a,{event:'兴趣活动'});
+  aObservation.events[0].supports=[{photoId:a.photoId,source:'user_text',quote:'这是同一天社区花园活动刚开始，我们先分苗'}];
+  const bObservation=observation(b,{event:'兴趣活动'});
+  const s=setup([a,b],{[a.photoId]:aObservation,[b.photoId]:bObservation},{
+    eventDecision:()=> 'same',
+    alterOutput:(value,stage)=>{
+      if(stage==='relate'){
+        value.relations[0].supports=[
+          {photoId:a.photoId,source:'user_text',quote:'这是同一天社区花园活动刚开始，我们先分苗'},
+          {photoId:b.photoId,source:'visual',quote:'两张图展示同一组人在整理幼苗'}
+        ];
+        value.relations[0].rationale='两张照片属于同一活动';
+      }
+      return value;
+    }
+  });
+  const result=await run(s);
+  assert.equal(result.errors.length,0);
+  assert.equal(result.workflowStatus,'succeeded');
+  assert.deepEqual(groupMembers(result,'event'),[[a.photoId,b.photoId]]);
+  assert.equal(result.snapshot.observations[a.photoId].value.events[0].supports[0].evidenceId,'punct_text');
+  assert.equal(result.snapshot.edges.find(edge=>edge.kind==='event').supports[0].evidenceId,'punct_text');
+});
 test('real-mode sanitizer keeps valid facets and exposes dropped model assertions for review',async()=>{
   const p=photo('p_real_sanitize','');const raw=observation(p,{event:'兴趣活动',scene:'户外'});
   raw.times=[{value:'daytime',precision:'relative',role:'capture',supports:[{photoId:p.photoId,source:'visual',quote:'Natural sunlight and shadows visible in the park setting.'}]}];

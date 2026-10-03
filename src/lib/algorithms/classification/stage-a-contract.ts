@@ -78,6 +78,17 @@ export const pairKey=(kind:string,a:Endpoint,b:Endpoint)=>stable([kind,...[endpo
 export const sameScope=(a:Scope,b:Scope)=>a.householdId===b.householdId&&a.subjectId===b.subjectId;
 export function ensure(condition:unknown,code:string):asserts condition {if(!condition)throw new StageError(code);}
 
+// Providers can mechanically normalize full-width punctuation or whitespace in
+// a verbatim text quote. Treat only those Unicode/spacing variants as the same
+// evidence; semantic paraphrases still fail the literal substring check.
+function canonicalEvidenceText(value:string):string {
+  return value.normalize('NFKC').replace(/\s+/gu,'');
+}
+function containsEvidenceQuote(text:string,quote:string):boolean {
+  const normalizedQuote=canonicalEvidenceText(quote);
+  return normalizedQuote.length>0&&canonicalEvidenceText(text).includes(normalizedQuote);
+}
+
 const chineseDigit:Record<string,string>={〇:'0',零:'0',一:'1',二:'2',三:'3',四:'4',五:'5',六:'6',七:'7',八:'8',九:'9'};
 const SHORT_YEAR_PIVOT=29;
 function chineseSmallNumber(value:string):string {
@@ -96,10 +107,10 @@ function normalizeTemporalEvidence(value:string):string {
 export function bindUniqueTextEvidence(item:Support,photo:Photo):Support {
   if(!['user_text','final_asr'].includes(item.source)||item.evidenceId)return item;
   const evidence=photo.textEvidence??[];
-  const sourceMatches=evidence.filter(e=>e.source===item.source&&e.text.includes(item.quote));
+  const sourceMatches=evidence.filter(e=>e.source===item.source&&containsEvidenceQuote(e.text,item.quote));
   if(sourceMatches.length===1)return {...item,evidenceId:sourceMatches[0].evidenceId};
   if(sourceMatches.length>1)return item;
-  const fallbackMatches=evidence.filter(e=>e.text.includes(item.quote));
+  const fallbackMatches=evidence.filter(e=>containsEvidenceQuote(e.text,item.quote));
   return fallbackMatches.length===1?{...item,source:fallbackMatches[0].source,evidenceId:fallbackMatches[0].evidenceId}:item;
 }
 
@@ -195,7 +206,7 @@ export function validateSupports(items:Support[], photos:Photo[]) {
       if(!s.evidenceId)throw new StageError('TEXT_SUPPORT_REQUIRES_EVIDENCE');
       const evidence=(p.textEvidence??[]).find(e=>e.evidenceId===s.evidenceId&&e.source===s.source);
       if(!evidence)throw new StageError('FOREIGN_SOURCE');
-      if(!evidence.text.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
+      if(!containsEvidenceQuote(evidence.text,s.quote))throw new StageError('UNSUPPORTED_QUOTE');
     }
   }
 }
