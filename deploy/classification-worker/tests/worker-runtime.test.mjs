@@ -625,7 +625,11 @@ test('all feature failures produce one terminal failure and no result upload', a
 });
 
 test('unknown completion acknowledgement does not emit a contradictory failure', async (t) => {
-  const fx = await fixture({ completeError: new Error('response lost') });
+  const completeError = Object.assign(new Error('response lost'), {
+    diagnosticCode: 'INVALID_OUTPUT',
+    status: 422,
+  });
+  const fx = await fixture({ completeError });
   t.after(() => import('node:fs/promises').then(({ rm }) => rm(fx.root, { recursive: true, force: true })));
 
   const summary = await fx.runtime.runOnce();
@@ -634,7 +638,8 @@ test('unknown completion acknowledgement does not emit a contradictory failure',
   assert.equal(fx.controlPlane.requests.complete.length, 1);
   assert.equal(fx.controlPlane.requests.fail.length, 0);
   assert.equal(fx.controlPlane.requests.cancelAck.length, 0);
-  assert.ok(fx.logs.some((entry) => entry.event === 'terminal_state_unknown'));
+  assert.ok(fx.logs.some((entry) => entry.event === 'terminal_state_unknown'
+    && entry.fields.diagnosticCode === 'INVALID_OUTPUT' && entry.fields.httpStatus === 422));
 });
 
 test('same attempt is not executed twice in one worker lifetime', async (t) => {
@@ -680,6 +685,25 @@ test('HTTP control-plane client accepts empty 204 terminal response without retr
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, 'https://control.example.test/internal/v1/classification/jobs/job-1/complete');
   assert.equal(requests[0].options.headers.authorization, 'Bearer injected-test-token');
+});
+
+test('HTTP control-plane client preserves only a bounded safe backend diagnostic code', async () => {
+  const client = new HttpControlPlaneClient({
+    baseUrl: 'https://control.example.test',
+    token: 'injected-test-token',
+    fetchImpl: async () => new Response(JSON.stringify({
+      ok: false,
+      error: { code: 'INVALID_OUTPUT', detail: 'must never reach worker logs' },
+    }), { status: 422, headers: { 'content-type': 'application/json' } }),
+  });
+
+  await assert.rejects(
+    client.complete('job-1', { test: true }),
+    error => error.code === 'CONTROL_PLANE_HTTP_ERROR'
+      && error.diagnosticCode === 'INVALID_OUTPUT'
+      && error.status === 422
+      && !error.message.includes('must never reach worker logs'),
+  );
 });
 
 test('HTTP clients reject insecure remote control plane and non-local feature service', () => {

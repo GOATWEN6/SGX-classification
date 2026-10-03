@@ -1265,9 +1265,12 @@ export function validateLabExecutionResultAgainstEnvelope(
   for(const association of result.output.organization.associations) {
     if(associationIds.has(association.associationId)) throw new Error('DUPLICATE_RESULT_ASSOCIATION');
     associationIds.add(association.associationId);
-    const allowed = evidenceForContents([association.fromContentId]);
+    // A relation may be supported by text/ASR that the user explicitly bound
+    // to either endpoint. Those sources are valid observation evidence for
+    // the endpoint even though they remain separate ContentItems.
+    const allowed = observationEvidenceForContent(association.fromContentId);
     if(association.toContentId) {
-      for(const ref of evidenceForContents([association.toContentId])) allowed.add(ref);
+      for(const ref of observationEvidenceForContent(association.toContentId)) allowed.add(ref);
     } else if(association.toStoryId) {
       const target = storyEvidence.get(association.toStoryId);
       if(!target) throw new Error('FOREIGN_RESULT_ASSOCIATION_STORY');

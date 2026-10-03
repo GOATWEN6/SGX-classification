@@ -274,8 +274,9 @@ async function classificationResult(record) {
   };
 }
 
-async function preparedCompletion({ control, lease, record, built, clock, requestId }) {
+async function preparedCompletion({ control, lease, record, built, clock, requestId, mutateClassification }) {
   const classification = await classificationResult(record);
+  if(mutateClassification) mutateClassification(classification);
   const pipeline = {
     schemaVersion: WORKER_PIPELINE_RESULT_VERSION,
     generatedAt: new Date(clock.value).toISOString(),
@@ -321,6 +322,57 @@ async function preparedCompletion({ control, lease, record, built, clock, reques
     },
   };
 }
+
+test('AI association may cite text explicitly bound to either image endpoint', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-worker-bound-association.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const clock = { value: FIXED_NOW };
+  const store = new FileClassificationLabV2Store(root);
+  const guardStore = new FileTrustedLabGuardStore(root);
+  const built = buildLabSubmission(submission(8, {
+    images: [
+      { filename: 'round-8-a.png', mimeType: 'image/png', bytes: png(81) },
+      { filename: 'round-8-b.png', mimeType: 'image/png', bytes: png(82) },
+    ],
+    userTextTargetIndexes: [0],
+  }), {
+    authorizationRevision: 't1_auth_bound_association',
+    consentRef: 't1_consent_bound_association',
+  });
+  const record = await submit({
+    built,
+    root,
+    store,
+    guardStore,
+    clock,
+    contextRevision: 't1_context_bound_association',
+  });
+  const classification = await classificationResult(record);
+  const images = built.envelope.contents.filter(value => value.modality === 'image');
+  const text = built.envelope.contents.find(value => value.modality === 'user_text');
+  classification.output.organization.associations.push({
+    associationId: 'assoc_bound_text_ai_candidate',
+    fromContentId: images[0].contentId,
+    toContentId: images[1].contentId,
+    relation: 'same_story',
+    source: 'ai_inferred',
+    status: 'not_selected',
+    decisionBasis: 'retrieval_only',
+    evidenceStrength: 'insufficient',
+    method: 'bound-text-regression.1',
+    evidenceRefs: [images[0].evidenceId, images[1].evidenceId, text.evidenceId],
+    createdAt: built.envelope.createdAt,
+  });
+
+  assert.equal(
+    validateLabExecutionResultAgainstEnvelope(
+      classification,
+      record.envelope,
+      record.executionProfile,
+    ).workflowStatus,
+    'succeeded',
+  );
+});
 
 test('T1 session keeps authorization stable across rounds and blocks revoked sessions', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-t1-session.'));
@@ -575,6 +627,56 @@ test('history index failure cannot expose a false terminal success', async (t) =
   assert.equal(failed.error.code, 'HISTORY_INDEX_FAILED');
   assert.equal(failed.result, undefined);
   assert.equal(failed.resultDigest, undefined);
+});
+
+test('invalid uploaded classification closes the job instead of leaving processing stuck', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-worker-invalid-result.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const clock = { value: FIXED_NOW };
+  const store = new FileClassificationLabV2Store(root);
+  const guardStore = new FileTrustedLabGuardStore(root);
+  const control = new ClassificationWorkerControlPlane({
+    dataRoot: root,
+    publicBaseUrl: 'http://127.0.0.1:3137',
+    store,
+    guardStore,
+    clock: { nowMs: () => clock.value },
+  });
+  const built = buildLabSubmission(submission(4), {
+    authorizationRevision: 't1_auth_invalid_result',
+    consentRef: 't1_consent_invalid_result',
+  });
+  const record = await submit({
+    built,
+    root,
+    store,
+    guardStore,
+    clock,
+    contextRevision: 't1_context_invalid_result',
+  });
+  const lease = (await control.lease(worker(profile()))).leases[0];
+  const completeRequest = await preparedCompletion({
+    control,
+    lease,
+    record: await store.get(record.jobId),
+    built,
+    clock,
+    requestId: 'complete_invalid_result',
+    mutateClassification(classification) {
+      const observation = classification.output.observations[0];
+      observation.evidenceId = 'evidence_not_bound';
+      observation.supports = [{
+        evidenceId: 'evidence_not_bound',
+        sourceType: 'user_text',
+        quote: '不属于本任务的证据',
+      }];
+    },
+  });
+
+  await assert.rejects(control.complete(lease.jobId, completeRequest), /INVALID_OUTPUT/);
+  const failed = await store.get(record.jobId);
+  assert.equal(failed.status, 'failed_terminal');
+  assert.equal(failed.error.code, 'INVALID_OUTPUT');
 });
 
 test('real worker lease requires and settles the shared user-authorized budget', async (t) => {

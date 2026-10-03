@@ -311,10 +311,12 @@ test('consent-gated person matching reaches the model and only produces unnamed 
   value.input.guard = matchingGuard;
   value.input.budgetPolicy = { ...value.input.budgetPolicy, maxRequests: 3, maxOutputTokens: 20_000 };
   const calls = [];
+  const tokenCaps = [];
   const transport = async (_url, init) => {
     const body = JSON.parse(init.body);
     const context = JSON.parse(body.messages[1].content[0].text);
     calls.push(context);
+    tokenCaps.push({ stage: context.stage, maxTokens: body.max_tokens });
     let response;
     if(context.stage === 'extract') {
       const photoId = context.untrustedContext.requestedPhotoIds[0];
@@ -364,6 +366,7 @@ test('consent-gated person matching reaches the model and only produces unnamed 
   });
   assert.ok(['succeeded', 'needs_review'].includes(completed.status));
   assert.equal(calls.filter(call => call.stage === 'relate').length, 1);
+  assert.equal(tokenCaps.find(call => call.stage === 'relate').maxTokens, 2048);
   assert.equal(calls.find(call => call.stage === 'relate').untrustedContext.personMatchingEnabled, true);
   const personObservations = completed.result.output.observations.filter(item => item.facet === 'person');
   assert.equal(personObservations.length, 2);
@@ -489,7 +492,7 @@ test('direct Stage A execution preserves bounded provider schema diagnostics for
   assert.equal(calls.length, 1);
 });
 
-test('direct Stage A execution classifies grounded-output validation failures without hiding their safe code', async t => {
+test('direct Stage A execution quarantines an ungrounded assertion and preserves a safe review code', async t => {
   const value = await fixture(t);
   const calls = [];
   const factory = new StageALabExecutorFactory({
@@ -520,12 +523,12 @@ test('direct Stage A execution classifies grounded-output validation failures wi
     readAsset: async () => new Uint8Array(png)
   };
 
-  await assert.rejects(
-    () => factory.create(value.executionProfile, context).execute(context),
-    error => error.message === 'INVALID_OUTPUT'
-      && error.diagnostic?.phase === 'schema'
-      && error.diagnostic.issues[0]?.code === 'TEXT_SUPPORT_REQUIRES_EVIDENCE'
-  );
+  const outcome = await factory.create(value.executionProfile, context).execute(context);
+  assert.equal(outcome.result.workflowStatus, 'needs_review');
+  assert.ok(outcome.result.output.organization.reviewItems.some(item =>
+    item.startsWith('UNSUPPORTED_MODEL_SUPPORT_DROPPED:')));
+  assert.equal(outcome.result.output.observations.some(item =>
+    item.facet === 'event' && item.normalizedValue === '家庭聚会'), false);
   assert.equal(calls.length, 1);
 });
 

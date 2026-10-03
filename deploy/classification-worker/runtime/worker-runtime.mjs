@@ -112,6 +112,8 @@ export class TerminalStateUnknownError extends Error {
     super(`terminal state unknown after ${operation}`, { cause });
     this.name = 'TerminalStateUnknownError';
     this.operation = operation;
+    this.diagnosticCode = typeof cause?.diagnosticCode === 'string' ? cause.diagnosticCode : undefined;
+    this.status = Number.isInteger(cause?.status) ? cause.status : undefined;
   }
 }
 
@@ -659,7 +661,12 @@ export class WorkerRuntime {
         terminal = { kind: 'cancel', reason: error.reason ?? fence.stopReason };
         outcome = 'cancelled';
       } else if (error instanceof TerminalStateUnknownError) {
-        terminal = { kind: 'unknown', operation: error.operation };
+        terminal = {
+          kind: 'unknown',
+          operation: error.operation,
+          diagnosticCode: error.diagnosticCode,
+          status: error.status,
+        };
         outcome = 'failed';
       } else {
         const executionError = error instanceof WorkerExecutionError
@@ -686,6 +693,8 @@ export class WorkerRuntime {
         jobId: lease.jobId,
         runId: lease.runId,
         operation: terminal.operation,
+        ...(terminal.diagnosticCode ? { diagnosticCode: terminal.diagnosticCode } : {}),
+        ...(terminal.status ? { httpStatus: terminal.status } : {}),
       });
       return outcome;
     }

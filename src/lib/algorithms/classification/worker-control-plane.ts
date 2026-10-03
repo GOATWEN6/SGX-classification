@@ -1011,14 +1011,39 @@ export class ClassificationWorkerControlPlane {
     if(hashBytes(bytes) !== request.resultArtifact.sha256 || bytes.length !== request.resultArtifact.byteLength) {
       fail('RESULT_ARTIFACT_MISMATCH', 409);
     }
-    const pipeline = this.parsePipeline(JSON.parse(bytes.toString('utf8')), state, job);
-    if(pipeline.classification.workflowStatus === 'needs_review' && request.status !== 'needs_review') fail('WORKFLOW_STATUS_MISMATCH');
-    const result = validateLabExecutionResultAgainstEnvelope({
-      ...pipeline.classification,
-      workflowStatus: request.status,
-    }, job.envelope, job.executionProfile);
-    const at = later(job.updatedAt, iso(() => this.clock.nowMs()));
-    const records = this.historyRecords(job, guard, pipeline.featureBundle, at);
+    let prepared: { result: LabExecutionResult; at: string; records: HistoricalFeatureRecord[] };
+    try {
+      const pipeline = this.parsePipeline(JSON.parse(bytes.toString('utf8')), state, job);
+      if(pipeline.classification.workflowStatus === 'needs_review' && request.status !== 'needs_review') {
+        fail('WORKFLOW_STATUS_MISMATCH');
+      }
+      const result = validateLabExecutionResultAgainstEnvelope({
+        ...pipeline.classification,
+        workflowStatus: request.status,
+      }, job.envelope, job.executionProfile);
+      const at = later(job.updatedAt, iso(() => this.clock.nowMs()));
+      prepared = {
+        result,
+        at,
+        records: this.historyRecords(job, guard, pipeline.featureBundle, at),
+      };
+    } catch {
+      // Provider usage has already occurred and is therefore settled above.
+      // A deterministic output rejection must also close the product job;
+      // otherwise the worker cannot know whether it may safely retry and the
+      // UI is left forever in `processing`.
+      try {
+        await this.terminalFailure(job, 'INVALID_OUTPUT', false);
+        await this.updateState(jobId, current => ({
+          ...current,
+          status: 'failed',
+          stage: 'organizing',
+          updatedAt: later(current.updatedAt, iso(() => this.clock.nowMs())),
+        }));
+      } catch { /* A concurrent lifecycle change already fenced the job. */ }
+      fail('INVALID_OUTPUT', 422);
+    }
+    const { result, at, records } = prepared;
     // Index first, while the product job is still processing. A failed index
     // can then fail the job truthfully instead of exposing a terminal success
     // that later rounds cannot retrieve. A lost product CAS is compensated by

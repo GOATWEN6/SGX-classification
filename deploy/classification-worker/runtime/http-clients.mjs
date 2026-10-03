@@ -36,15 +36,19 @@ function protectedHttpUrl(value, label) {
 }
 
 async function parseJson(response, operation) {
+  const text = response.status === 204 ? '' : await response.text();
   if (!response.ok) {
     const error = new Error(`${operation} returned HTTP ${response.status}`);
     error.code = 'CONTROL_PLANE_HTTP_ERROR';
     error.status = response.status;
     error.operation = operation;
+    try {
+      const code = JSON.parse(text)?.error?.code;
+      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,127}$/.test(code)) error.diagnosticCode = code;
+    } catch { /* Never expose an arbitrary response body in worker logs. */ }
     throw error;
   }
   if (response.status === 204) return null;
-  const text = await response.text();
   return text.length > 0 ? JSON.parse(text) : null;
 }
 

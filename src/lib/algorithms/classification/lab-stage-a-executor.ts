@@ -225,7 +225,10 @@ class StageALabExecutor implements LabExecutionExecutor {
           maxOutputPerRequest,
           stageOutputTokens: {
             extract: maxOutputPerRequest,
-            relate: Math.min(maxOutputPerRequest, 1024)
+            // A consented multi-person pair can require one event edge plus
+            // several anonymous face-pair candidates. 1024 tokens truncated a
+            // real two-image response before its JSON object closed.
+            relate: Math.min(maxOutputPerRequest, 2048)
           },
           maxCallDurationMs: context.job.budgetPolicy.maxCallDurationMs
         },
