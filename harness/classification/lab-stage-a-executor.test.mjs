@@ -489,6 +489,46 @@ test('direct Stage A execution preserves bounded provider schema diagnostics for
   assert.equal(calls.length, 1);
 });
 
+test('direct Stage A execution classifies grounded-output validation failures without hiding their safe code', async t => {
+  const value = await fixture(t);
+  const calls = [];
+  const factory = new StageALabExecutorFactory({
+    profile: value.executionProfile,
+    provider: 'qwen',
+    model: value.model,
+    inputCnyPerMillion: 0,
+    outputCnyPerMillion: 0,
+    placeKindPolicy: placePolicy(value.built.envelope.taxonomyVersion),
+    transport: transportFor(value.model, calls, ({ photoId }) => ({
+      observations: [{
+        photoId,
+        people: [], mentions: [], times: [], places: [],
+        events: [{
+          type: '家庭聚会',
+          supports: [{ photoId, source: 'user_text', quote: '模型改写后不存在于原文的引文' }]
+        }],
+        scenes: [], unknownFacets: ['person', 'time', 'place', 'scene'], conflicts: []
+      }]
+    }))
+  });
+  const pending = await submitLabExecutionJob(value.input, value.store, clock);
+  const context = {
+    job: pending,
+    signal: new AbortController().signal,
+    clock,
+    getGuard: async () => structuredClone(value.guard),
+    readAsset: async () => new Uint8Array(png)
+  };
+
+  await assert.rejects(
+    () => factory.create(value.executionProfile, context).execute(context),
+    error => error.message === 'INVALID_OUTPUT'
+      && error.diagnostic?.phase === 'schema'
+      && error.diagnostic.issues[0]?.code === 'TEXT_SUPPORT_REQUIRES_EVIDENCE'
+  );
+  assert.equal(calls.length, 1);
+});
+
 test('processing cancellation aborts Stage A and a late transport cannot revive the job', async t => {
   const value = await fixture(t);
   const started = deferred();
