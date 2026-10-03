@@ -606,10 +606,22 @@ export class WorkerRuntime {
         'organizing',
       );
       ensure(processed.result && typeof processed.result === 'object', 'INTERNAL_ERROR', 'organizing');
+      const usage = {
+        ...emptyUsage(startedAt, this.now),
+        ...processed.usage,
+      };
+      // The processor may already have made paid provider calls. Preserve that
+      // usage before result upload so a later transport failure is accounted
+      // accurately by the control plane.
+      knownUsage = usage;
       await fence.checkpoint('uploading', 85);
       const resultBytes = Buffer.from(JSON.stringify(processed.result), 'utf8');
       ensure(resultBytes.length <= lease.resultUpload.maxByteLength, 'RESULT_UPLOAD_FAILED', 'uploading');
-      ensure(this.now() < parseTimestamp(lease.resultUpload.expiresAt, 'RESULT_UPLOAD_FAILED', 'uploading'), 'RESULT_UPLOAD_FAILED', 'uploading');
+      // The immediately preceding heartbeat renews both the lease and upload
+      // expiry on the control plane. The lease object contains only the
+      // original expiry, so checking it here would reject every valid job that
+      // runs longer than the initial lease. The upload endpoint remains the
+      // authoritative expiry check.
       try {
         await this.artifacts.upload({
           url: lease.resultUpload.uploadUrl,
@@ -626,11 +638,6 @@ export class WorkerRuntime {
       await fence.checkpoint('uploading', 99);
       await fence.stop();
       fence.assertActive();
-      const usage = {
-        ...emptyUsage(startedAt, this.now),
-        ...processed.usage,
-      };
-      knownUsage = usage;
       const completeRequest = {
         protocolVersion: PROTOCOL_VERSION,
         requestId: this.idFactory(),

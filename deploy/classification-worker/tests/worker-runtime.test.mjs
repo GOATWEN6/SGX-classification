@@ -509,6 +509,53 @@ test('component failure is preserved as needs_review when another feature succee
   }]);
 });
 
+test('renewed heartbeat permits result upload after the original upload expiry', async (t) => {
+  const lease = makeLease();
+  lease.resultUpload.expiresAt = new Date(FIXED_NOW - 1).toISOString();
+  const fx = await fixture({ lease });
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(fx.root, { recursive: true, force: true })));
+
+  const summary = await fx.runtime.runOnce();
+
+  assert.equal(summary.completed, 1);
+  assert.equal(fx.artifacts.uploads.length, 1);
+  assert.equal(fx.controlPlane.requests.complete.length, 1);
+  assert.equal(fx.controlPlane.requests.fail.length, 0);
+});
+
+test('result upload failure reports provider usage already returned by the processor', async (t) => {
+  const fx = await fixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(fx.root, { recursive: true, force: true })));
+  fx.runtime.processor = {
+    async process() {
+      return {
+        status: 'succeeded',
+        result: { schemaVersion: 'test-result.1' },
+        usage: {
+          providerLatencyMs: 321,
+          inputTokens: 12_726,
+          outputTokens: 3_419,
+          costCny: 0.0316824,
+          providerCalls: 3,
+        },
+      };
+    },
+  };
+  fx.artifacts.upload = async () => { throw new Error('synthetic upload failure'); };
+
+  const summary = await fx.runtime.runOnce();
+
+  assert.equal(summary.failed, 1);
+  assert.equal(fx.controlPlane.requests.fail.length, 1);
+  const failure = fx.controlPlane.requests.fail[0].request;
+  assert.equal(failure.errorCode, 'RESULT_UPLOAD_FAILED');
+  assert.equal(failure.providerCalled, true);
+  assert.equal(failure.usage.providerCalls, 3);
+  assert.equal(failure.usage.inputTokens, 12_726);
+  assert.equal(failure.usage.outputTokens, 3_419);
+  assert.equal(failure.usage.costCny, 0.0316824);
+});
+
 test('artifact hash mismatch fails once without feature calls or upload and cleans scratch', async (t) => {
   const lease = makeLease();
   const fx = await fixture({ lease });
