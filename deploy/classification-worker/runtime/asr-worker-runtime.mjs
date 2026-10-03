@@ -91,11 +91,18 @@ export class AsrWorkerRuntime {
     idFactory = () => `asr-request-${randomUUID()}`,
     logger,
     sleep = (milliseconds, signal) => new Promise(resolve => {
-      const timer = setTimeout(resolve, milliseconds);
-      signal?.addEventListener('abort', () => {
-        clearTimeout(timer);
+      let finished = false;
+      let timer;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
         resolve();
-      }, { once: true });
+      };
+      timer = setTimeout(finish, milliseconds);
+      if (signal?.aborted) finish();
+      else signal?.addEventListener('abort', finish, { once: true });
     }),
   }) {
     ensure(ID_PATTERN.test(workerId ?? ''), 'ASR_WORKER_ID_INVALID');
