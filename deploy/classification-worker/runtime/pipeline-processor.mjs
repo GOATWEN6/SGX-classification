@@ -107,10 +107,14 @@ function usageFromBridge(raw) {
   return raw;
 }
 
-function failureBundle({ lease, files, versions, now }) {
+function failureBundle({ lease, files, versions, now, authorizedPersonEvidenceIds = new Set() }) {
   const evidence = files.map((file) => {
     const capabilities = file.evidence.modality === 'image'
-      ? ['ocr', 'image_embedding']
+      ? [
+          'ocr',
+          'image_embedding',
+          ...(authorizedPersonEvidenceIds.has(file.evidence.evidenceId) ? ['face_embeddings'] : []),
+        ]
       : ['text_embedding'];
     return {
       evidenceId: file.evidence.evidenceId,
@@ -149,6 +153,38 @@ function failureBundle({ lease, files, versions, now }) {
       providerCalls: 0,
     },
   };
+}
+
+function authorizedPersonEvidenceIds(execution, lease, files, personMatchingEnabled) {
+  if (!personMatchingEnabled) return new Set();
+  const guard = execution?.guard;
+  ensure(guard && typeof guard === 'object', 'VERSION_MISMATCH', 'retrieval');
+  if (guard.allowPersonMatching !== true) return new Set();
+  ensure(guard.active === true, 'VERSION_MISMATCH', 'retrieval', 'person authorization is inactive');
+  ensure(guard.authorizationRevision === lease.authorizationRevision,
+    'VERSION_MISMATCH', 'retrieval', 'person authorization revision mismatch');
+  ensure(same(guard.scope, lease.scope), 'VERSION_MISMATCH', 'retrieval', 'person authorization scope mismatch');
+  ensure(Array.isArray(guard.personMatchingEvidenceIds) && Array.isArray(guard.evidence),
+    'VERSION_MISMATCH', 'retrieval', 'person authorization evidence is missing');
+
+  const fileByEvidenceId = new Map(files.map((file) => [file.evidence.evidenceId, file]));
+  const guardByEvidenceId = new Map(guard.evidence.map((item) => [item?.evidenceId, item]));
+  const authorized = new Set();
+  for (const evidenceId of guard.personMatchingEvidenceIds) {
+    ensure(typeof evidenceId === 'string' && !authorized.has(evidenceId),
+      'VERSION_MISMATCH', 'retrieval', 'invalid person matching evidence');
+    const file = fileByEvidenceId.get(evidenceId);
+    const guarded = guardByEvidenceId.get(evidenceId);
+    ensure(file?.evidence?.modality === 'image' && file.evidence.lifecycleState === 'active',
+      'VERSION_MISMATCH', 'retrieval', 'person matching evidence is not an active image');
+    ensure(guarded?.lifecycleState === 'active' && typeof guarded.personConsentRef === 'string'
+      && guarded.personConsentRef.length > 0,
+    'VERSION_MISMATCH', 'retrieval', 'person consent is missing');
+    ensure(guarded.revision === file.evidence.revision && guarded.sourceHash === file.evidence.sourceHash,
+      'VERSION_MISMATCH', 'retrieval', 'person evidence version mismatch');
+    authorized.add(evidenceId);
+  }
+  return authorized;
 }
 
 function assertFileSet(files) {
@@ -413,16 +449,6 @@ export class StageAPipelineProcessor {
   }
 
   async process({ lease, identity, files, versions, signal, checkpoint = async () => {} }) {
-    let featureBundle;
-    try {
-      featureBundle = await this.featureProcessor.process({ lease, files, versions, signal });
-    } catch (error) {
-      if (signal.aborted) throw error;
-      if (!(error instanceof WorkerExecutionError) || error.errorCode !== 'FEATURE_SERVICE_UNAVAILABLE') throw error;
-      featureBundle = failureBundle({ lease, files, versions, now: this.now });
-    }
-
-    await checkpoint('retrieval', 45);
     const requestId = this.idFactory();
     const contextResponse = await this.contextProvider.executionContext(lease.jobId, {
       protocolVersion: PROTOCOL_VERSION,
@@ -434,7 +460,35 @@ export class StageAPipelineProcessor {
       identity,
       lease,
     });
+    const authorizedPersonEvidence = authorizedPersonEvidenceIds(
+      execution,
+      lease,
+      files,
+      this.featureProcessor.personMatchingEnabled === true,
+    );
 
+    let featureBundle;
+    try {
+      featureBundle = await this.featureProcessor.process({
+        lease,
+        files,
+        versions,
+        signal,
+        authorizedPersonEvidenceIds: authorizedPersonEvidence,
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (!(error instanceof WorkerExecutionError) || error.errorCode !== 'FEATURE_SERVICE_UNAVAILABLE') throw error;
+      featureBundle = failureBundle({
+        lease,
+        files,
+        versions,
+        now: this.now,
+        authorizedPersonEvidenceIds: authorizedPersonEvidence,
+      });
+    }
+
+    await checkpoint('retrieval', 45);
     await checkpoint('vlm_extract', 55);
     const derivedFeatures = buildDerivedFeatures(featureBundle.result, execution);
     const classified = await this.bridge.run({ identity, lease, execution, derivedFeatures, files, signal });

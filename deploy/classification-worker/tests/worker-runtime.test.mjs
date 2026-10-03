@@ -70,7 +70,7 @@ const versions = {
   gitCommit: '1e162e0',
   contractVersion: 'classification-ingestion-v2.0.0',
   providerVersion: 'stage-a-provider.1',
-  promptVersion: 'sgx-five-facets.13',
+  promptVersion: 'sgx-five-facets.16',
   guardVersion: 'stage-a-guard.1',
   adapterVersion: 'cloud-worker.1',
   taxonomyVersion: 'sgx-taxonomy.1',
@@ -190,6 +190,31 @@ function contextBinding(lease) {
     authorizationRevision: lease.authorizationRevision,
     inputHash: lease.inputHash,
     executionProfileDigest: lease.executionProfileDigest,
+  };
+}
+
+function personGuardForLease(lease, personMatchingEvidenceIds = []) {
+  const authorized = new Set(personMatchingEvidenceIds);
+  return {
+    scope: lease.scope,
+    actorId: 'actor-test',
+    authorityRef: 'authority-test',
+    purposes: ['classification', 'album_organization'],
+    authorizationRevision: lease.authorizationRevision,
+    contextRevision: 'context-test-1',
+    active: true,
+    allowedConsentRefs: lease.evidence.map((item) => `consent-${item.evidenceId}`),
+    allowedCorrectionIds: [],
+    allowPersonMatching: authorized.size > 0,
+    personMatchingEvidenceIds: [...authorized],
+    evidence: lease.evidence.map((item) => ({
+      evidenceId: item.evidenceId,
+      revision: item.revision,
+      sourceHash: item.sourceHash,
+      consentRef: `consent-${item.evidenceId}`,
+      ...(authorized.has(item.evidenceId) ? { personConsentRef: `person-consent-${item.evidenceId}` } : {}),
+      lifecycleState: item.lifecycleState,
+    })),
   };
 }
 
@@ -627,6 +652,20 @@ test('runtime rejects online model transport even with persistent caches', () =>
   );
 });
 
+test('worker defaults and release examples use the Stage A prompt source version', async () => {
+  const [contract, main, environment, release] = await Promise.all([
+    readFile(new URL('../../../src/lib/algorithms/classification/stage-a-contract.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../runtime/main.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../nonsecret.env.example', import.meta.url), 'utf8'),
+    readFile(new URL('../release-manifest.example.json', import.meta.url), 'utf8'),
+  ]);
+  const promptVersion = contract.match(/PROMPT_VERSION\s*=\s*'([^']+)'/)?.[1];
+  assert.equal(promptVersion, 'sgx-five-facets.16');
+  assert.match(main, new RegExp(`SGX_PROMPT_VERSION \\?\\? '${promptVersion}'`));
+  assert.match(environment, new RegExp(`SGX_PROMPT_VERSION=${promptVersion}(?:\\n|$)`));
+  assert.equal(JSON.parse(release).algorithmVersions.prompt, promptVersion);
+});
+
 test('pipeline processor binds feature extraction, trusted context and canonical classification result', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-pipeline.'));
   t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
@@ -717,8 +756,9 @@ test('pipeline fails closed on an execution-context binding mismatch before the 
   await writeFile(imagePath, Buffer.from('image-one'));
   await writeFile(textPath, lease.evidence[1].inlineText.text);
   let bridgeCalls = 0;
+  const featureService = new FakeFeatures();
   const processor = new StageAPipelineProcessor({
-    featureProcessor: new LocalFeatureBundleProcessor({ featureService: new FakeFeatures() }),
+    featureProcessor: new LocalFeatureBundleProcessor({ featureService }),
     contextProvider: {
       async executionContext(_jobId, request) {
         return {
@@ -745,6 +785,129 @@ test('pipeline fails closed on an execution-context binding mismatch before the 
     signal: new AbortController().signal,
   }), (error) => error.errorCode === 'VERSION_MISMATCH' && error.stage === 'retrieval');
   assert.equal(bridgeCalls, 0);
+  assert.equal(featureService.calls.length, 0, 'trusted context must be validated before feature extraction');
+});
+
+test('pipeline validates per-image person consent before calling face features', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-person-consent.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const lease = makeLease();
+  const imagePath = path.join(root, 'image.jpg');
+  const textPath = path.join(root, 'text.txt');
+  await writeFile(imagePath, Buffer.from('image-one'));
+  await writeFile(textPath, lease.evidence[1].inlineText.text);
+  const files = [
+    { evidence: lease.evidence[0], sourcePath: imagePath, byteLength: 9 },
+    { evidence: lease.evidence[1], sourcePath: textPath, byteLength: Buffer.byteLength(lease.evidence[1].inlineText.text) },
+  ];
+  const featureService = new FakeFeatures();
+  let contextResolved = false;
+  const processor = new StageAPipelineProcessor({
+    featureProcessor: new LocalFeatureBundleProcessor({
+      featureService,
+      personMatchingEnabled: true,
+      now: () => FIXED_NOW,
+    }),
+    contextProvider: {
+      async executionContext(_jobId, request) {
+        assert.equal(featureService.calls.length, 0, 'face and non-biometric features must wait for trusted context');
+        contextResolved = true;
+        return {
+          protocolVersion: PROTOCOL_VERSION,
+          requestId: request.requestId,
+          contextVersion: EXECUTION_CONTEXT_VERSION,
+          binding: contextBinding(lease),
+          execution: {
+            job: { jobId: lease.jobId, envelope: envelopeForLease(lease), budgetPolicy: minimalBudgetPolicy },
+            guard: personGuardForLease(lease, ['evidence-image-1']),
+            placeKindPolicy: { policyVersion: 'test.1' },
+          },
+        };
+      },
+    },
+    bridge: {
+      async run() {
+        return {
+          status: 'succeeded',
+          result: { workflowStatus: 'succeeded' },
+          usage: { providerLatencyMs: 1, inputTokens: 1, outputTokens: 1, costCny: 0, providerCalls: 1 },
+        };
+      },
+    },
+    now: () => FIXED_NOW,
+    idFactory: () => 'context-request-person-1',
+  });
+
+  await processor.process({
+    lease,
+    identity: identityFor(lease),
+    files,
+    versions,
+    signal: new AbortController().signal,
+  });
+
+  assert.equal(contextResolved, true);
+  assert.deepEqual(featureService.calls.map((call) => call.capability), [
+    'ocr', 'image_embedding', 'face_embeddings', 'text_embedding',
+  ]);
+});
+
+test('pipeline skips face features without per-image person authorization', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-no-person-consent.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const lease = makeLease();
+  const imagePath = path.join(root, 'image.jpg');
+  const textPath = path.join(root, 'text.txt');
+  await writeFile(imagePath, Buffer.from('image-one'));
+  await writeFile(textPath, lease.evidence[1].inlineText.text);
+  const featureService = new FakeFeatures();
+  const processor = new StageAPipelineProcessor({
+    featureProcessor: new LocalFeatureBundleProcessor({
+      featureService,
+      personMatchingEnabled: true,
+      now: () => FIXED_NOW,
+    }),
+    contextProvider: {
+      async executionContext(_jobId, request) {
+        return {
+          protocolVersion: PROTOCOL_VERSION,
+          requestId: request.requestId,
+          contextVersion: EXECUTION_CONTEXT_VERSION,
+          binding: contextBinding(lease),
+          execution: {
+            job: { jobId: lease.jobId, envelope: envelopeForLease(lease), budgetPolicy: minimalBudgetPolicy },
+            guard: personGuardForLease(lease),
+            placeKindPolicy: { policyVersion: 'test.1' },
+          },
+        };
+      },
+    },
+    bridge: {
+      async run() {
+        return {
+          status: 'succeeded', result: { workflowStatus: 'succeeded' },
+          usage: { providerLatencyMs: 1, inputTokens: 1, outputTokens: 1, costCny: 0, providerCalls: 1 },
+        };
+      },
+    },
+    now: () => FIXED_NOW,
+    idFactory: () => 'context-request-person-2',
+  });
+
+  await processor.process({
+    lease,
+    identity: identityFor(lease),
+    files: [
+      { evidence: lease.evidence[0], sourcePath: imagePath, byteLength: 9 },
+      { evidence: lease.evidence[1], sourcePath: textPath, byteLength: Buffer.byteLength(lease.evidence[1].inlineText.text) },
+    ],
+    versions,
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(featureService.calls.map((call) => call.capability), [
+    'ocr', 'image_embedding', 'text_embedding',
+  ]);
 });
 
 test('pipeline degrades unavailable local features to review while Stage A still runs once', async (t) => {

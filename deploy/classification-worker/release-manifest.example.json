@@ -8,7 +8,7 @@
   "runtimeRoot": "/quota/sgx-classification",
   "scratchRoot": "/tmp/sgx-classification/jobs",
   "algorithmVersions": {
-    "prompt": "sgx-five-facets.13",
+    "prompt": "sgx-five-facets.16",
     "guard": "replace-after-freeze",
     "adapter": "replace-after-freeze",
     "taxonomy": "replace-after-freeze",

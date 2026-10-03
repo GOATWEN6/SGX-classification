@@ -34,9 +34,12 @@ const personMatchingEnabled = boolean(env.SGX_PERSON_MATCHING_ENABLED, false);
 const processorMode = env.SGX_PROCESSOR_MODE ?? 'stage_a';
 const vlmProvider = env.SGX_VLM_PROVIDER ?? 'qwen';
 const vlmModel = env.SGX_VLM_MODEL ?? 'qwen3.7-flash-2026-07-15';
-const promptVersion = env.SGX_PROMPT_VERSION ?? 'sgx-five-facets.13';
+const promptVersion = env.SGX_PROMPT_VERSION ?? 'sgx-five-facets.16';
 if (!['stage_a', 'feature_bundle_only'].includes(processorMode)) {
   throw new Error('invalid SGX_PROCESSOR_MODE');
+}
+if (processorMode === 'feature_bundle_only' && personMatchingEnabled) {
+  throw new Error('SGX_PERSON_MATCHING_ENABLED requires stage_a authorization context');
 }
 if (integer(env.SGX_VLM_AUTO_RETRIES, 0) !== 0) {
   throw new Error('SGX_VLM_AUTO_RETRIES must remain 0');

@@ -357,7 +357,8 @@ export class LocalFeatureBundleProcessor {
     this.now = now;
   }
 
-  async process({ lease, files, versions, signal }) {
+  async process({ lease, files, versions, signal, authorizedPersonEvidenceIds = [] }) {
+    const authorizedPersonEvidence = new Set(authorizedPersonEvidenceIds);
     const evidenceResults = [];
     const componentErrors = [];
     let successes = 0;
@@ -388,7 +389,7 @@ export class LocalFeatureBundleProcessor {
       if (file.evidence.modality === 'image') {
         features.ocr = await invoke('ocr', file, () => this.featureService.ocr(source, { signal }));
         features.imageEmbedding = await invoke('image_embedding', file, () => this.featureService.imageEmbedding(source, { signal }));
-        if (this.personMatchingEnabled) {
+        if (this.personMatchingEnabled && authorizedPersonEvidence.has(file.evidence.evidenceId)) {
           features.faceEmbeddings = await invoke('face_embeddings', file, () => this.featureService.faceEmbeddings(source, { signal }));
         }
       } else {
