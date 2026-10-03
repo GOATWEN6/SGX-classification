@@ -280,10 +280,11 @@ class FakeArtifacts {
 }
 
 class FakeFeatures {
-  constructor({ fail = [], embeddings = {}, ocrTextByHash = {} } = {}) {
+  constructor({ fail = [], embeddings = {}, ocrTextByHash = {}, faceEmbeddingsByHash = {} } = {}) {
     this.fail = new Set(fail);
     this.embeddings = embeddings;
     this.ocrTextByHash = ocrTextByHash;
+    this.faceEmbeddingsByHash = faceEmbeddingsByHash;
     this.calls = [];
   }
 
@@ -334,7 +335,7 @@ class FakeFeatures {
         embeddingModelRevision: 'test-revision',
         dimensions: 2,
         normalized: true,
-        faces: [],
+        faces: this.faceEmbeddingsByHash[source.sourceSha256] ?? [],
       };
     }
     return { capability, sourceSha256: source.sourceSha256 };
@@ -1077,6 +1078,111 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
       && hint.rightPhotoId === 'evidence-image-2'
       && hint.rank === 1
   )));
+});
+
+test('pipeline emits authorized face Top-K hints without promoting detections to identities', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-face-topk.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const imageBytes = [Buffer.from('face-image-one'), Buffer.from('face-image-two'), Buffer.from('face-image-three')];
+  const imageHashes = imageBytes.map((bytes) => digest(bytes));
+  const lease = {
+    ...makeLease(),
+    evidence: imageBytes.map((bytes, index) => ({
+      evidenceId: `evidence-face-${index + 1}`,
+      contentId: `content-face-${index + 1}`,
+      modality: 'image',
+      revision: 1,
+      sourceHash: imageHashes[index],
+      lifecycleState: 'active',
+      artifact: { mimeType: 'image/jpeg' },
+    })),
+  };
+  const files = [];
+  for (let index = 0; index < imageBytes.length; index += 1) {
+    const sourcePath = path.join(root, `face-${index + 1}.jpg`);
+    await writeFile(sourcePath, imageBytes[index]);
+    files.push({ evidence: lease.evidence[index], sourcePath, byteLength: imageBytes[index].length });
+  }
+  const stripped = (value) => value.slice('sha256:'.length);
+  const face = (suffix, vector) => ({
+    faceId: `face_${suffix.repeat(32)}`,
+    bounds: { x: 10, y: 12, width: 40, height: 42 },
+    detectorScore: 0.98,
+    vector,
+  });
+  const featureService = new FakeFeatures({
+    embeddings: Object.fromEntries(imageHashes.map((hash, index) => [stripped(hash), index === 2 ? [0, 1] : [1, 0]])),
+    faceEmbeddingsByHash: {
+      [stripped(imageHashes[0])]: [face('a', [1, 0])],
+      [stripped(imageHashes[1])]: [face('b', [0.99, 0.1])],
+      [stripped(imageHashes[2])]: [face('c', [0, 1])],
+    },
+  });
+  let bridgeInput;
+  const processor = new StageAPipelineProcessor({
+    featureProcessor: new LocalFeatureBundleProcessor({
+      featureService,
+      personMatchingEnabled: true,
+      now: () => FIXED_NOW,
+    }),
+    contextProvider: {
+      async executionContext(_jobId, request) {
+        return {
+          protocolVersion: PROTOCOL_VERSION,
+          requestId: request.requestId,
+          contextVersion: EXECUTION_CONTEXT_VERSION,
+          binding: contextBinding(lease),
+          execution: {
+            job: {
+              jobId: lease.jobId,
+              envelope: envelopeForLease(lease),
+              budgetPolicy: { maxCandidatesPerContent: 1 },
+            },
+            guard: personGuardForLease(lease, lease.evidence.map((item) => item.evidenceId)),
+            placeKindPolicy: { policyVersion: 'classification-place-kind.1' },
+          },
+        };
+      },
+    },
+    bridge: {
+      async run(input) {
+        bridgeInput = input;
+        return {
+          status: 'succeeded',
+          result: { workflowStatus: 'succeeded' },
+          usage: { providerLatencyMs: 1, inputTokens: 1, outputTokens: 1, costCny: 0, providerCalls: 1 },
+        };
+      },
+    },
+    now: () => FIXED_NOW,
+    idFactory: () => 'context-request-face-topk-1',
+  });
+
+  await processor.process({
+    lease,
+    identity: identityFor(lease),
+    files,
+    versions,
+    signal: new AbortController().signal,
+  });
+
+  assert.equal(bridgeInput.derivedFeatures.faceRetrieval, 'batch_topk');
+  assert.ok(bridgeInput.derivedFeatures.retrievalHints.some((hint) => (
+    hint.kind === 'face_embedding_topk'
+      && hint.leftPhotoId === 'evidence-face-1'
+      && hint.rightPhotoId === 'evidence-face-2'
+      && hint.rank === 1
+  )));
+  assert.deepEqual(
+    bridgeInput.derivedFeatures.faceCandidatesByEvidenceId['evidence-face-1'].faces,
+    [{
+      faceId: `face_${'a'.repeat(32)}`,
+      bounds: { x: 10, y: 12, width: 40, height: 42 },
+      detectorScore: 0.98,
+    }],
+  );
+  assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('"vector"'), false);
+  assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('personIdentity'), false);
 });
 
 test('subprocess bridge exchanges only file-bound JSON and validates the response binding', async (t) => {

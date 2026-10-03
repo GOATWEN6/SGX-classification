@@ -71,6 +71,20 @@ export interface TrustedLabDerivedFeatures {
   }>>;
   retrievalHints: readonly RetrievalHint[];
   embeddingRetrieval: 'batch_topk' | 'disabled_component_failure' | 'not_applicable';
+  faceCandidatesByEvidenceId?: Readonly<Record<string, {
+    sourceHash: `sha256:${string}`;
+    detectorModelId: string;
+    detectorModelRevision: string;
+    embeddingModelId: string;
+    embeddingModelRevision: string;
+    dimensions: number;
+    faces: readonly {
+      faceId: string;
+      bounds: { x: number; y: number; width: number; height: number };
+      detectorScore?: number;
+    }[];
+  }>>;
+  faceRetrieval?: 'batch_topk' | 'disabled_component_failure' | 'disabled_invalid_feature' | 'not_applicable';
 }
 
 export interface TrustedLabExecutionContext {

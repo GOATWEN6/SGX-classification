@@ -19,11 +19,14 @@ export const DERIVED_FEATURES_VERSION = 'classification-worker-derived-features.
 const EMPTY_DERIVED_FEATURES = Object.freeze({
   version: DERIVED_FEATURES_VERSION,
   ocrTextByEvidenceId: Object.freeze({}),
+  faceCandidatesByEvidenceId: Object.freeze({}),
   retrievalHints: Object.freeze([]),
   embeddingRetrieval: 'not_applicable',
+  faceRetrieval: 'not_applicable',
 });
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const FACE_ID_PATTERN = /^face_[a-f0-9]{32}$/;
 const TERMINAL_STATUSES = new Set(['succeeded', 'needs_review']);
 const PROVIDER_ERROR_CODES = new Set([
   'PROVIDER_TIMEOUT',
@@ -226,6 +229,63 @@ function meanNormalized(vectors) {
   return { modelId, modelRevision, dimensions, vector: mean.map((item) => item / norm) };
 }
 
+function normalizedFaceBundle(value, sourceHash) {
+  if (!value || typeof value !== 'object') return null;
+  if (`sha256:${value.sourceSha256}` !== sourceHash
+    || typeof value.detectorModelId !== 'string'
+    || typeof value.detectorModelRevision !== 'string'
+    || typeof value.embeddingModelId !== 'string'
+    || typeof value.embeddingModelRevision !== 'string'
+    || !Number.isInteger(value.dimensions) || value.dimensions < 1
+    || value.normalized !== true || !Array.isArray(value.faces)) return null;
+  const seen = new Set();
+  const faces = [];
+  for (const face of value.faces) {
+    const bounds = face?.bounds;
+    const detectorScore = face?.detectorScore;
+    const vector = Array.isArray(face?.vector) ? face.vector.map(Number) : [];
+    if (!FACE_ID_PATTERN.test(face?.faceId ?? '') || seen.has(face.faceId)
+      || !bounds || ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isInteger)
+      || bounds.x < 0 || bounds.y < 0 || bounds.width <= 0 || bounds.height <= 0
+      || (detectorScore !== undefined && detectorScore !== null
+        && (!Number.isFinite(detectorScore) || detectorScore < 0 || detectorScore > 1))
+      || vector.length !== value.dimensions || vector.some((item) => !Number.isFinite(item))) return null;
+    const norm = Math.sqrt(vector.reduce((sum, item) => sum + item * item, 0));
+    if (!Number.isFinite(norm) || norm <= 0) return null;
+    seen.add(face.faceId);
+    faces.push({
+      faceId: face.faceId,
+      bounds: {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      ...(detectorScore === undefined || detectorScore === null ? {} : { detectorScore }),
+      vector: vector.map((item) => item / norm),
+    });
+  }
+  return {
+    detectorModelId: value.detectorModelId,
+    detectorModelRevision: value.detectorModelRevision,
+    embeddingModelId: value.embeddingModelId,
+    embeddingModelRevision: value.embeddingModelRevision,
+    dimensions: value.dimensions,
+    faces,
+  };
+}
+
+function faceSimilarity(leftFaces, rightFaces) {
+  let best = -Infinity;
+  for (const left of leftFaces) {
+    for (const right of rightFaces) {
+      const similarity = left.vector.reduce((sum, value, index) => sum + value * right.vector[index], 0);
+      if (similarity > best) best = similarity;
+    }
+  }
+  return best;
+}
+
 function buildDerivedFeatures(featureBundle, execution) {
   ensure(featureBundle?.schemaVersion === FEATURE_BUNDLE_VERSION, 'VERSION_MISMATCH', 'retrieval');
   ensure(Array.isArray(featureBundle.evidence) && Array.isArray(featureBundle.componentErrors), 'VERSION_MISMATCH', 'retrieval');
@@ -247,22 +307,51 @@ function buildDerivedFeatures(featureBundle, execution) {
   }
 
   const ocrTextByEvidenceId = {};
+  const faceCandidatesByEvidenceId = {};
   const textVectorsByImageContentId = new Map();
   const images = [];
+  const allowedFaceEvidenceIds = new Set(
+    execution?.guard?.active === true && execution.guard.allowPersonMatching === true
+      ? execution.guard.personMatchingEvidenceIds ?? []
+      : [],
+  );
+  let invalidFaceFeature = false;
   for (const item of featureBundle.evidence) {
     ensure(typeof item.evidenceId === 'string' && typeof item.contentId === 'string'
       && SHA256_PATTERN.test(item.sourceHash ?? ''), 'VERSION_MISMATCH', 'retrieval');
     if (item.modality === 'image') {
+      const sourceContent = contentByEvidenceId.get(item.evidenceId);
+      ensure(sourceContent?.contentId === item.contentId
+        && sourceContent.modality === item.modality, 'VERSION_MISMATCH', 'retrieval');
       const ocr = item.features?.ocr;
       if (ocr) {
         ensure(`sha256:${ocr.sourceSha256}` === item.sourceHash && Array.isArray(ocr.regions), 'VERSION_MISMATCH', 'retrieval');
         const text = ocr.regions.map((region) => String(region?.text ?? '').trim()).filter(Boolean).join('\n').slice(0, 16000);
         if (text) ocrTextByEvidenceId[item.evidenceId] = { sourceHash: item.sourceHash, text };
       }
+      let faceBundle = null;
+      if (item.features?.faceEmbeddings) {
+        ensure(allowedFaceEvidenceIds.has(item.evidenceId),
+          'VERSION_MISMATCH', 'retrieval', 'unauthorized face feature');
+        faceBundle = normalizedFaceBundle(item.features.faceEmbeddings, item.sourceHash);
+        invalidFaceFeature ||= !faceBundle;
+        if (faceBundle) {
+          faceCandidatesByEvidenceId[item.evidenceId] = {
+            sourceHash: item.sourceHash,
+            detectorModelId: faceBundle.detectorModelId,
+            detectorModelRevision: faceBundle.detectorModelRevision,
+            embeddingModelId: faceBundle.embeddingModelId,
+            embeddingModelRevision: faceBundle.embeddingModelRevision,
+            dimensions: faceBundle.dimensions,
+            faces: faceBundle.faces.map(({ vector: _vector, ...metadata }) => metadata),
+          };
+        }
+      }
       images.push({
         evidenceId: item.evidenceId,
         contentId: item.contentId,
         imageVector: normalizedVector(item.features?.imageEmbedding),
+        faceBundle,
       });
     } else if (item.modality === 'user_text' || item.modality === 'final_asr') {
       const vector = normalizedVector(item.features?.textEmbedding);
@@ -283,7 +372,9 @@ function buildDerivedFeatures(featureBundle, execution) {
   const embeddingFailed = featureBundle.componentErrors.some((item) => (
     item.capability === 'image_embedding' || item.capability === 'text_embedding'
   ));
+  const faceFailed = featureBundle.componentErrors.some((item) => item.capability === 'face_embeddings');
   const retrievalHints = [];
+  const imageTextHints = [];
   if (!embeddingFailed) {
     const resolved = images.map((image) => ({
       ...image,
@@ -318,16 +409,57 @@ function buildDerivedFeatures(featureBundle, execution) {
         if (!previous || candidate.rank < previous.rank) pairHints.set(key, candidate);
       });
     }
-    retrievalHints.push(...[...pairHints.values()].sort((a, b) => a.rank - b.rank
+    imageTextHints.push(...[...pairHints.values()].sort((a, b) => a.rank - b.rank
       || a.leftPhotoId.localeCompare(b.leftPhotoId) || a.rightPhotoId.localeCompare(b.rightPhotoId)));
+    retrievalHints.push(...imageTextHints);
+  }
+  const faceHints = [];
+  if (!faceFailed && !invalidFaceFeature) {
+    const resolved = images.filter((image) => image.faceBundle?.faces.length);
+    const pairHints = new Map();
+    for (const left of resolved) {
+      const neighbors = resolved.filter((right) => right.evidenceId !== left.evidenceId
+        && right.faceBundle.embeddingModelId === left.faceBundle.embeddingModelId
+        && right.faceBundle.embeddingModelRevision === left.faceBundle.embeddingModelRevision
+        && right.faceBundle.dimensions === left.faceBundle.dimensions)
+        .map((right) => ({
+          right,
+          similarity: faceSimilarity(left.faceBundle.faces, right.faceBundle.faces),
+        }))
+        .filter((item) => Number.isFinite(item.similarity))
+        .sort((a, b) => b.similarity - a.similarity || a.right.evidenceId.localeCompare(b.right.evidenceId))
+        .slice(0, maxCandidates);
+      neighbors.forEach(({ right }, index) => {
+        const [leftPhotoId, rightPhotoId] = [left.evidenceId, right.evidenceId].sort();
+        const key = `${leftPhotoId}/${rightPhotoId}`;
+        const candidate = {
+          kind: 'face_embedding_topk',
+          leftPhotoId,
+          rightPhotoId,
+          rank: index + 1,
+          modelId: left.faceBundle.embeddingModelId,
+          modelRevision: left.faceBundle.embeddingModelRevision,
+        };
+        const previous = pairHints.get(key);
+        if (!previous || candidate.rank < previous.rank) pairHints.set(key, candidate);
+      });
+    }
+    faceHints.push(...[...pairHints.values()].sort((a, b) => a.rank - b.rank
+      || a.leftPhotoId.localeCompare(b.leftPhotoId) || a.rightPhotoId.localeCompare(b.rightPhotoId)));
+    retrievalHints.push(...faceHints);
   }
   return {
     version: DERIVED_FEATURES_VERSION,
     ocrTextByEvidenceId,
+    faceCandidatesByEvidenceId,
     retrievalHints,
     embeddingRetrieval: embeddingFailed
       ? 'disabled_component_failure'
-      : retrievalHints.length ? 'batch_topk' : 'not_applicable',
+      : imageTextHints.length ? 'batch_topk' : 'not_applicable',
+    faceRetrieval: faceFailed
+      ? 'disabled_component_failure'
+      : invalidFaceFeature ? 'disabled_invalid_feature'
+        : faceHints.length ? 'batch_topk' : 'not_applicable',
   };
 }
 
