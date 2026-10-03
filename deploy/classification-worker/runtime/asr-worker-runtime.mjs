@@ -156,12 +156,13 @@ export class AsrWorkerRuntime {
         throw Object.assign(new Error('audio hash mismatch'), { code: 'HASH_MISMATCH' });
       }
       await this.#heartbeat(lease, runIdentity, 'asr', 35, signal);
+      const featureSourceSha256 = lease.audio.sha256.slice('sha256:'.length);
       const result = await this.featureService.asr({
         sourcePath: scratch.audioPath,
-        sourceSha256: lease.audio.sha256,
+        sourceSha256: featureSourceSha256,
         sourceByteLength: lease.audio.byteLength,
       }, { signal });
-      ensure(result && result.sourceSha256 === lease.audio.sha256, 'ASR_RESULT_SOURCE_MISMATCH');
+      ensure(result && result.sourceSha256 === featureSourceSha256, 'ASR_RESULT_SOURCE_MISMATCH');
       ensure(result.sourceByteLength === lease.audio.byteLength, 'ASR_RESULT_SOURCE_MISMATCH');
       ensure(typeof result.text === 'string' && result.text.trim().length > 0, 'ASR_RESULT_INVALID');
       await this.#heartbeat(lease, runIdentity, 'completing', 95, signal);
@@ -169,7 +170,7 @@ export class AsrWorkerRuntime {
         protocolVersion: ASR_PROTOCOL_VERSION,
         requestId: this.idFactory(),
         identity: runIdentity,
-        result,
+        result: { ...result, sourceSha256: lease.audio.sha256 },
       }, { signal });
       this.logger?.info('asr_job_completed', { jobId: lease.jobId, sessionId: lease.sessionId });
       return 'completed';

@@ -73,9 +73,9 @@ test('ASR worker downloads one WAV, calls local ASR once, completes and removes 
     featureService: {
       async asr(source) {
         asrCalls += 1;
-        assert.equal(source.sourceSha256, digest(audio));
+        assert.equal(source.sourceSha256, digest(audio).slice('sha256:'.length));
         return {
-          sourceSha256: digest(audio),
+          sourceSha256: digest(audio).slice('sha256:'.length),
           sourceByteLength: audio.length,
           audioFormat: 'wav-pcm-s16le',
           sampleRateHz: 16_000,
@@ -101,6 +101,7 @@ test('ASR worker downloads one WAV, calls local ASR once, completes and removes 
   assert.equal(asrCalls, 1);
   assert.equal(heartbeats.length, 3);
   assert.equal(completes.length, 1);
+  assert.equal(completes[0].result.sourceSha256, digest(audio));
   assert.equal(completes[0].result.text, '这是一次家庭聚会。');
   assert.equal(failures.length, 0);
   assert.deepEqual(await runtime.runOnce(), { leased: 1, completed: 0, failed: 0, skipped: 1 });
