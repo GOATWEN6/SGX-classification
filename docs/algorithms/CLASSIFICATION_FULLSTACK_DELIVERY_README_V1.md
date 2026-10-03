@@ -1,7 +1,9 @@
-# SGX 自动分类与归纳：全栈交付包 README
+# SGX 自动分类与归纳：全栈交付仓库 README
 
-> 包类型：`internal_release_candidate`
-> 交付版本：`v0.2.1-20261003`
+> 类型：`internal_release_candidate`
+> 交付分支：`codex/classification-contract-v1`
+> 当前验证提交：`4a904f413c017e0fc576d8bdb3ef8d1edcfe9486`
+> 仓库：`https://github.com/GOATWEN6/SGX-classification`
 > 目标：让全栈工程师在新版产品仓库中实现真实上传、异步 Job、云端 Worker 和智能相册结果接入。
 
 ## 1. 先读哪些文件
@@ -28,7 +30,7 @@
 - 不能把内部候选 artifact 或合成冒烟结果解释为真实用户准确率、可靠身份或正式生产发布。
 - 不能让浏览器直接调用 VirtAI、OCR、embedding 或模型供应商。
 - 不能把 AI 候选直接写入长期 Memory。
-- 不能仅凭这个 ZIP 上生产；产品数据库、对象存储、鉴权、OpenAPI、队列/lease 和监控由产品后端实现。
+- 不能仅凭这个分支上生产；产品数据库、对象存储、鉴权、OpenAPI、队列/lease 和监控由产品后端实现。
 
 ## 4. 目录说明
 
@@ -47,7 +49,7 @@ figures/                            架构图 PNG、Mermaid 源码和预览
 scripts/                            类型生成、统一测试和 Fake/Stage A 入口
 ```
 
-根目录还包含：
+历史 ZIP 交付流程生成的根目录文件可能包含：
 
 - `ALGORITHM_ARCHITECTURE_AND_FUNCTIONS.md`
 - `VALIDATION_REPORT.md`
@@ -156,6 +158,14 @@ Worker 内部协议至少实现：
 - 任何 Prompt、模型、taxonomy、规则或 Schema 变化都必须更新版本或 digest。
 - 历史结果保留当时版本，不能重写成最新版本。
 - `MANIFEST.sha256` 用于确认交付包未被修改。
-- 本包不含 `.env`、API key、SSH key、真实用户媒体、模型权重、`node_modules` 或 Python cache。
-- 当前包名中的 `internal-release-candidate` 必须保留，直到真实数据、产品链和发布 Gate 全部完成。
+- 本仓库分支不含 `.env`、API key、SSH key、真实用户媒体、模型权重、`node_modules` 或 Python cache。
+- 当前分支必须保持 `internal-release-candidate` 标识，直到真实数据、产品链和发布 Gate 全部完成。
 - 云端下载持久化策略为 `classification-download-persistence.1`：模型、wheel、源码包、许可证和下载缓存必须位于 `/gemini/code/sgx-classification`；`/quota` 仅承载离线可重建的 venv 与生成缓存。
+
+## 11. 2026-10-04 最新可运行证据
+
+- 远端 Worker 发布：`4a904f413c017e0fc576d8bdb3ef8d1edcfe9486`，372 项文件完整性通过，上一发布保留为 `previous`。
+- 真实多图 Job `lab_run_e8fd529c4610565d899e94c5`：2 图 + 批次文字，人物匹配开启，3 次 Qwen 调用，最终 `succeeded`，结果已上传并持久化。
+- 真实链耗时 37.792 秒，费用 ¥0.0303216，三条 provider 记录均 `finish_reason=stop`。
+- 详细证据见 [`CLASSIFICATION_T1_REAL_MULTI_IMAGE_RETEST_2026-10-04.md`](CLASSIFICATION_T1_REAL_MULTI_IMAGE_RETEST_2026-10-04.md)。
+- VirtAI Notebook 有 idle timer；T2 内部用户环境必须增加持久 supervisor/自动恢复，或迁移到不会自动回收推理进程的部署环境。

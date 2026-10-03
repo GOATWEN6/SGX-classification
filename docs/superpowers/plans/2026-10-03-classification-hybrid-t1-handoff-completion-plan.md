@@ -4,10 +4,12 @@
 > 分支：`codex/classification-contract-v1`  
 > 架构基线：`sgx-classification-cloud-hybrid.1.0.0`  
 > 当前 Prompt：`sgx-five-facets.16`  
-> 交付目标：算法负责人完成 T0/T1，形成全栈工程师可接入产品 T2 的可运行 ZIP  
-> 状态：执行中；本文取代旧计划中的“当前下一动作”，不覆盖历史记录
+> 交付目标：算法负责人完成 T0/T1，形成全栈工程师可接入产品 T2 的可运行 GitHub 分支
+> 状态：T0/T1 主链已形成可交付候选；T2 产品接入与补充场景验证继续进行
 
 > 2026-10-03 更新：Phase 1–3 的 Worker、跨轮候选、ASR 和统一 T1 页面已完成；真实调用共享总账本已接入并从既有 `81` 次 / `¥0.745861` 起算。当前进入 Phase 4 云端整链 canary，尚未完成最终 validation、人工产品验收和 ZIP 冻结。
+
+> 2026-10-04 更新：真实 OCR/embedding/face + Qwen + StoryUnit + 结果上传链已由 `lab_run_e8fd529c4610565d899e94c5` 跑通；上传租约和失败 usage 结算修复已发布为 `4a904f4...`。交付方式按用户最新决定改为 GitHub 分支，不再以 ZIP 为主。完整固定分母 validation、产品负责人更多场景人工验收和 T2 正式后端接入仍未完成。
 
 ## 1. 最终目标
 

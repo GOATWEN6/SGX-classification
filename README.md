@@ -4,6 +4,18 @@
 
 一个通过温和，专业、长期可持续的对话，引导老人讲述自己的人生故事，并最终生成高质量、可编辑、可评分优化的人生回忆录的AI助手。
 
+## 自动分类与归纳模块（全栈先读）
+
+当前 T0/T1 内部候选已接入真实 Qwen、多图/文字、OCR、image/text embedding、授权后匿名人物候选、StoryUnit 组织和 Worker 结果持久化。全栈接入从以下文档开始：
+
+- [全栈交付 README](docs/algorithms/CLASSIFICATION_FULLSTACK_DELIVERY_README_V1.md)
+- [完整算法架构与功能](docs/algorithms/CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md)
+- [全栈接入指南](docs/algorithms/CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)
+- [2026-10-04 真实多图复测](docs/algorithms/CLASSIFICATION_T1_REAL_MULTI_IMAGE_RETEST_2026-10-04.md)
+- [云端 Worker 部署与回滚](deploy/classification-worker/README.md)
+
+当前结论是“真实模型功能链已跑通”，不是现实家庭数据准确率或生产发布结论。产品后端仍需完成 T2 的鉴权、业务数据库、对象存储、队列、监控和内部用户环境部署。
+
 ## 功能特点
 
 ### 🎯 核心功能
@@ -120,7 +132,7 @@ npm run dev
 ```bash
 # 只需修改这三项即可切换平台
 LLM_PROVIDER=siliconflow  # 可选: siliconflow, openai, volcengine, qwen, zhipu
-LLM_API_KEY=your-new-api-key
+LLM_API_KEY=your-api-key
 LLM_MODEL=your-preferred-model
 ```
 
