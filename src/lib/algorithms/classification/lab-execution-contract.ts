@@ -1548,7 +1548,7 @@ export function mapLabExecutionError(code: string): LabFailureDisposition {
   if(code === 'LAB_RUN_TIMEOUT' || code === 'LAB_PROVIDER_UNAVAILABLE' || code === 'LAB_GUARD_UNAVAILABLE' || code === 'LAB_RUN_INTERRUPTED'
     || code === 'DOWNLOAD_FAILED' || code === 'FEATURE_SERVICE_UNAVAILABLE' || code === 'OCR_FAILED'
     || code === 'EMBEDDING_FAILED' || code === 'PROVIDER_TIMEOUT' || code === 'PROVIDER_RATE_LIMITED'
-    || code === 'RESULT_UPLOAD_FAILED' || code === 'INTERNAL_ERROR') {
+    || code === 'RESULT_UPLOAD_FAILED' || code === 'HISTORY_INDEX_FAILED' || code === 'INTERNAL_ERROR') {
     return { kind: 'persist', status: 'failed_retryable', retryable: true, code };
   }
   return { kind: 'persist', status: 'failed_terminal', retryable: false, code: id.parse(code) };

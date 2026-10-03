@@ -16,6 +16,7 @@ const { FileTrustedLabGuardStore } = require(`${build}/src/lib/algorithms/classi
 const { FileClassificationLabV2Store } = require(`${build}/src/lib/algorithms/classification/lab-execution-store.js`);
 const { submitLabExecutionJob } = require(`${build}/src/lib/algorithms/classification/lab-execution.js`);
 const { DeterministicLabProvider } = require(`${build}/src/lib/algorithms/classification/lab-provider.js`);
+const { FileHistoricalRetrievalAdapter } = require(`${build}/src/lib/algorithms/classification/historical-retrieval.js`);
 const { FileClassificationT1SessionStore } = require(`${build}/src/lib/algorithms/classification/t1-session-store.js`);
 const {
   ClassificationWorkerControlPlane,
@@ -236,6 +237,54 @@ async function classificationResult(record) {
   };
 }
 
+async function preparedCompletion({ control, lease, record, built, clock, requestId }) {
+  const classification = await classificationResult(record);
+  const pipeline = {
+    schemaVersion: WORKER_PIPELINE_RESULT_VERSION,
+    generatedAt: new Date(clock.value).toISOString(),
+    jobId: lease.jobId,
+    runId: lease.runId,
+    scope: lease.scope,
+    authorizationRevision: lease.authorizationRevision,
+    inputHash: lease.inputHash,
+    executionProfileDigest: lease.executionProfileDigest,
+    versions: worker(profile()).versions,
+    featureBundle: featureBundle(record, built, [1, 0]),
+    derivedFeatures: {},
+    classification,
+  };
+  const resultBytes = Buffer.from(JSON.stringify(pipeline));
+  const uploadUrl = new URL(lease.resultUpload.uploadUrl);
+  const uploaded = await control.uploadResult({
+    jobId: lease.jobId,
+    artifactId: lease.resultUpload.artifactId,
+    uploadToken: uploadUrl.searchParams.get('token'),
+    bytes: resultBytes,
+    mimeType: 'application/json',
+  });
+  return {
+    protocolVersion: WORKER_CONTROL_PLANE_VERSION,
+    requestId,
+    identity: identity(lease),
+    status: 'succeeded',
+    versions: worker(profile()).versions,
+    resultArtifact: {
+      artifactId: lease.resultUpload.artifactId,
+      sha256: uploaded.sha256,
+      byteLength: uploaded.byteLength,
+      mimeType: 'application/json',
+    },
+    usage: {
+      endToEndLatencyMs: 1200,
+      providerLatencyMs: 800,
+      inputTokens: 120,
+      outputTokens: 80,
+      costCny: 0.01,
+      providerCalls: 1,
+    },
+  };
+}
+
 test('T1 session keeps authorization stable across rounds and blocks revoked sessions', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-t1-session.'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -413,4 +462,50 @@ test('reference control plane leases, fences, persists result and enables cross-
     }),
     /LEASE_IDENTITY_MISMATCH/,
   );
+});
+
+test('history index failure cannot expose a false terminal success', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-worker-history-failure.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const clock = { value: FIXED_NOW };
+  const store = new FileClassificationLabV2Store(root);
+  const guardStore = new FileTrustedLabGuardStore(root);
+  const historical = new FileHistoricalRetrievalAdapter(path.join(root, 'failing-history'));
+  historical.upsert = async () => { throw new Error('simulated history storage failure'); };
+  const control = new ClassificationWorkerControlPlane({
+    dataRoot: root,
+    publicBaseUrl: 'http://127.0.0.1:3137',
+    store,
+    guardStore,
+    historical,
+    clock: { nowMs: () => clock.value },
+  });
+  const built = buildLabSubmission(submission(3), {
+    authorizationRevision: 't1_auth_history_failure',
+    consentRef: 't1_consent_history_failure',
+  });
+  const record = await submit({
+    built,
+    root,
+    store,
+    guardStore,
+    clock,
+    contextRevision: 't1_context_history_failure',
+  });
+  const lease = (await control.lease(worker(profile()))).leases[0];
+  const completeRequest = await preparedCompletion({
+    control,
+    lease,
+    record: await store.get(record.jobId),
+    built,
+    clock,
+    requestId: 'complete_history_failure',
+  });
+
+  await assert.rejects(control.complete(lease.jobId, completeRequest), /HISTORY_INDEX_FAILED/);
+  const failed = await store.get(record.jobId);
+  assert.equal(failed.status, 'failed_retryable');
+  assert.equal(failed.error.code, 'HISTORY_INDEX_FAILED');
+  assert.equal(failed.result, undefined);
+  assert.equal(failed.resultDigest, undefined);
 });

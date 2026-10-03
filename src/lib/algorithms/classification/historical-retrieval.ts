@@ -266,6 +266,35 @@ export class FileHistoricalRetrievalAdapter {
     });
   }
 
+  /**
+   * Compensating delete used only when a product-result CAS loses after its
+   * history records were prepared. Record ids are job/run-derived, so this
+   * cannot remove another run's features.
+   */
+  async deleteRecords(input: {
+    scope: Scope;
+    authorizationRevision: string;
+    recordIds: string[];
+  }): Promise<{ deletedRecords: number }> {
+    const scope = ScopeSchema.parse(input.scope);
+    id.parse(input.authorizationRevision);
+    const recordIds = z.array(id).min(1).max(4096).parse(input.recordIds);
+    if(new Set(recordIds).size !== recordIds.length) throw new Error('DUPLICATE_RECORD_ID');
+    const targets = new Set(recordIds);
+    return this.serialize(scope, async () => {
+      const snapshot = await this.read(scope);
+      let deletedRecords = 0;
+      const records = snapshot.records.filter(record => {
+        const remove = targets.has(record.recordId)
+          && record.authorizationRevision === input.authorizationRevision;
+        if(remove) deletedRecords += 1;
+        return !remove;
+      });
+      if(deletedRecords) await this.write({ ...snapshot, records });
+      return { deletedRecords };
+    });
+  }
+
   async query(raw: unknown): Promise<HistoricalRetrievalResult> {
     const input = HistoricalRetrievalQuerySchema.parse(raw);
     const pending = this.pendingWrites.get(scopeKey(input.scope));

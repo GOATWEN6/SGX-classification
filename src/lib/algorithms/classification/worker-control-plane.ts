@@ -873,6 +873,28 @@ export class ClassificationWorkerControlPlane {
     }, job.envelope, job.executionProfile);
     const at = later(job.updatedAt, iso(() => this.clock.nowMs()));
     const records = this.historyRecords(job, guard, pipeline.featureBundle, at);
+    // Index first, while the product job is still processing. A failed index
+    // can then fail the job truthfully instead of exposing a terminal success
+    // that later rounds cannot retrieve. A lost product CAS is compensated by
+    // deleting only the deterministic records prepared by this run.
+    try {
+      if(records.length) await this.historical.upsert({
+        scope: job.envelope.scope,
+        authorizationRevision: job.authorization.authorizationRevision,
+        records,
+      });
+    } catch {
+      try {
+        await this.terminalFailure(job, 'HISTORY_INDEX_FAILED', true);
+        await this.updateState(jobId, current => ({
+          ...current,
+          status: 'failed',
+          stage: 'organizing',
+          updatedAt: later(current.updatedAt, iso(() => this.clock.nowMs())),
+        }));
+      } catch { /* A concurrent guard or lifecycle change already fenced the job. */ }
+      fail('HISTORY_INDEX_FAILED', 500);
+    }
     const committed = await this.store.compareAndSetTrusted(jobId, job.revision, current => ({
       ...current,
       status: request.status,
@@ -890,19 +912,34 @@ export class ClassificationWorkerControlPlane {
         runnerGeneration: current.processingOwner?.runnerGeneration,
       }],
     }));
-    if(!committed.ok) fail('STALE_RESULT', 409);
-    if(records.length) await this.historical.upsert({
-      scope: job.envelope.scope,
-      authorizationRevision: job.authorization.authorizationRevision,
-      records,
-    });
-    await this.updateState(jobId, current => ({ ...current, status: 'completed', progress: 100, updatedAt: at }));
+    if(!committed.ok) {
+      if(records.length) {
+        try {
+          await this.historical.deleteRecords({
+            scope: job.envelope.scope,
+            authorizationRevision: job.authorization.authorizationRevision,
+            recordIds: records.map(record => record.recordId),
+          });
+        } catch { fail('HISTORY_INDEX_ROLLBACK_FAILED', 500); }
+      }
+      fail('STALE_RESULT', 409);
+    }
+    let controlStateUpdated = true;
+    try {
+      await this.updateState(jobId, current => ({ ...current, status: 'completed', progress: 100, updatedAt: at }));
+    } catch {
+      // The product job and historical index are already committed. Preserve
+      // the accepted completion response; this control-state file is not the
+      // product source of truth and cannot be allowed to create a false retry.
+      controlStateUpdated = false;
+    }
     return {
       protocolVersion: WORKER_CONTROL_PLANE_VERSION,
       requestId: request.requestId,
       accepted: true,
       jobRevision: committed.record.revision,
       historicalRecordsUpserted: records.length,
+      controlStateUpdated,
     };
   }
 
