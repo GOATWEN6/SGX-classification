@@ -21,6 +21,22 @@ user -> product frontend -> product backend -> DB/object store/lease
 - The product backend accepts a result only when lease, attempt, job, authorization, input and execution-profile revisions still match.
 - OCR and embedding are internal features. The browser must not call them directly.
 
+Before a `stage_a_real` job can be leased, the product control plane must load
+`CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH`. The referenced JSON is a
+deployment-specific, non-secret authorization receipt. It freezes the provider
+and model, the cumulative `150` request / `¥25` / zero-retry cap, person-matching
+permission, expiry, and the reconciled usage from all earlier real campaigns.
+The checked-in `real-call-authorization.example.json` is deliberately expired.
+
+The control plane reserves the job's full request and cost ceiling before it
+changes the job from `pending` to `processing`. A successful completion or a
+known pre-provider failure releases unused capacity. A cancellation or failure
+whose provider usage is unknown keeps the full reservation accounted. The
+ledger is stored under
+`$CLASSIFICATION_LAB_DATA_DIR/real-call-authorizations/<authorizationId>` and
+is shared by every T1 browser session. The API key remains only in secret
+storage; neither this receipt nor the ledger contains credentials.
+
 The Stage A worker also calls the job-scoped control-plane route
 `POST /internal/v1/classification/jobs/:jobId/historical-query` after local
 feature extraction. The request carries current image/text or consented face

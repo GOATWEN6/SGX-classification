@@ -1,0 +1,21 @@
+{
+  "version": "classification-real-call-authorization.1",
+  "authorizationId": "replace_with_frozen_authorization",
+  "providerVersion": "qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.2",
+  "modelVersion": "qwen3.7-flash-2026-07-15",
+  "caps": {
+    "maxRequests": 150,
+    "maxCostCny": 25,
+    "maxRetries": 0
+  },
+  "openingUsage": {
+    "requests": 0,
+    "costCny": 0,
+    "sourceRefs": [
+      "replace-with-reconciled-prior-ledger-receipt"
+    ]
+  },
+  "allowPersonMatching": true,
+  "expiresAt": "2000-01-01T00:00:00.000Z",
+  "authorizationEvidenceRef": "replace-with-current-user-authorization-reference"
+}

@@ -536,6 +536,7 @@ export class WorkerRuntime {
     let fence;
     let terminal = null;
     let outcome = 'failed';
+    let knownUsage = null;
     try {
       if (lease && typeof lease === 'object' && lease.jobId && lease.runId && lease.leaseToken) {
         identity = runIdentity(this.workerId, lease);
@@ -614,6 +615,7 @@ export class WorkerRuntime {
         ...emptyUsage(startedAt, this.now),
         ...processed.usage,
       };
+      knownUsage = usage;
       const completeRequest = {
         protocolVersion: PROTOCOL_VERSION,
         requestId: this.idFactory(),
@@ -683,6 +685,7 @@ export class WorkerRuntime {
           identity,
           reason,
           temporaryFilesDeleted,
+          ...(knownUsage ? { usage: knownUsage } : {}),
         });
       } catch (error) {
         this.logger.error('terminal_state_unknown', {
@@ -705,8 +708,8 @@ export class WorkerRuntime {
           ? executionError.stage
           : 'lease',
         retryable: false,
-        providerCalled: executionError.providerCalled,
-        usage: emptyUsage(startedAt, this.now),
+        providerCalled: executionError.providerCalled || (knownUsage?.providerCalls ?? 0) > 0,
+        usage: knownUsage ?? emptyUsage(startedAt, this.now),
       });
     } catch (error) {
       this.logger.error('terminal_state_unknown', {

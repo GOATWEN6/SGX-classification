@@ -95,6 +95,15 @@ type Capabilities = {
   maxImagesPerRound: number;
   personMatching: string;
   rawAudio: string;
+  realCallBudget: {
+    configured: false;
+  } | {
+    configured: true;
+    authorizationId: string;
+    state: 'active' | 'halted' | 'expired';
+    used: { requests: number; costCny: number };
+    remaining: { requests: number; costCny: number };
+  };
 };
 
 const errorCopy: Record<string, string> = {
@@ -111,6 +120,9 @@ const errorCopy: Record<string, string> = {
   ASR_MODEL_UNAVAILABLE: 'SenseVoice 模型未就绪。',
   ASR_INVALID_OUTPUT: 'ASR 返回内容不符合冻结契约，已停止且未重试。',
   PROVIDER_INVALID_OUTPUT: '多模态模型返回内容不符合契约，已停止且未重试。',
+  REAL_CALL_AUTHORIZATION_NOT_CONFIGURED: '真实模型总额度授权尚未接入，任务不会发送给云端模型。',
+  REAL_CALL_BUDGET_EXHAUSTED: '真实模型累计调用额度已用完。',
+  REAL_CALL_AUTHORIZATION_EXPIRED: '真实模型累计调用授权已到期。',
 };
 
 function message(code: string): string { return errorCopy[code] ?? `任务失败：${code}`; }
@@ -330,6 +342,9 @@ export default function ClassificationT1Page() {
         <strong>Worker Pull · 真实模型</strong>
         <span>{capabilities?.model ?? '等待连接'}</span>
         <small>{session ? `会话 ${session.sessionId.slice(0, 18)}… · ${session.roundCount} 轮` : '尚未建立会话'} · 0 自动重试</small>
+        <small>{capabilities?.realCallBudget.configured
+          ? `累计额度余 ${capabilities.realCallBudget.remaining.requests} 次 / ¥${capabilities.realCallBudget.remaining.costCny.toFixed(4)}`
+          : '累计额度门禁未配置'}</small>
       </div>
     </header>
 
@@ -403,6 +418,9 @@ export default function ClassificationT1Page() {
         <div className={styles.row}><span>人物匹配</span><strong>逐轮显式授权</strong></div>
         <div className={styles.row}><span>历史检索</span><strong>同家庭/老人 Top-K</strong></div>
         <div className={styles.row}><span>自动重试</span><strong>{capabilities?.automaticRetries ?? 0}</strong></div>
+        <div className={styles.row}><span>真实调用总账本</span><strong>{capabilities?.realCallBudget.configured
+          ? `${capabilities.realCallBudget.state === 'active' ? '有效' : capabilities.realCallBudget.state === 'expired' ? '已过期' : '已停止'} · 已用 ${capabilities.realCallBudget.used.requests} 次`
+          : '未配置'}</strong></div>
         {session && <button type="button" className={styles.secondaryAction} onClick={() => void fetchHistory(session.sessionId)}>刷新任务</button>}
         {history.length === 0 ? <p className={styles.empty}>本会话还没有分类任务。</p> : history.map(item => <button type="button" key={item.jobId} className={`${styles.historyItem} ${job?.jobId === item.jobId ? styles.activeHistory : ''}`} onClick={() => setJob(item)}>
           <span>{statusCopy(item.status)}</span>

@@ -24,6 +24,12 @@ import {
   type HistoricalFeatureRecord,
   type HistoricalRetrievalResult,
 } from './historical-retrieval';
+import {
+  RealCallReservationSchema,
+  type RealCallBudgetGate,
+  type RealCallBudgetStatus,
+  type RealCallReservation,
+} from './real-call-budget';
 import { digest, stable } from './stage-a-contract';
 
 export const WORKER_CONTROL_PLANE_VERSION = 'classification-worker-control-plane.v1' as const;
@@ -155,6 +161,7 @@ const CancelAckRequestSchema = z.object({
   identity: RunIdentitySchema,
   reason: z.enum(['cancelled', 'authorization_changed', 'deadline_exceeded', 'evidence_inactive']),
   temporaryFilesDeleted: z.boolean(),
+  usage: WorkerUsageSchema.optional(),
 }).strict();
 
 const UploadedResultSchema = z.object({
@@ -187,6 +194,7 @@ const WorkerControlStateSchema = z.object({
   createdAt: dateTime,
   updatedAt: dateTime,
   uploadedResult: UploadedResultSchema.optional(),
+  realCallReservation: RealCallReservationSchema.optional(),
 }).strict();
 
 type WorkerControlState = z.infer<typeof WorkerControlStateSchema>;
@@ -259,6 +267,7 @@ export interface ClassificationWorkerControlPlaneOptions {
   store?: FileClassificationLabV2Store;
   guardStore?: FileTrustedLabGuardStore;
   historical?: FileHistoricalRetrievalAdapter;
+  realCallBudget?: RealCallBudgetGate;
   clock?: WorkerControlPlaneClock;
   leaseDurationMs?: number;
   resultMaxByteLength?: number;
@@ -268,6 +277,7 @@ export class ClassificationWorkerControlPlane {
   readonly store: FileClassificationLabV2Store;
   readonly guardStore: FileTrustedLabGuardStore;
   readonly historical: FileHistoricalRetrievalAdapter;
+  readonly realCallBudget?: RealCallBudgetGate;
   readonly root: string;
   readonly publicBaseUrl: string;
   readonly clock: WorkerControlPlaneClock;
@@ -280,6 +290,7 @@ export class ClassificationWorkerControlPlane {
     this.store = options.store ?? new FileClassificationLabV2Store(baseRoot);
     this.guardStore = options.guardStore ?? new FileTrustedLabGuardStore(baseRoot);
     this.historical = options.historical ?? new FileHistoricalRetrievalAdapter(path.resolve(baseRoot, 'v2-historical'));
+    this.realCallBudget = options.realCallBudget;
     this.root = path.resolve(baseRoot, 'v2-worker-control-plane');
     const parsed = new URL(options.publicBaseUrl);
     const loopback = ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname);
@@ -373,6 +384,87 @@ export class ClassificationWorkerControlPlane {
     return guard;
   }
 
+  private throwRealCallBudgetError(error: unknown): never {
+    const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message)
+      ? error.message
+      : 'REAL_CALL_LEDGER_FAILED';
+    const status = code === 'REAL_CALL_BUDGET_EXHAUSTED' ? 429
+      : code.endsWith('_MISMATCH') || code.endsWith('_CHANGED') ? 409
+        : 503;
+    fail(code, status);
+  }
+
+  private async reserveRealCall(
+    job: LabJobRecordV2,
+    guard: TrustedLabGuardSnapshot,
+  ): Promise<RealCallReservation | undefined> {
+    if(job.executionProfile.providerMode !== 'stage_a_real') return undefined;
+    if(!this.realCallBudget) fail('REAL_CALL_AUTHORIZATION_NOT_CONFIGURED', 503);
+    try {
+      return await this.realCallBudget.reserve({
+        jobId: job.jobId,
+        runId: job.runId,
+        attemptRevision: job.attemptRevision,
+        executionProfileDigest: job.executionProfile.configDigest,
+        providerVersion: job.executionProfile.providerVersion,
+        modelVersion: job.executionProfile.modelVersion,
+        promptVersion: job.executionProfile.promptVersion,
+        allowPersonMatching: guard.allowPersonMatching,
+        maxRequests: job.budgetPolicy.maxRequests,
+        maxCostCny: job.budgetPolicy.maxCostCny,
+      });
+    } catch(error) {
+      this.throwRealCallBudgetError(error);
+    }
+  }
+
+  private async finalizeRealCall(input: {
+    state: WorkerControlState;
+    job: LabJobRecordV2;
+    disposition: 'settled' | 'uncertain';
+    actualRequests: number;
+    actualCostCny: number;
+    stopReason?: string;
+  }): Promise<RealCallBudgetStatus | undefined> {
+    if(input.job.executionProfile.providerMode !== 'stage_a_real') {
+      if(input.state.realCallReservation) fail('UNEXPECTED_REAL_CALL_RESERVATION', 500);
+      return undefined;
+    }
+    if(!this.realCallBudget || !input.state.realCallReservation) {
+      fail('REAL_CALL_RESERVATION_MISSING', 503);
+    }
+    try {
+      return await this.realCallBudget.finalize({
+        reservation: input.state.realCallReservation,
+        disposition: input.disposition,
+        actualRequests: input.actualRequests,
+        actualCostCny: input.actualCostCny,
+        ...(input.stopReason ? { stopReason: input.stopReason } : {}),
+      });
+    } catch(error) {
+      this.throwRealCallBudgetError(error);
+    }
+  }
+
+  private async releaseUnusedRealCall(
+    reservation: RealCallReservation | undefined,
+    stopReason: string,
+  ): Promise<void> {
+    if(!reservation) return;
+    if(!this.realCallBudget) fail('REAL_CALL_RESERVATION_MISSING', 503);
+    try {
+      await this.realCallBudget.finalize({
+        reservation,
+        disposition: 'settled',
+        actualRequests: 0,
+        actualCostCny: 0,
+        stopReason,
+      });
+    } catch(error) {
+      this.throwRealCallBudgetError(error);
+    }
+  }
+
   private identityState(identityInput: unknown, state: WorkerControlState): RunIdentity {
     const identity = RunIdentitySchema.parse(identityInput);
     const expected = {
@@ -459,23 +551,34 @@ export class ClassificationWorkerControlPlane {
       catch { continue; }
       if(!this.workerMatches(candidate, guard, request.versions, request.capabilities)) continue;
 
+      const realCallReservation = await this.reserveRealCall(candidate, guard);
+
       const at = later(candidate.updatedAt, iso(() => this.clock.nowMs()));
-      const claimed = await this.store.compareAndSetTrusted(candidate.jobId, candidate.revision, current => ({
-        ...current,
-        status: 'processing',
-        startedAt: at,
-        updatedAt: at,
-        processingOwner: { runnerGeneration: request.workerId, claimedAt: at },
-        transitions: [...current.transitions, {
-          from: 'pending',
-          to: 'processing',
-          reason: 'LAB_JOB_CLAIMED',
-          at,
-          revision: current.revision + 1,
-          runnerGeneration: request.workerId,
-        }],
-      }));
-      if(!claimed.ok) continue;
+      let claimed;
+      try {
+        claimed = await this.store.compareAndSetTrusted(candidate.jobId, candidate.revision, current => ({
+          ...current,
+          status: 'processing',
+          startedAt: at,
+          updatedAt: at,
+          processingOwner: { runnerGeneration: request.workerId, claimedAt: at },
+          transitions: [...current.transitions, {
+            from: 'pending',
+            to: 'processing',
+            reason: 'LAB_JOB_CLAIMED',
+            at,
+            revision: current.revision + 1,
+            runnerGeneration: request.workerId,
+          }],
+        }));
+      } catch(error) {
+        await this.releaseUnusedRealCall(realCallReservation, 'JOB_CLAIM_FAILED');
+        throw error;
+      }
+      if(!claimed.ok) {
+        await this.releaseUnusedRealCall(realCallReservation, 'JOB_CLAIM_LOST');
+        continue;
+      }
 
       const leaseToken = secret();
       const resultUploadToken = secret();
@@ -506,6 +609,7 @@ export class ClassificationWorkerControlPlane {
         stage: 'lease',
         createdAt: at,
         updatedAt: at,
+        ...(realCallReservation ? { realCallReservation } : {}),
       });
       try {
         await this.exclusive(claimed.record.jobId, async () => {
@@ -518,6 +622,7 @@ export class ClassificationWorkerControlPlane {
         // leaving an unobservable processing job behind.
         try { await this.terminalFailure(claimed.record, 'INTERNAL_ERROR', true); }
         catch { /* A concurrent state change already fenced this claim. */ }
+        await this.releaseUnusedRealCall(realCallReservation, 'LEASE_STATE_FAILED');
         continue;
       }
 
@@ -853,6 +958,25 @@ export class ClassificationWorkerControlPlane {
   async complete(jobId: string, raw: unknown): Promise<unknown> {
     const request = CompleteRequestSchema.parse(raw);
     const { state, job, guard } = await this.requireActiveLease(id.parse(jobId), request.identity);
+    const realCallBudget = await this.finalizeRealCall({
+      state,
+      job,
+      disposition: 'settled',
+      actualRequests: request.usage.providerCalls,
+      actualCostCny: request.usage.costCny,
+    });
+    if(realCallBudget?.state === 'halted') {
+      try {
+        await this.terminalFailure(job, 'REAL_CALL_RESERVATION_OVERRUN', false);
+        await this.updateState(jobId, current => ({
+          ...current,
+          status: 'failed',
+          stage: 'organizing',
+          updatedAt: later(current.updatedAt, iso(() => this.clock.nowMs())),
+        }));
+      } catch { /* The ledger remains halted even if the job was concurrently fenced. */ }
+      fail('REAL_CALL_RESERVATION_OVERRUN', 409);
+    }
     if(request.versions.providerVersion !== job.executionProfile.providerVersion
       || request.versions.promptVersion !== job.executionProfile.promptVersion
       || request.versions.guardVersion !== job.executionProfile.guardVersion
@@ -940,12 +1064,21 @@ export class ClassificationWorkerControlPlane {
       jobRevision: committed.record.revision,
       historicalRecordsUpserted: records.length,
       controlStateUpdated,
+      ...(realCallBudget ? { realCallBudget } : {}),
     };
   }
 
   async fail(jobId: string, raw: unknown): Promise<unknown> {
     const request = FailRequestSchema.parse(raw);
-    const { job } = await this.requireActiveLease(id.parse(jobId), request.identity);
+    const { state, job } = await this.requireActiveLease(id.parse(jobId), request.identity);
+    const realCallBudget = await this.finalizeRealCall({
+      state,
+      job,
+      disposition: request.providerCalled && request.usage.providerCalls === 0 ? 'uncertain' : 'settled',
+      actualRequests: request.usage.providerCalls,
+      actualCostCny: request.usage.costCny,
+      stopReason: request.errorCode,
+    });
     const retryableCodes = new Set([
       'DOWNLOAD_FAILED', 'FEATURE_SERVICE_UNAVAILABLE', 'OCR_FAILED', 'EMBEDDING_FAILED',
       'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED', 'RESULT_UPLOAD_FAILED', 'INTERNAL_ERROR',
@@ -958,7 +1091,13 @@ export class ClassificationWorkerControlPlane {
       stage: request.stage,
       updatedAt: later(current.updatedAt, iso(() => this.clock.nowMs())),
     }));
-    return { protocolVersion: WORKER_CONTROL_PLANE_VERSION, requestId: request.requestId, accepted: true, jobRevision: record.revision };
+    return {
+      protocolVersion: WORKER_CONTROL_PLANE_VERSION,
+      requestId: request.requestId,
+      accepted: true,
+      jobRevision: record.revision,
+      ...(realCallBudget ? { realCallBudget } : {}),
+    };
   }
 
   async cancelAck(jobId: string, raw: unknown): Promise<unknown> {
@@ -968,6 +1107,14 @@ export class ClassificationWorkerControlPlane {
     this.identityState(request.identity, state);
     const job = await this.store.get(jobId);
     if(!job) fail('LAB_JOB_NOT_FOUND', 404);
+    const realCallBudget = await this.finalizeRealCall({
+      state,
+      job,
+      disposition: request.usage ? 'settled' : 'uncertain',
+      actualRequests: request.usage?.providerCalls ?? 0,
+      actualCostCny: request.usage?.costCny ?? 0,
+      stopReason: request.reason.toUpperCase(),
+    });
     if(job.status === 'processing' && job.revision === state.jobRevision) {
       const code = request.reason === 'authorization_changed' ? 'AUTHORIZATION_CHANGED'
         : request.reason === 'evidence_inactive' ? 'INACTIVE_EVIDENCE'
@@ -1005,6 +1152,7 @@ export class ClassificationWorkerControlPlane {
       requestId: request.requestId,
       accepted: true,
       temporaryFilesDeleted: request.temporaryFilesDeleted,
+      ...(realCallBudget ? { realCallBudget } : {}),
     };
   }
 }

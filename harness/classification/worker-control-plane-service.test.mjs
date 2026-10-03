@@ -17,6 +17,10 @@ const { FileClassificationLabV2Store } = require(`${build}/src/lib/algorithms/cl
 const { submitLabExecutionJob } = require(`${build}/src/lib/algorithms/classification/lab-execution.js`);
 const { DeterministicLabProvider } = require(`${build}/src/lib/algorithms/classification/lab-provider.js`);
 const { FileHistoricalRetrievalAdapter } = require(`${build}/src/lib/algorithms/classification/historical-retrieval.js`);
+const {
+  FileRealCallBudgetGate,
+  REAL_CALL_AUTHORIZATION_VERSION,
+} = require(`${build}/src/lib/algorithms/classification/real-call-budget.js`);
 const { FileClassificationT1SessionStore } = require(`${build}/src/lib/algorithms/classification/t1-session-store.js`);
 const {
   ClassificationWorkerControlPlane,
@@ -62,6 +66,35 @@ function profile() {
     placeKindPolicyDigest: `sha256:${'1'.repeat(64)}`,
     scorerVersion: 'classification-semantic-score.2',
     configDigest: `sha256:${'2'.repeat(64)}`,
+  };
+}
+
+function realProfile() {
+  return {
+    providerMode: 'stage_a_real',
+    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.2',
+    modelVersion: 'qwen3.7-flash-2026-07-15',
+    promptVersion: 'sgx-five-facets.16',
+    guardVersion: 'classification-lab-guard.1',
+    adapterVersion: 'classification-lab-stage-a-composition.1',
+    taxonomyVersion: 'classification-lab-taxonomy.1',
+    placeKindPolicyDigest: `sha256:${'3'.repeat(64)}`,
+    scorerVersion: 'classification-semantic-score.2',
+    configDigest: `sha256:${'4'.repeat(64)}`,
+  };
+}
+
+function realAuthorization() {
+  return {
+    version: REAL_CALL_AUTHORIZATION_VERSION,
+    authorizationId: 'sgx_internal_t1_20261003',
+    providerVersion: realProfile().providerVersion,
+    modelVersion: realProfile().modelVersion,
+    caps: { maxRequests: 150, maxCostCny: 25, maxRetries: 0 },
+    openingUsage: { requests: 81, costCny: 0.745861, sourceRefs: ['campaign-ledgers:r5-r9b'] },
+    allowPersonMatching: true,
+    expiresAt: '2026-10-10T00:00:00.000Z',
+    authorizationEvidenceRef: 'user-approved-150-requests-25-cny-20261003',
   };
 }
 
@@ -130,11 +163,11 @@ function identity(lease, workerId = 'worker_t1') {
   };
 }
 
-async function submit({ built, root, store, guardStore, clock, contextRevision }) {
+async function submit({ built, root, store, guardStore, clock, contextRevision, profileValue = profile() }) {
   const trusted = guard(built, contextRevision);
   const record = await submitLabExecutionJob({
     built,
-    profile: profile(),
+    profile: profileValue,
     guard: trusted,
     semanticContext: {
       version: 'classification-lab-semantic-context.1',
@@ -508,4 +541,70 @@ test('history index failure cannot expose a false terminal success', async (t) =
   assert.equal(failed.error.code, 'HISTORY_INDEX_FAILED');
   assert.equal(failed.result, undefined);
   assert.equal(failed.resultDigest, undefined);
+});
+
+test('real worker lease requires and settles the shared user-authorized budget', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-worker-real-budget.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const clock = { value: FIXED_NOW };
+  const store = new FileClassificationLabV2Store(root);
+  const guardStore = new FileTrustedLabGuardStore(root);
+  const built = buildLabSubmission(submission(4), {
+    authorizationRevision: 't1_auth_real_budget',
+    consentRef: 't1_consent_real_budget',
+  });
+  const record = await submit({
+    built,
+    root,
+    store,
+    guardStore,
+    clock,
+    contextRevision: 't1_context_real_budget',
+    profileValue: realProfile(),
+  });
+  const ungated = new ClassificationWorkerControlPlane({
+    dataRoot: root,
+    publicBaseUrl: 'http://127.0.0.1:3137',
+    store,
+    guardStore,
+    clock: { nowMs: () => clock.value },
+  });
+  await assert.rejects(ungated.lease(worker(realProfile())), /REAL_CALL_AUTHORIZATION_NOT_CONFIGURED/);
+  assert.equal((await store.get(record.jobId)).status, 'pending');
+
+  const budget = new FileRealCallBudgetGate({
+    dataRoot: root,
+    authorization: realAuthorization(),
+    nowMs: () => clock.value,
+  });
+  const gated = new ClassificationWorkerControlPlane({
+    dataRoot: root,
+    publicBaseUrl: 'http://127.0.0.1:3137',
+    store,
+    guardStore,
+    realCallBudget: budget,
+    clock: { nowMs: () => clock.value },
+  });
+  const lease = (await gated.lease(worker(realProfile()))).leases[0];
+  assert.equal(lease.jobId, record.jobId);
+  assert.equal((await budget.readStatus()).used.requests, 89, 'the job budget reserves eight possible calls');
+  const failed = await gated.fail(lease.jobId, {
+    protocolVersion: WORKER_CONTROL_PLANE_VERSION,
+    requestId: 'fail_real_before_provider',
+    identity: identity(lease),
+    errorCode: 'DOWNLOAD_FAILED',
+    stage: 'downloading',
+    retryable: false,
+    providerCalled: false,
+    usage: {
+      endToEndLatencyMs: 20,
+      providerLatencyMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costCny: 0,
+      providerCalls: 0,
+    },
+  });
+  assert.deepEqual(failed.realCallBudget.used, { requests: 81, costCny: 0.745861 });
+  assert.equal((await store.get(record.jobId)).status, 'failed_retryable');
 });

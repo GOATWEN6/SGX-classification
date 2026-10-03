@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { ZodError } from 'zod';
 
 import {
@@ -6,6 +8,10 @@ import {
   WorkerControlPlaneError,
   verifyWorkerBearer,
 } from './worker-control-plane';
+import {
+  FileRealCallBudgetGate,
+  loadRealCallAuthorizationSync,
+} from './real-call-budget';
 import { ClassificationT1AsrService } from './t1-asr-prejob';
 
 type WorkerOperation = (control: ClassificationWorkerControlPlane, body: unknown) => Promise<unknown>;
@@ -27,13 +33,19 @@ function requireEnabled(): void {
 export function getClassificationWorkerControlPlane(): ClassificationWorkerControlPlane {
   requireEnabled();
   const dataRoot = process.env.CLASSIFICATION_LAB_DATA_DIR ?? '';
+  const resolvedDataRoot = path.resolve(dataRoot || path.join(tmpdir(), 'sgx-classification-lab'));
   const publicBaseUrl = process.env.CLASSIFICATION_WORKER_PUBLIC_BASE_URL
     ?? `http://127.0.0.1:${process.env.PORT ?? '3137'}`;
-  const signature = JSON.stringify({ dataRoot, publicBaseUrl });
+  const authorizationPath = process.env.CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH ?? '';
+  const authorization = authorizationPath ? loadRealCallAuthorizationSync(authorizationPath) : undefined;
+  const signature = JSON.stringify({ dataRoot: resolvedDataRoot, publicBaseUrl, authorization });
   if(cached?.signature === signature) return cached.control;
   const control = new ClassificationWorkerControlPlane({
-    ...(dataRoot ? { dataRoot } : {}),
+    dataRoot: resolvedDataRoot,
     publicBaseUrl,
+    ...(authorization ? {
+      realCallBudget: new FileRealCallBudgetGate({ dataRoot: resolvedDataRoot, authorization }),
+    } : {}),
   });
   cached = { signature, control };
   return control;

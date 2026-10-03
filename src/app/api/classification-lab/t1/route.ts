@@ -7,6 +7,7 @@ import {
   ClassificationT1LabService,
   classificationT1LabConfig,
 } from '@/lib/algorithms/classification/t1-lab-service';
+import { getClassificationWorkerControlPlane } from '@/lib/algorithms/classification/worker-control-http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,15 @@ export const dynamic = 'force-dynamic';
 function service(): ClassificationT1LabService {
   if(process.env.CLASSIFICATION_T1_LAB_ENABLED !== 'true') throw new Error('T1_LAB_DISABLED');
   return new ClassificationT1LabService(classificationT1LabConfig());
+}
+async function capabilities(lab: ClassificationT1LabService) {
+  const control = getClassificationWorkerControlPlane();
+  return {
+    ...lab.capabilities(),
+    realCallBudget: control.realCallBudget
+      ? { configured: true as const, ...(await control.realCallBudget.readStatus()) }
+      : { configured: false as const },
+  };
 }
 function errorResponse(error: unknown): NextResponse {
   const raw = error instanceof Error ? error.message : 'T1_LAB_INTERNAL_ERROR';
@@ -36,7 +46,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const sessionId = url.searchParams.get('sessionId');
     if(!sessionId) {
-      return NextResponse.json({ ok: true, capabilities: service().capabilities() }, {
+      const lab = service();
+      return NextResponse.json({ ok: true, capabilities: await capabilities(lab) }, {
         headers: { 'Cache-Control': 'no-store' },
       });
     }
@@ -45,7 +56,7 @@ export async function GET(request: Request) {
     const result = jobId
       ? { job: await lab.get(sessionId, jobId) }
       : { jobs: await lab.list(sessionId) };
-    return NextResponse.json({ ok: true, capabilities: lab.capabilities(), ...result }, {
+    return NextResponse.json({ ok: true, capabilities: await capabilities(lab), ...result }, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch(error) { return errorResponse(error); }
@@ -82,7 +93,7 @@ export async function POST(request: Request) {
       submission: { ...submission, images },
       personMatchingAuthorized: personMatchingAuthorized === true,
     });
-    return NextResponse.json({ ok: true, capabilities: lab.capabilities(), result }, {
+    return NextResponse.json({ ok: true, capabilities: await capabilities(lab), result }, {
       status: 202,
       headers: { 'Cache-Control': 'no-store' },
     });
