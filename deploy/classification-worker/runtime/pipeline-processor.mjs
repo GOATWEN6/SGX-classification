@@ -43,6 +43,7 @@ const STOP_REASONS = new Set([
   'authorization_changed',
   'evidence_inactive',
 ]);
+const BRIDGE_DIAGNOSTIC_PATTERN = /^BRIDGE_[A-Z0-9_]{3,96}$/;
 const FORBIDDEN_CONTEXT_KEYS = new Set([
   'apiKey',
   'api_key',
@@ -79,6 +80,19 @@ function containsForbiddenKey(value) {
   return Object.entries(value).some(([key, child]) => (
     FORBIDDEN_CONTEXT_KEYS.has(key) || containsForbiddenKey(child)
   ));
+}
+
+function safeBridgeDiagnostic(response, stderr, exit) {
+  if (BRIDGE_DIAGNOSTIC_PATTERN.test(response?.diagnosticCode ?? '')) {
+    return response.diagnosticCode;
+  }
+  const text = String(stderr ?? '').slice(0, 16_384);
+  if (/ERR_MODULE_NOT_FOUND|Cannot find module/.test(text)) return 'BRIDGE_MODULE_LOAD_FAILED';
+  if (/SyntaxError/.test(text)) return 'BRIDGE_SYNTAX_ERROR';
+  if (/EACCES|EPERM/.test(text)) return 'BRIDGE_PERMISSION_DENIED';
+  if (/heap out of memory|allocation failed/i.test(text)) return 'BRIDGE_RESOURCE_EXHAUSTED';
+  if (exit?.signal) return 'BRIDGE_SIGNAL_EXIT';
+  return 'BRIDGE_RESPONSE_UNAVAILABLE';
 }
 
 export function validateExecutionContext(raw, { requestId, identity, lease }) {
@@ -648,8 +662,13 @@ export class SubprocessStageABridge {
     ], {
       cwd: runRoot,
       env: { ...this.environment, SGX_CLASSIFICATION_BUILD_DIR: this.buildDir },
-      stdio: 'ignore',
+      stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
+    });
+    let stderr = '';
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk) => {
+      if (stderr.length < 16_384) stderr += chunk.slice(0, 16_384 - stderr.length);
     });
     let forceKill;
     const onAbort = () => {
@@ -666,7 +685,10 @@ export class SubprocessStageABridge {
         child.once('exit', (code, exitSignal) => resolve({ code, signal: exitSignal }));
       });
     } catch (error) {
-      throw new WorkerExecutionError('INTERNAL_ERROR', 'vlm_extract', 'stage-a bridge could not start', { cause: error });
+      throw new WorkerExecutionError('INTERNAL_ERROR', 'vlm_extract', 'stage-a bridge could not start', {
+        cause: error,
+        diagnosticCode: 'BRIDGE_START_FAILED',
+      });
     } finally {
       signal.removeEventListener('abort', onAbort);
       if (forceKill) clearTimeout(forceKill);
@@ -677,7 +699,10 @@ export class SubprocessStageABridge {
     try {
       response = JSON.parse(await readFile(responsePath, 'utf8'));
     } catch (error) {
-      throw new WorkerExecutionError('INTERNAL_ERROR', 'vlm_extract', 'stage-a bridge returned no valid response', { cause: error });
+      throw new WorkerExecutionError('INTERNAL_ERROR', 'vlm_extract', 'stage-a bridge returned no valid response', {
+        cause: error,
+        diagnosticCode: safeBridgeDiagnostic(null, stderr, exit),
+      });
     }
     if (exit.code !== 0) {
       if (STOP_REASONS.has(response?.stopReason)) throw new FenceStop(response.stopReason);
@@ -686,6 +711,7 @@ export class SubprocessStageABridge {
         : 'INTERNAL_ERROR';
       throw new WorkerExecutionError(errorCode, response?.stage ?? 'vlm_extract', errorCode, {
         providerCalled: response?.providerCalled === true,
+        diagnosticCode: safeBridgeDiagnostic(response, stderr, exit),
       });
     }
     ensure(response.schemaVersion === BRIDGE_RESPONSE_VERSION, 'PROVIDER_INVALID_OUTPUT', 'organizing');

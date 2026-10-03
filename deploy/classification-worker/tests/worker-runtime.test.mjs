@@ -1375,6 +1375,33 @@ test('subprocess bridge exchanges only file-bound JSON and validates the respons
   assert.equal(result.usage.providerCalls, 1);
 });
 
+test('subprocess bridge reports a sanitized diagnostic when the child cannot load a module', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-bridge-diagnostic.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const fakeBridge = path.join(root, 'fake-bridge.mjs');
+  await writeFile(fakeBridge, `
+    console.error('Error [ERR_MODULE_NOT_FOUND]: Cannot find module /private/path');
+    process.exitCode = 2;
+  `);
+  const lease = makeLease();
+  const sourcePath = path.join(root, 'source.jpg');
+  await writeFile(sourcePath, Buffer.from('image-one'));
+  const bridge = new SubprocessStageABridge({ buildDir: root, bridgePath: fakeBridge });
+
+  await assert.rejects(
+    () => bridge.run({
+      identity: identityFor(lease),
+      lease,
+      execution: { job: {}, guard: {}, placeKindPolicy: {} },
+      files: [{ evidence: lease.evidence[0], sourcePath, byteLength: 9 }],
+      signal: new AbortController().signal,
+    }),
+    (error) => error.errorCode === 'INTERNAL_ERROR'
+      && error.diagnosticCode === 'BRIDGE_MODULE_LOAD_FAILED'
+      && !error.message.includes('/private/path'),
+  );
+});
+
 test('HTTP control-plane client fetches an immutable execution context through the internal route', async () => {
   const requests = [];
   const client = new HttpControlPlaneClient({

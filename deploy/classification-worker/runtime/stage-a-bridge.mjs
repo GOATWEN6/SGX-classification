@@ -13,6 +13,35 @@ const require = createRequire(import.meta.url);
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
 let providerCallObserved = false;
 
+const SAFE_DIAGNOSTICS = new Map([
+  ['BRIDGE_ARGUMENT_MISSING', 'BRIDGE_ARGUMENT_MISSING'],
+  ['BRIDGE_ARGUMENT_INVALID', 'BRIDGE_ARGUMENT_INVALID'],
+  ['LAB_RUN_IDENTITY_MISMATCH', 'BRIDGE_IDENTITY_MISMATCH'],
+  ['LAB_PROVIDER_UNAVAILABLE', 'BRIDGE_PROVIDER_CONFIG_UNAVAILABLE'],
+  ['AUTHORIZATION_REVOKED', 'BRIDGE_AUTHORIZATION_REVOKED'],
+  ['AUTHORIZATION_CHANGED', 'BRIDGE_AUTHORIZATION_CHANGED'],
+  ['INACTIVE_EVIDENCE', 'BRIDGE_EVIDENCE_INACTIVE'],
+  ['EVIDENCE_CHANGED', 'BRIDGE_EVIDENCE_CHANGED'],
+  ['LAB_RUN_TIMEOUT', 'BRIDGE_TIMEOUT'],
+  ['TIMEOUT', 'BRIDGE_TIMEOUT'],
+  ['INVALID_OUTPUT', 'BRIDGE_INVALID_OUTPUT'],
+  ['MODEL_VERSION_MISMATCH', 'BRIDGE_MODEL_VERSION_MISMATCH'],
+  ['MISSING_USAGE_OR_PROVENANCE', 'BRIDGE_MISSING_USAGE_OR_PROVENANCE'],
+  ['RATE_LIMITED', 'BRIDGE_RATE_LIMITED'],
+]);
+
+function diagnosticCode(error) {
+  const raw = error instanceof Error ? error.message : '';
+  if (SAFE_DIAGNOSTICS.has(raw)) return SAFE_DIAGNOSTICS.get(raw);
+  if (error?.code === 'MODULE_NOT_FOUND' || error?.code === 'ERR_MODULE_NOT_FOUND') {
+    return 'BRIDGE_MODULE_LOAD_FAILED';
+  }
+  if (error?.code === 'ENOENT') return 'BRIDGE_FILE_MISSING';
+  if (error?.code === 'EACCES' || error?.code === 'EPERM') return 'BRIDGE_PERMISSION_DENIED';
+  if (error instanceof SyntaxError) return 'BRIDGE_INVALID_JSON';
+  return 'BRIDGE_UNCLASSIFIED_FAILURE';
+}
+
 function cliValue(name) {
   const index = process.argv.indexOf(name);
   if (index < 0 || !process.argv[index + 1]) throw new Error('BRIDGE_ARGUMENT_MISSING');
@@ -93,24 +122,29 @@ function mockTransport(model, onCall) {
 function mappedFailure(error, providerCalled) {
   const raw = error instanceof Error ? error.message : '';
   if (raw === 'CANCELLED') {
-    return { stopReason: 'cancelled', stage: 'vlm_extract', providerCalled };
+    return { stopReason: 'cancelled', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'AUTHORIZATION_REVOKED' || raw === 'AUTHORIZATION_CHANGED') {
-    return { stopReason: 'authorization_changed', stage: 'retrieval', providerCalled };
+    return { stopReason: 'authorization_changed', stage: 'retrieval', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'INACTIVE_EVIDENCE' || raw === 'EVIDENCE_CHANGED') {
-    return { stopReason: 'evidence_inactive', stage: 'retrieval', providerCalled };
+    return { stopReason: 'evidence_inactive', stage: 'retrieval', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'LAB_RUN_TIMEOUT' || raw === 'TIMEOUT') {
-    return { errorCode: 'PROVIDER_TIMEOUT', stage: 'vlm_extract', providerCalled };
+    return { errorCode: 'PROVIDER_TIMEOUT', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'INVALID_OUTPUT' || raw === 'MODEL_VERSION_MISMATCH' || raw === 'MISSING_USAGE_OR_PROVENANCE') {
-    return { errorCode: 'PROVIDER_INVALID_OUTPUT', stage: 'vlm_extract', providerCalled };
+    return { errorCode: 'PROVIDER_INVALID_OUTPUT', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'RATE_LIMITED') {
-    return { errorCode: 'PROVIDER_RATE_LIMITED', stage: 'vlm_extract', providerCalled };
+    return { errorCode: 'PROVIDER_RATE_LIMITED', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
-  return { errorCode: 'INTERNAL_ERROR', stage: providerCalled ? 'vlm_extract' : 'retrieval', providerCalled };
+  return {
+    errorCode: 'INTERNAL_ERROR',
+    stage: providerCalled ? 'vlm_extract' : 'retrieval',
+    providerCalled,
+    diagnosticCode: diagnosticCode(error),
+  };
 }
 
 async function verifyEvidenceFiles(request, job, requestRoot) {

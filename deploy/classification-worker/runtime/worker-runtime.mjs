@@ -87,6 +87,9 @@ export class WorkerExecutionError extends Error {
     this.errorCode = errorCode;
     this.stage = stage;
     this.providerCalled = options.providerCalled === true;
+    this.diagnosticCode = typeof options.diagnosticCode === 'string'
+      ? options.diagnosticCode
+      : undefined;
     // This runtime never schedules an automatic retry. A later attempt requires
     // a new control-plane decision and identity.
     this.retryable = false;
@@ -730,6 +733,7 @@ export class WorkerRuntime {
       runId: lease.runId,
       stage: executionError.stage,
       errorCode: executionError.errorCode,
+      ...(executionError.diagnosticCode ? { diagnosticCode: executionError.diagnosticCode } : {}),
     });
     return outcome;
   }
