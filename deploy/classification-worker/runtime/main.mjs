@@ -54,7 +54,7 @@ const versions = {
   promptVersion,
   guardVersion: env.SGX_GUARD_VERSION ?? 'classification-lab-guard.1',
   adapterVersion: env.SGX_ADAPTER_VERSION ?? 'classification-lab-stage-a-composition.1',
-  taxonomyVersion: env.SGX_TAXONOMY_VERSION ?? 'sgx-taxonomy.1',
+  taxonomyVersion: env.SGX_TAXONOMY_VERSION ?? 'classification-lab-taxonomy.1',
   ocrVersion: env.SGX_OCR_MODEL_REVISION ?? 'unconfigured',
   embeddingVersion: env.SGX_EMBEDDING_REVISION ?? 'unconfigured',
 };

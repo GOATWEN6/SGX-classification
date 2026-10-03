@@ -133,6 +133,7 @@ for expected in (
     "HF_HUB_OFFLINE=1",
     "TRANSFORMERS_OFFLINE=1",
     "SGX_ALLOW_MODEL_DOWNLOADS=false",
+    "SGX_TAXONOMY_VERSION=classification-lab-taxonomy.1",
 ):
     assert expected in env_text
 assert "SGX_D4_API_KEY=" not in env_text
