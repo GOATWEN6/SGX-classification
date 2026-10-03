@@ -1476,6 +1476,7 @@ export const LabProductJobViewSchema = z.object({
   originalTextByEvidenceId: z.record(id, z.string().max(65536)),
   assetRefs: z.array(LabAssetRefV2Schema).max(5000),
   result: LabExecutionResultSchema.optional(),
+  metrics: LabExecutionMetricsSchema.optional(),
   error: z.object({ code: id }).strict().optional(),
   actionCount: z.number().int().nonnegative(),
   redacted: z.literal(false)

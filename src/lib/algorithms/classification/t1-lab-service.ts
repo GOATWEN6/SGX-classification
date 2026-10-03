@@ -15,6 +15,7 @@ import { FileClassificationLabV2Store } from './lab-execution-store';
 import {
   getLabProductJobView,
   listLabProductJobViews,
+  readLabProductAsset,
   submitLabExecutionJob,
 } from './lab-execution';
 import { buildLabSubmission, type LabSubmission } from './lab-contract';
@@ -288,5 +289,21 @@ export class ClassificationT1LabService {
       && view.envelope.scope.householdId === session.scope.householdId
       && view.envelope.scope.subjectId === session.scope.subjectId
     )).slice(0, limit);
+  }
+
+  async readAsset(sessionId: string, jobId: string, evidenceId: string): Promise<{
+    bytes: Buffer;
+    mimeType: string;
+  }> {
+    const view = await this.get(sessionId, jobId);
+    if(!view) throw new Error('T1_JOB_NOT_FOUND');
+    if(view.redacted) throw new Error('T1_ASSET_NOT_AUTHORIZED');
+    const asset = await readLabProductAsset(jobId, evidenceId, {
+      store: this.store,
+      guardProvider: this.guardStore,
+      requiredPurpose: 'classification',
+    });
+    if(asset.ref.mimeType === 'text/plain') throw new Error('T1_TEXT_ASSET_NOT_RENDERABLE');
+    return { bytes: asset.bytes, mimeType: asset.ref.mimeType };
   }
 }

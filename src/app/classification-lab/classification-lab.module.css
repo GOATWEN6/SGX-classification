@@ -41,6 +41,14 @@
 .inlineHint { display: inline; margin-left: 8px; color: #94877a !important; font-size: 12px; font-weight: 400 !important; }
 .submit { width: 100%; margin-top: 22px; min-height: 58px; border-radius: 15px; background: #2f5b47; font-size: 18px; }
 .submit:hover { background: #244a39; }
+.secondaryAction { width: 100%; min-height: 46px; margin: 12px 0; border: 1px solid #9db5a7; border-radius: 12px; background: #edf4ef; color: #2f5b47; box-shadow: none; font-weight: 700; }
+.secondaryAction:hover { background: #e1ede5; }
+.secondaryAction:disabled { cursor: not-allowed; opacity: .5; }
+.success { margin: 12px 0 22px; padding: 13px 16px; border-left: 4px solid #4d8468; border-radius: 8px; background: #edf7f0; color: #315b47; }
+.consentRow { display: flex; align-items: flex-start; gap: 12px; margin: 22px 0 0; padding: 14px 16px; border: 1px solid #c8d7cd; border-radius: 14px; background: #f0f6f2; color: #385546; cursor: pointer; }
+.consentRow input { width: 19px; min-height: 19px; margin-top: 2px; }
+.consentRow span, .consentRow strong, .consentRow small { display: block; }
+.consentRow small { margin-top: 3px; color: #6b7b72; font-weight: 400; }
 .textButton { padding: 3px 5px; min-height: 0; background: none; color: #2f5b47; font-size: 14px; }
 .historyItem { display: grid; width: 100%; min-height: 0; margin-bottom: 8px; padding: 13px; border: 1px solid transparent; border-radius: 13px; background: #f7f2eb; color: #4f4439; text-align: left; }
 .historyItem:hover, .activeHistory { border-color: #bea98e; background: #fff; }

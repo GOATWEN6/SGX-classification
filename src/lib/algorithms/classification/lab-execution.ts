@@ -968,6 +968,7 @@ export async function getLabProductJobView(
           .filter(([evidenceId]) => allowedEvidenceIds.has(evidenceId))),
         assetRefs: job.assetRefs.filter(value => allowedEvidenceIds.has(value.evidenceId)),
         ...(result ? { result } : {}),
+        ...(job.metrics ? { metrics: job.metrics } : {}),
         ...(job.error ? { error: { code: job.error.code } } : {}),
         actionCount: job.actions.length,
         redacted: false
