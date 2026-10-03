@@ -64,12 +64,42 @@ export interface LabExecutionExecutor {
 }
 
 export interface TrustedLabDerivedFeatures {
-  version: 'classification-worker-derived-features.1';
+  version: 'classification-worker-derived-features.2';
   ocrTextByEvidenceId: Readonly<Record<string, {
     sourceHash: `sha256:${string}`;
     text: string;
   }>>;
   retrievalHints: readonly RetrievalHint[];
+  historicalCandidates: readonly {
+    candidateId: string;
+    sourceContentId: string;
+    sourceEvidenceId: string;
+    sourceFaceId?: string;
+    historicalContentId: string;
+    historicalEvidenceId: string;
+    kind: 'image_text_embedding' | 'face_embedding';
+    rank: number;
+    modelId: string;
+    modelRevision: string;
+    reasons: readonly string[];
+    featureRefs: readonly string[];
+    evidenceRefs: readonly string[];
+    historicalProjection: {
+      contentId: string;
+      evidenceId: string;
+      evidenceRevision: number;
+      sourceHash: `sha256:${string}`;
+      artifactId: string;
+      mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic';
+      byteLength: number;
+      consentRef: string;
+      personConsentRef?: string;
+      faceId?: string;
+      observationRef?: string;
+      confirmedReferenceIds: readonly string[];
+      lifecycleState: 'active';
+    };
+  }[];
   embeddingRetrieval: 'batch_topk' | 'disabled_component_failure' | 'not_applicable';
   faceCandidatesByEvidenceId?: Readonly<Record<string, {
     sourceHash: `sha256:${string}`;
@@ -85,6 +115,7 @@ export interface TrustedLabDerivedFeatures {
     }[];
   }>>;
   faceRetrieval?: 'batch_topk' | 'disabled_component_failure' | 'disabled_invalid_feature' | 'not_applicable';
+  historicalRetrieval: 'historical_topk' | 'no_candidates' | 'disabled_component_failure' | 'not_configured' | 'not_applicable';
 }
 
 export interface TrustedLabExecutionContext {

@@ -7,6 +7,9 @@
 > 重新授权读取的历史投影，不返回向量或相似度；排序不是概率，也不能自动确认人物姓名、亲属关系、
 > 事件或长期 Memory。该文件存储是 T1 内部参考实现，全栈接入时应替换为受鉴权的对象存储与
 > PostgreSQL/pgvector，同时保持本契约、撤回和删除语义。
+> 当前冻结版本为 `classification-historical-retrieval.2`：人脸 source、candidate 和 trace
+> 都绑定当前匿名 `sourceFaceId`，避免一张照片多张脸时发生候选碰撞；历史投影只携带历史匿名
+> `faceId` 和授权引用，仍不能据此自动写入姓名或亲属关系。
 
 > 2026-10-02：混合召回与内容组织契约升级为
 > [`classification-hybrid.schema.json`](classification-hybrid.schema.json) v2（`schemaVersion=2.0`、

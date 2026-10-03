@@ -83,6 +83,7 @@ function query({
     sources: [{
       sourceContentId: 'content_round_2',
       sourceEvidenceId: 'evidence_round_2',
+      ...(kind === 'face_embedding' ? { sourceFaceId: `face_${'b'.repeat(32)}` } : {}),
       kind,
       modelId: kind === 'face_embedding' ? 'face_embedding_test' : 'image_text_embedding_test',
       modelRevision,
@@ -198,6 +199,9 @@ test('face history requires independent person consent and remains an anonymous 
   const result = await adapter.query(query({ kind: 'face_embedding' }));
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].kind, 'face_embedding');
+  assert.equal(result.candidates[0].sourceFaceId, `face_${'b'.repeat(32)}`);
+  assert.equal(result.traces[0].sourceFaceId, `face_${'b'.repeat(32)}`);
+  assert.equal(result.candidates[0].historicalProjection.faceId, `face_${'a'.repeat(32)}`);
   assert.ok(result.candidates[0].reasons.includes('anonymous_person_candidate'));
   assert.equal(JSON.stringify(result).includes('displayName'), false);
   assert.equal(JSON.stringify(result).includes('relationship'), false);
@@ -207,5 +211,28 @@ test('face history requires independent person consent and remains an anonymous 
   await assert.rejects(
     () => adapter.upsert({ scope, authorizationRevision: 'auth_1', records: [invalid] }),
     /PERSON_CONSENT_REQUIRED/,
+  );
+});
+
+test('multiple current faces produce distinct anonymous candidates and traces', async (t) => {
+  const adapter = await adapterFixture(t);
+  await adapter.upsert({
+    scope,
+    authorizationRevision: 'auth_1',
+    records: [record({ kind: 'face_embedding' })],
+  });
+  const request = query({ kind: 'face_embedding' });
+  request.sources.push({
+    ...structuredClone(request.sources[0]),
+    sourceFaceId: `face_${'c'.repeat(32)}`,
+  });
+
+  const result = await adapter.query(request);
+
+  assert.equal(result.candidates.length, 2);
+  assert.equal(new Set(result.candidates.map((item) => item.candidateId)).size, 2);
+  assert.deepEqual(
+    result.traces.map((item) => item.sourceFaceId).sort(),
+    [`face_${'b'.repeat(32)}`, `face_${'c'.repeat(32)}`],
   );
 });

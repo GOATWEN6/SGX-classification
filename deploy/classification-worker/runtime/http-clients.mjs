@@ -87,6 +87,15 @@ export class HttpControlPlaneClient {
     );
   }
 
+  historicalQuery(jobId, body, options) {
+    return this.#post(
+      `/internal/v1/classification/jobs/${encodeURIComponent(jobId)}/historical-query`,
+      body,
+      'historical_query',
+      options,
+    );
+  }
+
   complete(jobId, body, options) {
     return this.#post(`/internal/v1/classification/jobs/${encodeURIComponent(jobId)}/complete`, body, 'complete', options);
   }

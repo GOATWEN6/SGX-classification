@@ -15,14 +15,18 @@ export const EXECUTION_CONTEXT_VERSION = 'classification-worker-stage-a-context.
 export const BRIDGE_REQUEST_VERSION = 'classification-worker-stage-a-bridge-request.1';
 export const BRIDGE_RESPONSE_VERSION = 'classification-worker-stage-a-bridge-response.1';
 export const PIPELINE_RESULT_VERSION = 'classification-worker-pipeline-result.1';
-export const DERIVED_FEATURES_VERSION = 'classification-worker-derived-features.1';
+export const DERIVED_FEATURES_VERSION = 'classification-worker-derived-features.2';
+export const HISTORICAL_RETRIEVAL_SCHEMA_VERSION = '2.0';
+export const HISTORICAL_RETRIEVAL_CONTRACT_VERSION = 'classification-historical-retrieval.2';
 const EMPTY_DERIVED_FEATURES = Object.freeze({
   version: DERIVED_FEATURES_VERSION,
   ocrTextByEvidenceId: Object.freeze({}),
   faceCandidatesByEvidenceId: Object.freeze({}),
   retrievalHints: Object.freeze([]),
+  historicalCandidates: Object.freeze([]),
   embeddingRetrieval: 'not_applicable',
   faceRetrieval: 'not_applicable',
+  historicalRetrieval: 'not_applicable',
 });
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
@@ -286,6 +290,100 @@ function faceSimilarity(leftFaces, rightFaces) {
   return best;
 }
 
+function containsHistoricalSecret(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(containsHistoricalSecret);
+  return Object.entries(value).some(([key, child]) => (
+    ['vector', 'similarity', 'retrievalScore', 'probability'].includes(key)
+      || containsHistoricalSecret(child)
+  ));
+}
+
+function validateHistoricalRetrievalResult(raw, { lease, sources, maxCandidatesPerSource, currentEvidenceIds }) {
+  ensure(raw && typeof raw === 'object', 'VERSION_MISMATCH', 'retrieval');
+  ensure(raw.schemaVersion === HISTORICAL_RETRIEVAL_SCHEMA_VERSION
+    && raw.contractVersion === HISTORICAL_RETRIEVAL_CONTRACT_VERSION,
+  'VERSION_MISMATCH', 'retrieval');
+  ensure(same(raw.scope, lease.scope) && raw.authorizationRevision === lease.authorizationRevision,
+    'VERSION_MISMATCH', 'retrieval');
+  ensure(raw.scoreMeaning === 'retrieval_order_not_probability'
+    && Array.isArray(raw.candidates) && Array.isArray(raw.traces),
+  'VERSION_MISMATCH', 'retrieval');
+  ensure(!containsHistoricalSecret(raw), 'VERSION_MISMATCH', 'retrieval', 'historical response exposes a score or vector');
+  const sourceByKey = new Map(sources.map((source) => [[
+    source.sourceEvidenceId,
+    source.kind,
+    source.sourceFaceId ?? '',
+  ].join('/'), source]));
+  const seen = new Set();
+  const candidateById = new Map();
+  for (const candidate of raw.candidates) {
+    ensure(candidate && typeof candidate === 'object'
+      && typeof candidate.candidateId === 'string' && !seen.has(candidate.candidateId),
+    'VERSION_MISMATCH', 'retrieval');
+    seen.add(candidate.candidateId);
+    candidateById.set(candidate.candidateId, candidate);
+    const source = sourceByKey.get([
+      candidate.sourceEvidenceId,
+      candidate.kind,
+      candidate.sourceFaceId ?? '',
+    ].join('/'));
+    const projection = candidate.historicalProjection;
+    ensure(source && candidate.sourceContentId === source.sourceContentId
+      && candidate.modelId === source.modelId && candidate.modelRevision === source.modelRevision,
+    'VERSION_MISMATCH', 'retrieval');
+    ensure(Number.isInteger(candidate.rank) && candidate.rank >= 1
+      && candidate.rank <= maxCandidatesPerSource,
+    'VERSION_MISMATCH', 'retrieval');
+    ensure(!currentEvidenceIds.has(candidate.historicalEvidenceId)
+      && projection && projection.lifecycleState === 'active'
+      && candidate.historicalContentId === projection.contentId
+      && candidate.historicalEvidenceId === projection.evidenceId
+      && SHA256_PATTERN.test(projection.sourceHash ?? '')
+      && typeof projection.artifactId === 'string'
+      && typeof projection.consentRef === 'string'
+      && Number.isInteger(projection.byteLength) && projection.byteLength > 0,
+    'VERSION_MISMATCH', 'retrieval');
+    ensure(Array.isArray(candidate.reasons) && candidate.reasons.length > 0
+      && Array.isArray(candidate.featureRefs) && candidate.featureRefs.length > 0
+      && Array.isArray(candidate.evidenceRefs)
+      && candidate.evidenceRefs.includes(candidate.sourceEvidenceId)
+      && candidate.evidenceRefs.includes(candidate.historicalEvidenceId),
+    'VERSION_MISMATCH', 'retrieval');
+    if (candidate.kind === 'face_embedding') {
+      ensure(FACE_ID_PATTERN.test(candidate.sourceFaceId ?? '')
+        && FACE_ID_PATTERN.test(projection.faceId ?? '')
+        && typeof projection.personConsentRef === 'string',
+      'VERSION_MISMATCH', 'retrieval');
+    } else {
+      ensure(candidate.sourceFaceId === undefined
+        && projection.faceId === undefined && projection.personConsentRef === undefined,
+      'VERSION_MISMATCH', 'retrieval');
+    }
+  }
+  ensure(raw.traces.length === sources.length, 'VERSION_MISMATCH', 'retrieval');
+  const traceKeys = new Set();
+  for (const trace of raw.traces) {
+    const key = [trace?.sourceEvidenceId, trace?.kind, trace?.sourceFaceId ?? ''].join('/');
+    const source = sourceByKey.get(key);
+    ensure(source && !traceKeys.has(key) && trace.sourceContentId === source.sourceContentId
+      && Number.isInteger(trace.eligibleCount) && trace.eligibleCount >= 0
+      && ['complete', 'truncated'].includes(trace.coverage)
+      && Array.isArray(trace.selectedCandidateIds)
+      && trace.selectedCandidateIds.length <= maxCandidatesPerSource,
+    'VERSION_MISMATCH', 'retrieval');
+    traceKeys.add(key);
+    for (const candidateId of trace.selectedCandidateIds) {
+      const candidate = candidateById.get(candidateId);
+      ensure(candidate && candidate.sourceEvidenceId === source.sourceEvidenceId
+        && candidate.kind === source.kind
+        && (candidate.sourceFaceId ?? '') === (source.sourceFaceId ?? ''),
+      'VERSION_MISMATCH', 'retrieval');
+    }
+  }
+  return structuredClone(raw);
+}
+
 function buildDerivedFeatures(featureBundle, execution) {
   ensure(featureBundle?.schemaVersion === FEATURE_BUNDLE_VERSION, 'VERSION_MISMATCH', 'retrieval');
   ensure(Array.isArray(featureBundle.evidence) && Array.isArray(featureBundle.componentErrors), 'VERSION_MISMATCH', 'retrieval');
@@ -310,6 +408,10 @@ function buildDerivedFeatures(featureBundle, execution) {
   const faceCandidatesByEvidenceId = {};
   const textVectorsByImageContentId = new Map();
   const images = [];
+  const historicalSources = [];
+  const personConsentByEvidenceId = new Map((execution?.guard?.evidence ?? [])
+    .filter((item) => typeof item?.evidenceId === 'string' && typeof item?.personConsentRef === 'string')
+    .map((item) => [item.evidenceId, item.personConsentRef]));
   const allowedFaceEvidenceIds = new Set(
     execution?.guard?.active === true && execution.guard.allowPersonMatching === true
       ? execution.guard.personMatchingEvidenceIds ?? []
@@ -382,6 +484,16 @@ function buildDerivedFeatures(featureBundle, execution) {
       // to the same content; the image vector is the fallback.
       vector: meanNormalized(textVectorsByImageContentId.get(image.contentId) ?? []) ?? image.imageVector,
     })).filter((item) => item.vector);
+    historicalSources.push(...resolved.map((item) => ({
+      sourceContentId: item.contentId,
+      sourceEvidenceId: item.evidenceId,
+      kind: 'image_text_embedding',
+      modelId: item.vector.modelId,
+      modelRevision: item.vector.modelRevision,
+      dimensions: item.vector.dimensions,
+      normalized: true,
+      vector: item.vector.vector,
+    })));
     const pairHints = new Map();
     for (const left of resolved) {
       const neighbors = resolved.filter((right) => right.evidenceId !== left.evidenceId
@@ -416,6 +528,24 @@ function buildDerivedFeatures(featureBundle, execution) {
   const faceHints = [];
   if (!faceFailed && !invalidFaceFeature) {
     const resolved = images.filter((image) => image.faceBundle?.faces.length);
+    for (const image of resolved) {
+      const personConsentRef = personConsentByEvidenceId.get(image.evidenceId);
+      ensure(typeof personConsentRef === 'string', 'VERSION_MISMATCH', 'retrieval', 'person consent is missing');
+      for (const face of image.faceBundle.faces) {
+        historicalSources.push({
+          sourceContentId: image.contentId,
+          sourceEvidenceId: image.evidenceId,
+          sourceFaceId: face.faceId,
+          kind: 'face_embedding',
+          modelId: image.faceBundle.embeddingModelId,
+          modelRevision: image.faceBundle.embeddingModelRevision,
+          dimensions: image.faceBundle.dimensions,
+          normalized: true,
+          vector: face.vector,
+          personConsentRef,
+        });
+      }
+    }
     const pairHints = new Map();
     for (const left of resolved) {
       const neighbors = resolved.filter((right) => right.evidenceId !== left.evidenceId
@@ -449,17 +579,22 @@ function buildDerivedFeatures(featureBundle, execution) {
     retrievalHints.push(...faceHints);
   }
   return {
-    version: DERIVED_FEATURES_VERSION,
-    ocrTextByEvidenceId,
-    faceCandidatesByEvidenceId,
-    retrievalHints,
-    embeddingRetrieval: embeddingFailed
-      ? 'disabled_component_failure'
-      : imageTextHints.length ? 'batch_topk' : 'not_applicable',
-    faceRetrieval: faceFailed
-      ? 'disabled_component_failure'
-      : invalidFaceFeature ? 'disabled_invalid_feature'
-        : faceHints.length ? 'batch_topk' : 'not_applicable',
+    derivedFeatures: {
+      version: DERIVED_FEATURES_VERSION,
+      ocrTextByEvidenceId,
+      faceCandidatesByEvidenceId,
+      retrievalHints,
+      historicalCandidates: [],
+      embeddingRetrieval: embeddingFailed
+        ? 'disabled_component_failure'
+        : imageTextHints.length ? 'batch_topk' : 'not_applicable',
+      faceRetrieval: faceFailed
+        ? 'disabled_component_failure'
+        : invalidFaceFeature ? 'disabled_invalid_feature'
+          : faceHints.length ? 'batch_topk' : 'not_applicable',
+      historicalRetrieval: 'not_applicable',
+    },
+    historicalSources,
   };
 }
 
@@ -569,12 +704,14 @@ export class StageAPipelineProcessor {
   constructor({
     featureProcessor,
     contextProvider,
+    historicalRetrieval,
     bridge,
     now = () => Date.now(),
     idFactory = () => `context-${randomUUID()}`,
   }) {
     this.featureProcessor = featureProcessor;
     this.contextProvider = contextProvider;
+    this.historicalRetrieval = historicalRetrieval;
     this.bridge = bridge;
     this.now = now;
     this.idFactory = idFactory;
@@ -620,9 +757,36 @@ export class StageAPipelineProcessor {
       });
     }
 
+    const built = buildDerivedFeatures(featureBundle.result, execution);
+    const derivedFeatures = built.derivedFeatures;
+    if (built.historicalSources.length && this.historicalRetrieval?.historicalQuery) {
+      try {
+        const historical = await this.historicalRetrieval.historicalQuery(lease.jobId, {
+          schemaVersion: HISTORICAL_RETRIEVAL_SCHEMA_VERSION,
+          contractVersion: HISTORICAL_RETRIEVAL_CONTRACT_VERSION,
+          scope: lease.scope,
+          authorizationRevision: lease.authorizationRevision,
+          sources: built.historicalSources,
+          maxCandidatesPerSource: execution.job.budgetPolicy.maxCandidatesPerContent,
+          excludeEvidenceIds: files.map((file) => file.evidence.evidenceId),
+        }, { signal });
+        const checked = validateHistoricalRetrievalResult(historical, {
+          lease,
+          sources: built.historicalSources,
+          maxCandidatesPerSource: execution.job.budgetPolicy.maxCandidatesPerContent,
+          currentEvidenceIds: new Set(files.map((file) => file.evidence.evidenceId)),
+        });
+        derivedFeatures.historicalCandidates = checked.candidates;
+        derivedFeatures.historicalRetrieval = checked.candidates.length ? 'historical_topk' : 'no_candidates';
+      } catch (error) {
+        if (signal.aborted || error instanceof WorkerExecutionError) throw error;
+        derivedFeatures.historicalRetrieval = 'disabled_component_failure';
+      }
+    } else if (built.historicalSources.length) {
+      derivedFeatures.historicalRetrieval = 'not_configured';
+    }
     await checkpoint('retrieval', 45);
     await checkpoint('vlm_extract', 55);
-    const derivedFeatures = buildDerivedFeatures(featureBundle.result, execution);
     const classified = await this.bridge.run({ identity, lease, execution, derivedFeatures, files, signal });
     await checkpoint('organizing', 80);
     const status = featureBundle.status === 'needs_review' || classified.status === 'needs_review'

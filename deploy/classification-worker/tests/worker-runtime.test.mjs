@@ -218,6 +218,72 @@ function personGuardForLease(lease, personMatchingEvidenceIds = []) {
   };
 }
 
+function historicalCandidate(source, { suffix = '1', faceSuffix = 'd' } = {}) {
+  const historicalContentId = `historical-content-${suffix}`;
+  const historicalEvidenceId = `historical-evidence-${suffix}`;
+  return {
+    candidateId: `historical-candidate-${suffix}`,
+    sourceContentId: source.sourceContentId,
+    sourceEvidenceId: source.sourceEvidenceId,
+    ...(source.sourceFaceId ? { sourceFaceId: source.sourceFaceId } : {}),
+    historicalContentId,
+    historicalEvidenceId,
+    kind: source.kind,
+    rank: 1,
+    modelId: source.modelId,
+    modelRevision: source.modelRevision,
+    reasons: source.kind === 'face_embedding'
+      ? ['anonymous_person_candidate', 'historical_projection_authorized']
+      : ['semantic_neighbor', 'historical_projection_authorized'],
+    featureRefs: [`historical-feature-${suffix}`],
+    evidenceRefs: [source.sourceEvidenceId, historicalEvidenceId],
+    historicalProjection: {
+      contentId: historicalContentId,
+      evidenceId: historicalEvidenceId,
+      evidenceRevision: 1,
+      sourceHash: digest(Buffer.from(`historical-${suffix}`)),
+      artifactId: `historical-artifact-${suffix}`,
+      mimeType: 'image/jpeg',
+      byteLength: 128,
+      consentRef: `historical-consent-${suffix}`,
+      ...(source.kind === 'face_embedding' ? {
+        personConsentRef: `historical-person-consent-${suffix}`,
+        faceId: `face_${faceSuffix.repeat(32)}`,
+      } : {}),
+      confirmedReferenceIds: [],
+      lifecycleState: 'active',
+    },
+  };
+}
+
+function historicalResult(request, candidates = []) {
+  return {
+    schemaVersion: '2.0',
+    contractVersion: 'classification-historical-retrieval.2',
+    scope: request.scope,
+    authorizationRevision: request.authorizationRevision,
+    candidates,
+    traces: request.sources.map((source) => ({
+      sourceContentId: source.sourceContentId,
+      sourceEvidenceId: source.sourceEvidenceId,
+      ...(source.sourceFaceId ? { sourceFaceId: source.sourceFaceId } : {}),
+      kind: source.kind,
+      eligibleCount: candidates.filter((item) => (
+        item.sourceEvidenceId === source.sourceEvidenceId
+          && item.kind === source.kind
+          && (item.sourceFaceId ?? '') === (source.sourceFaceId ?? '')
+      )).length,
+      selectedCandidateIds: candidates.filter((item) => (
+        item.sourceEvidenceId === source.sourceEvidenceId
+          && item.kind === source.kind
+          && (item.sourceFaceId ?? '') === (source.sourceFaceId ?? '')
+      )).map((item) => item.candidateId),
+      coverage: 'complete',
+    })),
+    scoreMeaning: 'retrieval_order_not_probability',
+  };
+}
+
 class FakeControlPlane {
   constructor({ leases, controls = [], completeError = null }) {
     this.leases = leases;
@@ -720,6 +786,11 @@ test('pipeline processor binds feature extraction, trusted context and canonical
       now: () => FIXED_NOW,
     }),
     contextProvider,
+    historicalRetrieval: {
+      async historicalQuery() {
+        throw new Error('historical service temporarily unavailable');
+      },
+    },
     bridge,
     now: () => FIXED_NOW,
     idFactory: () => 'context-request-1',
@@ -746,6 +817,55 @@ test('pipeline processor binds feature extraction, trusted context and canonical
   ]);
   assert.equal(calls[0].request.identity.leaseToken, lease.leaseToken);
   assert.equal(calls[1].input.execution.job.jobId, lease.jobId);
+  assert.equal(calls[1].input.derivedFeatures.historicalRetrieval, 'disabled_component_failure');
+});
+
+test('pipeline rejects a cross-scope historical response before the Stage A bridge', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-history-fence.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const lease = makeLease();
+  const imagePath = path.join(root, 'image.jpg');
+  const textPath = path.join(root, 'text.txt');
+  await writeFile(imagePath, Buffer.from('image-one'));
+  await writeFile(textPath, lease.evidence[1].inlineText.text);
+  let bridgeCalls = 0;
+  const processor = new StageAPipelineProcessor({
+    featureProcessor: new LocalFeatureBundleProcessor({ featureService: new FakeFeatures() }),
+    contextProvider: {
+      async executionContext(_jobId, request) {
+        return {
+          protocolVersion: PROTOCOL_VERSION,
+          requestId: request.requestId,
+          contextVersion: EXECUTION_CONTEXT_VERSION,
+          binding: contextBinding(lease),
+          execution: {
+            job: { jobId: lease.jobId, envelope: envelopeForLease(lease), budgetPolicy: minimalBudgetPolicy },
+            guard: {},
+            placeKindPolicy: {},
+          },
+        };
+      },
+    },
+    historicalRetrieval: {
+      async historicalQuery(_jobId, request) {
+        return { ...historicalResult(request), scope: { householdId: 'other-household', subjectId: 'subject-1' } };
+      },
+    },
+    bridge: { async run() { bridgeCalls += 1; } },
+    idFactory: () => 'context-request-history-fence',
+  });
+
+  await assert.rejects(() => processor.process({
+    lease,
+    identity: identityFor(lease),
+    files: [
+      { evidence: lease.evidence[0], sourcePath: imagePath, byteLength: 9 },
+      { evidence: lease.evidence[1], sourcePath: textPath, byteLength: Buffer.byteLength(lease.evidence[1].inlineText.text) },
+    ],
+    versions,
+    signal: new AbortController().signal,
+  }), (error) => error.errorCode === 'VERSION_MISMATCH' && error.stage === 'retrieval');
+  assert.equal(bridgeCalls, 0);
 });
 
 test('pipeline fails closed on an execution-context binding mismatch before the bridge', async (t) => {
@@ -1024,6 +1144,7 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
     ocrTextByHash: { [stripped(imageHashes[0])]: '1985年毕业留念' },
   });
   let bridgeInput;
+  let historicalRequest;
   const processor = new StageAPipelineProcessor({
     featureProcessor: new LocalFeatureBundleProcessor({ featureService, now: () => FIXED_NOW }),
     contextProvider: {
@@ -1043,6 +1164,13 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
             placeKindPolicy: { policyVersion: 'classification-place-kind.1' },
           },
         };
+      },
+    },
+    historicalRetrieval: {
+      async historicalQuery(_jobId, request) {
+        historicalRequest = request;
+        const source = request.sources.find((item) => item.sourceContentId === 'content-2');
+        return historicalResult(request, [historicalCandidate(source, { suffix: 'semantic-1' })]);
       },
     },
     bridge: {
@@ -1078,6 +1206,14 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
       && hint.rightPhotoId === 'evidence-image-2'
       && hint.rank === 1
   )));
+  assert.deepEqual(
+    historicalRequest.sources.find((item) => item.sourceContentId === 'content-2').vector,
+    [1, 0],
+    'user-bound text embedding must take priority over the raw image embedding',
+  );
+  assert.equal(bridgeInput.derivedFeatures.historicalRetrieval, 'historical_topk');
+  assert.equal(bridgeInput.derivedFeatures.historicalCandidates[0].historicalEvidenceId, 'historical-evidence-semantic-1');
+  assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('similarity'), false);
 });
 
 test('pipeline emits authorized face Top-K hints without promoting detections to identities', async (t) => {
@@ -1119,6 +1255,7 @@ test('pipeline emits authorized face Top-K hints without promoting detections to
     },
   });
   let bridgeInput;
+  let historicalRequest;
   const processor = new StageAPipelineProcessor({
     featureProcessor: new LocalFeatureBundleProcessor({
       featureService,
@@ -1142,6 +1279,13 @@ test('pipeline emits authorized face Top-K hints without promoting detections to
             placeKindPolicy: { policyVersion: 'classification-place-kind.1' },
           },
         };
+      },
+    },
+    historicalRetrieval: {
+      async historicalQuery(_jobId, request) {
+        historicalRequest = request;
+        const source = request.sources.find((item) => item.kind === 'face_embedding');
+        return historicalResult(request, [historicalCandidate(source, { suffix: 'face-1', faceSuffix: 'e' })]);
       },
     },
     bridge: {
@@ -1183,6 +1327,11 @@ test('pipeline emits authorized face Top-K hints without promoting detections to
   );
   assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('"vector"'), false);
   assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('personIdentity'), false);
+  const faceSource = historicalRequest.sources.find((item) => item.kind === 'face_embedding');
+  assert.equal(faceSource.sourceFaceId, `face_${'a'.repeat(32)}`);
+  assert.equal(faceSource.personConsentRef, 'person-consent-evidence-face-1');
+  assert.equal(bridgeInput.derivedFeatures.historicalCandidates[0].sourceFaceId, `face_${'a'.repeat(32)}`);
+  assert.equal(bridgeInput.derivedFeatures.historicalCandidates[0].historicalProjection.faceId, `face_${'e'.repeat(32)}`);
 });
 
 test('subprocess bridge exchanges only file-bound JSON and validates the response binding', async (t) => {
@@ -1235,6 +1384,25 @@ test('HTTP control-plane client fetches an immutable execution context through t
   assert.deepEqual(response, { ok: true });
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, 'https://control.example.test/internal/v1/classification/jobs/job-1/execution-context');
+  assert.equal(requests[0].options.headers.authorization, 'Bearer injected-test-token');
+});
+
+test('HTTP control-plane client posts historical retrieval through the job-scoped route', async () => {
+  const requests = [];
+  const client = new HttpControlPlaneClient({
+    baseUrl: 'https://control.example.test',
+    token: 'injected-test-token',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  const response = await client.historicalQuery('job/1', { requestId: 'history-request-1' });
+
+  assert.deepEqual(response, { ok: true });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://control.example.test/internal/v1/classification/jobs/job%2F1/historical-query');
   assert.equal(requests[0].options.headers.authorization, 'Bearer injected-test-token');
 });
 

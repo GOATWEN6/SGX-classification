@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { ScopeSchema, stable, type Scope } from './stage-a-contract';
 
 export const HISTORICAL_RETRIEVAL_SCHEMA_VERSION = '2.0';
-export const HISTORICAL_RETRIEVAL_CONTRACT_VERSION = 'classification-historical-retrieval.1';
+export const HISTORICAL_RETRIEVAL_CONTRACT_VERSION = 'classification-historical-retrieval.2';
 export const HISTORICAL_RETRIEVAL_STORE_VERSION = 'classification-historical-retrieval-store.1';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -80,6 +80,7 @@ export const HistoricalFeatureRecordSchema = z.object({
 export const HistoricalRetrievalSourceSchema = z.object({
   sourceContentId: id,
   sourceEvidenceId: id,
+  sourceFaceId: faceId.optional(),
   kind: featureKind,
   modelId: id,
   modelRevision: id,
@@ -94,7 +95,10 @@ export const HistoricalRetrievalSourceSchema = z.object({
   if(value.kind === 'face_embedding' && !value.personConsentRef) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'PERSON_CONSENT_REQUIRED' });
   }
-  if(value.kind !== 'face_embedding' && value.personConsentRef) {
+  if(value.kind === 'face_embedding' && !value.sourceFaceId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'SOURCE_FACE_REQUIRED' });
+  }
+  if(value.kind !== 'face_embedding' && (value.personConsentRef || value.sourceFaceId)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'PERSON_DATA_NOT_APPLICABLE' });
   }
 });
@@ -112,6 +116,7 @@ export const HistoricalRetrievalCandidateSchema = z.object({
   candidateId: id,
   sourceContentId: id,
   sourceEvidenceId: id,
+  sourceFaceId: faceId.optional(),
   historicalContentId: id,
   historicalEvidenceId: id,
   kind: featureKind,
@@ -122,7 +127,14 @@ export const HistoricalRetrievalCandidateSchema = z.object({
   featureRefs: z.array(id).min(1).max(32),
   evidenceRefs: z.array(id).min(2).max(32),
   historicalProjection: HistoricalProjectionSchema,
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if(value.kind === 'face_embedding' && !value.sourceFaceId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'SOURCE_FACE_REQUIRED' });
+  }
+  if(value.kind !== 'face_embedding' && value.sourceFaceId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'SOURCE_FACE_NOT_APPLICABLE' });
+  }
+});
 
 export const HistoricalRetrievalResultSchema = z.object({
   ...versionFields,
@@ -132,10 +144,19 @@ export const HistoricalRetrievalResultSchema = z.object({
   traces: z.array(z.object({
     sourceContentId: id,
     sourceEvidenceId: id,
+    sourceFaceId: faceId.optional(),
+    kind: featureKind,
     eligibleCount: z.number().int().nonnegative(),
     selectedCandidateIds: z.array(id).max(32),
     coverage: z.enum(['complete', 'truncated']),
-  }).strict()).max(256),
+  }).strict().superRefine((value, ctx) => {
+    if(value.kind === 'face_embedding' && !value.sourceFaceId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'SOURCE_FACE_REQUIRED' });
+    }
+    if(value.kind !== 'face_embedding' && value.sourceFaceId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'SOURCE_FACE_NOT_APPLICABLE' });
+    }
+  })).max(256),
   scoreMeaning: z.literal('retrieval_order_not_probability'),
 }).strict();
 
@@ -230,12 +251,12 @@ export class FileHistoricalRetrievalAdapter {
     records: HistoricalFeatureRecord[];
   }): Promise<{ upsertedRecords: number }> {
     const scope = ScopeSchema.parse(input.scope);
-    const records = z.array(HistoricalFeatureRecordSchema).min(1).max(4096).parse(input.records);
+    const records = z.array(HistoricalFeatureRecordSchema).min(1).max(4096).parse(input.records)
+      .map(record => ({ ...record, vector: normalizedVector(record.vector) }));
     if(records.some(record => !sameScope(record.scope, scope))) throw new Error('CROSS_SCOPE');
     if(records.some(record => record.authorizationRevision !== input.authorizationRevision)) {
       throw new Error('AUTHORIZATION_CHANGED');
     }
-    for(const record of records) normalizedVector(record.vector);
     return this.serialize(scope, async () => {
       const snapshot = await this.read(scope);
       const byId = new Map(snapshot.records.map(record => [record.recordId, record]));
@@ -287,7 +308,9 @@ export class FileHistoricalRetrievalAdapter {
         const idValue = candidateId([
           input.authorizationRevision,
           source.sourceEvidenceId,
+          source.sourceFaceId ?? '',
           record.evidenceId,
+          record.projection.faceId ?? '',
           source.kind,
           source.modelId,
           source.modelRevision,
@@ -297,6 +320,7 @@ export class FileHistoricalRetrievalAdapter {
           candidateId: idValue,
           sourceContentId: source.sourceContentId,
           sourceEvidenceId: source.sourceEvidenceId,
+          ...(source.sourceFaceId ? { sourceFaceId: source.sourceFaceId } : {}),
           historicalContentId: record.contentId,
           historicalEvidenceId: record.evidenceId,
           kind: source.kind,
@@ -314,6 +338,8 @@ export class FileHistoricalRetrievalAdapter {
       traces.push({
         sourceContentId: source.sourceContentId,
         sourceEvidenceId: source.sourceEvidenceId,
+        ...(source.sourceFaceId ? { sourceFaceId: source.sourceFaceId } : {}),
+        kind: source.kind,
         eligibleCount: ranked.length,
         selectedCandidateIds,
         coverage: ranked.length > selected.length ? 'truncated' : 'complete',

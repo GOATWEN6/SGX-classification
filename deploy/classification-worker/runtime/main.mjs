@@ -84,6 +84,7 @@ const processor = processorMode === 'feature_bundle_only'
   : new StageAPipelineProcessor({
     featureProcessor,
     contextProvider: controlPlane,
+    historicalRetrieval: controlPlane,
     bridge: new SubprocessStageABridge({
       buildDir: env.SGX_CLASSIFICATION_BUILD_DIR,
     }),

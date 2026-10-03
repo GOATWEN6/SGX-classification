@@ -21,6 +21,18 @@ user -> product frontend -> product backend -> DB/object store/lease
 - The product backend accepts a result only when lease, attempt, job, authorization, input and execution-profile revisions still match.
 - OCR and embedding are internal features. The browser must not call them directly.
 
+The Stage A worker also calls the job-scoped control-plane route
+`POST /internal/v1/classification/jobs/:jobId/historical-query` after local
+feature extraction. The request carries current image/text or consented face
+vectors only inside the trusted Worker-to-backend boundary. The response must
+follow `classification-historical-retrieval.2`: it returns authorized active
+historical projections and rank order, never vectors, similarity values,
+probabilities, names or family relationships. A malformed, cross-scope or
+stale-authorization response stops the job before the VLM bridge; temporary
+historical-service unavailability degrades historical retrieval only and leaves
+current-batch classification available. The product backend remains responsible
+for implementing this route and the durable index.
+
 ## Verified remote facts and current boundary
 
 The 2026-10-02 read-only preflight established:

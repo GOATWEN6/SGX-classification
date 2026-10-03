@@ -154,7 +154,7 @@ async function execute(requestPath, responsePath) {
   const request = JSON.parse(await readFile(requestPath, 'utf8'));
   ensure(request.schemaVersion === BRIDGE_REQUEST_VERSION, 'LAB_RUN_IDENTITY_MISMATCH');
   ensure(request.binding && request.execution && request.derivedFeatures, 'LAB_RUN_IDENTITY_MISMATCH');
-  ensure(request.derivedFeatures.version === 'classification-worker-derived-features.1', 'LAB_RUN_IDENTITY_MISMATCH');
+  ensure(request.derivedFeatures.version === 'classification-worker-derived-features.2', 'LAB_RUN_IDENTITY_MISMATCH');
 
   const buildDir = process.env.SGX_CLASSIFICATION_BUILD_DIR;
   ensure(buildDir && path.isAbsolute(buildDir), 'LAB_PROVIDER_UNAVAILABLE');
