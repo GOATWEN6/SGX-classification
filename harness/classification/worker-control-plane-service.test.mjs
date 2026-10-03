@@ -73,11 +73,11 @@ function profile() {
 function realProfile() {
   return {
     providerMode: 'stage_a_real',
-    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.2',
+    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.3',
     modelVersion: 'qwen3.7-flash-2026-07-15',
     promptVersion: 'sgx-five-facets.16',
     guardVersion: 'classification-lab-guard.1',
-    adapterVersion: 'classification-lab-stage-a-composition.1',
+    adapterVersion: 'classification-lab-stage-a-composition.2',
     taxonomyVersion: 'classification-lab-taxonomy.1',
     placeKindPolicyDigest: `sha256:${'3'.repeat(64)}`,
     scorerVersion: 'classification-semantic-score.2',

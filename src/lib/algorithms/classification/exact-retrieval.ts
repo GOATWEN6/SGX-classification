@@ -81,6 +81,28 @@ function explicitPair(association: AssociationCandidate): string | undefined {
 }
 function pairId(left: string, right: string): string { return [left, right].sort().join('/'); }
 
+/**
+ * Keeps structured upstream candidates before generic exact-overlap recall.
+ * Pair/relation duplicates would otherwise be evaluated twice and are rejected
+ * by the sparse organizer. This merge changes no decision or confidence field.
+ */
+export function mergeRetrievalCandidates(
+  primary: readonly RetrievalCandidate[],
+  fallback: readonly RetrievalCandidate[]
+): RetrievalCandidate[] {
+  const seen=new Set<string>();
+  const ids=new Set<string>();
+  const merged:RetrievalCandidate[]=[];
+  for(const raw of [...primary,...fallback]){
+    const candidate=RetrievalCandidateSchema.parse(raw);
+    const key=`${pairId(candidate.fromContentId,candidate.toContentId)}/${candidate.relation}`;
+    if(seen.has(key))continue;
+    if(ids.has(candidate.candidateId))throw new Error('DUPLICATE_RETRIEVAL_CANDIDATE');
+    seen.add(key);ids.add(candidate.candidateId);merged.push(candidate);
+  }
+  return merged;
+}
+
 function indexContents(contents: ContentItem[], observations: ContentObservation[]): Map<string, IndexedContent> {
   const result = new Map<string, IndexedContent>();
   for(const content of contents.filter(item => item.lifecycle === 'active')) {

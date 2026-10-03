@@ -273,6 +273,52 @@ test('keeps multi-image, batch and AI-candidate text out of per-photo Stage A co
   assert.equal(plan.baseOrganization.retrievalCandidates.length, 1);
 });
 
+test('an explicit all-photo batch statement forms one reversible AI story without becoming per-photo fact', () => {
+  const image1 = { record: imageEvidence('image_batch_1', Buffer.from('batch-1')), bytes: Buffer.from('batch-1') };
+  const image2 = { record: imageEvidence('image_batch_2', Buffer.from('batch-2')), bytes: Buffer.from('batch-2') };
+  const text = '这两张都是二〇二五年春节聚会，第一张是开饭前，第二张是饭后补拍。';
+  const note = { record: textEvidence('text_batch_same_story', text), text };
+  const envelope = envelopeOf({
+    images: [image1, image2], texts: [note],
+    bindings: [binding('binding_batch_same_story', 'content_text_1', { kind: 'batch' })]
+  });
+  const plan = buildStageALabPlan(planInput(envelope, [image1, image2], [note]));
+  const observations = plan.stageA.request.photos.map(photo => stageObservation(photo.photoId, {
+    mentions: [], times: [], places: [], events: [], scenes: [], unknownFacets: ['person', 'time', 'place', 'event', 'scene']
+  }));
+  const composed = composeStageALabResult({ plan, stageResult: stageResult(plan, observations), createdAt });
+  const batchCandidates = composed.retrievalCandidates.filter(item => item.method === 'batch-text-explicit-relation.1');
+  assert.equal(batchCandidates.length, 2);
+  assert.ok(batchCandidates.every(item => item.stageDecision === 'same' && item.reasons.includes('user_batch_same_story_statement')));
+  assert.ok(composed.observations.every(item => item.contentId === 'content_image_1' || item.contentId === 'content_image_2'));
+  const organized = organizeSparseContent({
+    schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', scope,
+    contents: composed.contents, observations: composed.observations, retrievalCandidates: composed.retrievalCandidates,
+    explicitAssociations: composed.explicitAssociations,
+    decisionPolicy: buildActiveEvidenceRulePolicy({ maxCandidatesPerContent: 8, createdAt }), createdAt
+  });
+  assert.equal(organized.stories.length, 1);
+  assert.deepEqual(new Set(organized.stories[0].memberContentIds), new Set(['content_image_1', 'content_image_2', 'content_text_1']));
+  assert.equal(organized.stories[0].state, 'ai_candidate');
+});
+
+test('an uncertain batch statement stays separate and creates no automatic association', () => {
+  const image1 = { record: imageEvidence('image_uncertain_1', Buffer.from('uncertain-1')), bytes: Buffer.from('uncertain-1') };
+  const image2 = { record: imageEvidence('image_uncertain_2', Buffer.from('uncertain-2')), bytes: Buffer.from('uncertain-2') };
+  const text = '这两张可能是同一次聚会，我也不确定。';
+  const note = { record: textEvidence('text_batch_uncertain', text), text };
+  const envelope = envelopeOf({
+    images: [image1, image2], texts: [note],
+    bindings: [binding('binding_batch_uncertain', 'content_text_1', { kind: 'batch' })]
+  });
+  const plan = buildStageALabPlan(planInput(envelope, [image1, image2], [note]));
+  const observations = plan.stageA.request.photos.map(photo => stageObservation(photo.photoId, {
+    mentions: [], times: [], places: [], events: [], scenes: [], unknownFacets: ['person', 'time', 'place', 'event', 'scene']
+  }));
+  const composed = composeStageALabResult({ plan, stageResult: stageResult(plan, observations), createdAt });
+  assert.equal(composed.retrievalCandidates.some(item => item.method === 'batch-text-explicit-relation.1'), false);
+});
+
 test('text-only input skips Stage A but still composes supplied text observations', () => {
   const note = { record: textEvidence('text_only', '1985年在北京毕业'), text: '1985年在北京毕业' };
   const envelope = envelopeOf({ texts: [note], bindings: [binding('binding_text_only', 'content_text_1', { kind: 'batch' })] });

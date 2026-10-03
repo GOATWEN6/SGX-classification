@@ -39,11 +39,12 @@ test('ingestion bridge keeps every source independent and preserves batch bindin
   assert.equal(adapted.batchBindings.length, 1);
   assert.equal(adapted.batchBindings[0].sourceContentId, 'content_text_1');
   assert.equal(adapted.explicitAssociations.length, 2);
-  assert.equal(adapted.retrievalCandidates.length, 1);
-  assert.ok(adapted.retrievalCandidates.every(item => item.stageDecision === 'unknown'));
+  assert.equal(adapted.retrievalCandidates.length, 3);
+  assert.equal(adapted.retrievalCandidates.filter(item => item.method === 'batch-text-explicit-relation.1').length, 2);
+  assert.equal(adapted.retrievalCandidates.filter(item => item.stageDecision === 'unknown').length, 1);
 });
 
-test('explicit multi-image explanation joins selected contents while batch text is not spread to images', () => {
+test('explicit multi-image and all-photo batch explanations organize one story without spreading text facts to images', () => {
   const { input, payloads } = materialize(fixtures.familyTransfer);
   const adapted = adaptIngestionForOrganization(input, payloads);
   const extractor = new DeterministicTextExtractor();
@@ -52,13 +53,14 @@ test('explicit multi-image explanation joins selected contents while batch text 
     schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', scope: input.scope,
     contents: adapted.contents, observations, retrievalCandidates: adapted.retrievalCandidates,
     explicitAssociations: adapted.explicitAssociations,
-    decisionPolicy: { schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', policyVersion: 'decision-shadow.1', mode: 'shadow', decisionMode: 'evidence_rules', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt: input.createdAt },
+    decisionPolicy: { schemaVersion: '2.0', contractVersion: 'classification-hybrid.2', policyVersion: 'decision-evidence-active.2', mode: 'active', decisionMode: 'evidence_rules', calibrated: false, maxCandidatesPerContent: 8, riskPolicyVersion: 'impact-risk.1', createdAt: input.createdAt },
     createdAt: input.createdAt
   });
   const storyWithAsr = organized.stories.find(story => story.memberContentIds.includes('content_asr_1'));
-  assert.deepEqual(new Set(storyWithAsr.memberContentIds), new Set(['content_asr_1', 'content_photo_1', 'content_photo_2']));
+  assert.deepEqual(new Set(storyWithAsr.memberContentIds), new Set(['content_asr_1', 'content_photo_1', 'content_photo_2', 'content_text_1']));
   const batchStory = organized.stories.find(story => story.memberContentIds.includes('content_text_1'));
-  assert.deepEqual(batchStory.memberContentIds, ['content_text_1']);
+  assert.equal(batchStory.storyId, storyWithAsr.storyId);
+  assert.ok(adapted.contents.filter(item => item.modality === 'photo').every(item => item.evidenceIds.length === 1));
 });
 
 test('deterministic text baseline extracts traceable common facets without claiming model accuracy', () => {

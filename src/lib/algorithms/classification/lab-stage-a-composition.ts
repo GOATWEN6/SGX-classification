@@ -39,7 +39,7 @@ import {
 import type { EvidenceRecord } from './types';
 
 export const STAGE_A_LAB_PLAN_VERSION = 'classification-lab-stage-a-plan.1';
-export const STAGE_A_LAB_COMPOSITION_VERSION = 'classification-lab-stage-a-composition.1';
+export const STAGE_A_LAB_COMPOSITION_VERSION = 'classification-lab-stage-a-composition.2';
 
 export interface StageALabAuthorization {
   actorId: string;

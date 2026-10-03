@@ -11,7 +11,7 @@ import {
   type RetrievalCandidate
 } from './hybrid-contract';
 
-export const SPARSE_CONTENT_ORGANIZATION_VERSION = 'content-organization.3';
+export const SPARSE_CONTENT_ORGANIZATION_VERSION = 'content-organization.4';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const dateTime = z.string().datetime({ offset: true });
@@ -348,6 +348,9 @@ function sparseDecisionResult(
   const inDistribution = false;
   const supportedStageEvent = candidate.relation === 'same_event'
     && candidate.reasons.some(reason => reason === 'stage_a_event_edge' || reason === 'stage_a_event_group');
+  const supportedBatchStory = candidate.relation === 'same_story'
+    && candidate.stageDecision === 'same'
+    && candidate.reasons.includes('user_batch_same_story_statement');
   if(blockedByKnownDifference) {
     action = 'review';
     riskLevel = 'high';
@@ -375,6 +378,21 @@ function sparseDecisionResult(
       reasons.push('stage_event_same');
     }
     if(candidate.reasons.includes('two_sided_user_text_support')) reasons.push('two_sided_user_text_support');
+  } else if(supportedBatchStory) {
+    basis = 'stage_relation';
+    evidenceStrength = evidence.conflicted ? 'conflicted' : 'supported';
+    if(evidence.conflicted) {
+      action = 'review';
+      riskLevel = 'high';
+      reasons.push('batch_story_statement_with_conflict');
+    } else if(groupImpact === 'bridge_existing_groups') {
+      action = 'review';
+      riskLevel = 'high';
+      reasons.push('batch_story_statement_bridges_groups');
+    } else {
+      action = 'auto_link_candidate';
+      reasons.push('user_batch_same_story_statement');
+    }
   } else if(candidate.stageDecision === 'unknown') {
     reasons.push('stage_unknown_keep_separate');
   } else {

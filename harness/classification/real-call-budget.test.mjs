@@ -19,7 +19,7 @@ function authorization(patch = {}) {
   return {
     version: REAL_CALL_AUTHORIZATION_VERSION,
     authorizationId: 'sgx_internal_t1_20261003',
-    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.2',
+    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.3',
     modelVersion: 'qwen3.7-flash-2026-07-15',
     caps: { maxRequests: 150, maxCostCny: 25, maxRetries: 0 },
     openingUsage: {

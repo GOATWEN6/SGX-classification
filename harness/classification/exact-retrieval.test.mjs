@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { retrieveExactCandidates, EXACT_RETRIEVAL_VERSION } = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/exact-retrieval.js`);
+const { mergeRetrievalCandidates, retrieveExactCandidates, EXACT_RETRIEVAL_VERSION } = require(`${process.env.CLASSIFICATION_BUILD_DIR}/src/lib/algorithms/classification/exact-retrieval.js`);
 
 const scope = { householdId: 'house_a', subjectId: 'elder_a' };
 const createdAt = '2026-09-27T12:00:00.000Z';
@@ -84,6 +84,22 @@ test('explicit user pair is not emitted as a duplicate retrieval candidate', () 
   }];
   const result = retrieveExactCandidates(input(contents, [], { explicitAssociations: explicit }));
   assert.ok(!result.candidates.some(item => new Set([item.fromContentId, item.toContentId]).has('content_0') && new Set([item.fromContentId, item.toContentId]).has('content_1')));
+});
+
+test('structured upstream candidate wins over a duplicate exact-retrieval fallback', () => {
+  const result = retrieveExactCandidates(input([content(0), content(1)], [observation(0, 'event', '家庭聚会'), observation(1, 'event', '家庭聚会')]));
+  const fallback = result.candidates[0];
+  const primary = {
+    ...fallback,
+    candidateId: 'candidate_batch_statement',
+    stageDecision: 'same',
+    method: 'batch-text-explicit-relation.1',
+    reasons: ['user_batch_same_story_statement']
+  };
+  const merged = mergeRetrievalCandidates([primary], [fallback]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].candidateId, 'candidate_batch_statement');
+  assert.equal(merged[0].stageDecision, 'same');
 });
 
 test('withdrawn content is omitted while unsafe scope and evidence are rejected', () => {

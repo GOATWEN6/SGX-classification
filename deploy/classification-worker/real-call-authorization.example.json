@@ -1,7 +1,7 @@
 {
   "version": "classification-real-call-authorization.1",
   "authorizationId": "replace_with_frozen_authorization",
-  "providerVersion": "qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.2",
+  "providerVersion": "qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.3",
   "modelVersion": "qwen3.7-flash-2026-07-15",
   "caps": {
     "maxRequests": 150,

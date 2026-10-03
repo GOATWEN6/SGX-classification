@@ -182,6 +182,15 @@ test('explicit OCR text grounds time only when the literal quote exists in deriv
   const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].supports[0].source,'ocr');assert.ok(!normalized.unknownFacets.includes('time'));
   o.times[0].supports[0].quote='服装看起来像 2023 年前后';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_QUOTE/);
 });
+test('candidate sanitizer quarantines one ungrounded model support without discarding valid facets',()=>{
+  const p={...photo('p_bad_support',''),ocrText:'20010\n07'};const o=observation(p,{event:'旅行',scene:'交通'});
+  o.times=[{value:'2001',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'ocr',quote:'照片角落标注 2001-07'}]}];
+  o.events[0].supports=[{photoId:p.photoId,source:'visual',quote:'Two people are standing beside a train.'}];
+  const sanitized=contract.sanitizeObservationCandidate(o,p);const accepted=contract.validateObservation(sanitized.candidate,p);
+  assert.deepEqual(accepted.times,[]);assert.ok(accepted.unknownFacets.includes('time'));
+  assert.deepEqual(accepted.events.map(item=>item.type),['旅行']);assert.deepEqual(accepted.scenes.map(item=>item.label),['交通']);
+  assert.deepEqual(sanitized.reviewItems,[`UNSUPPORTED_MODEL_SUPPORT_DROPPED:${p.photoId}:time:ocr`]);
+});
 test('candidate sanitizer drops visual-only time but preserves supported event and scene',()=>{
   const p=photo('p_daylight','');const o=observation(p,{event:'兴趣活动',scene:'户外'});
   o.events[0].supports=[{photoId:p.photoId,source:'visual',quote:'Person performing slow, deliberate martial arts-like postures.'}];
@@ -311,7 +320,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.16\/stage-a-validation\.2$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.16\/stage-a-validation\.3$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{

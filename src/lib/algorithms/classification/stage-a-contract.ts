@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
 export const PROMPT_VERSION = 'sgx-five-facets.16';
-export const STAGE_A_VALIDATION_VERSION = 'stage-a-validation.2';
+export const STAGE_A_VALIDATION_VERSION = 'stage-a-validation.3';
 export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
 export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -116,11 +116,41 @@ export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate
   const parsed=ObservationSchema.parse(raw);
   const reviewItems:string[]=[];
   const dropped=new Set<z.infer<typeof FacetSchema>>();
+  const sanitizeSupports=(facet:z.infer<typeof FacetSchema>,items:Support[],allowed?:ReadonlySet<Support['source']>):Support[]=>items.flatMap(item=>{
+    const bound=bindUniqueTextEvidence(item,photo);
+    if(allowed&&!allowed.has(bound.source)){
+      reviewItems.push(`UNSUPPORTED_MODEL_SUPPORT_DROPPED:${photo.photoId}:${facet}:${bound.source}`);return [];
+    }
+    try{validateSupports([bound],[photo]);return [bound];}
+    catch(error){
+      const code=error instanceof StageError?error.code:'INVALID_SUPPORT';
+      if(!['UNSUPPORTED_QUOTE','TEXT_SUPPORT_REQUIRES_EVIDENCE','FOREIGN_SOURCE','UNSUPPORTED_EXIF'].includes(code))throw error;
+      reviewItems.push(`UNSUPPORTED_MODEL_SUPPORT_DROPPED:${photo.photoId}:${facet}:${bound.source}`);return [];
+    }
+  });
   const filterInstruction=<T extends {supports:Support[]}>(facet:z.infer<typeof FacetSchema>,items:T[]):T[]=>items.filter(item=>{
     if(!instructionOnly(item.supports))return true;
     dropped.add(facet);reviewItems.push(`UNTRUSTED_INSTRUCTION_DROPPED:${photo.photoId}:${facet}`);return false;
   });
+  const people=filterInstruction('person',parsed.people).flatMap(person=>{
+    const supports=sanitizeSupports('person',person.supports);
+    if(supports.some(item=>item.source==='visual'))return [{...person,supports}];
+    dropped.add('person');return [];
+  });
+  const mentions=filterInstruction('person',parsed.mentions).flatMap(mention=>{
+    const supports=sanitizeSupports('person',mention.supports,new Set<Support['source']>(['caption','user_text','final_asr']));
+    if(supports.length)return [{...mention,supports}];
+    dropped.add('person');return [];
+  });
+  const sanitizeItems=<T extends {supports:Support[]}>(facet:z.infer<typeof FacetSchema>,items:T[]):T[]=>filterInstruction(facet,items).flatMap(item=>{
+    const supports=sanitizeSupports(facet,item.supports);
+    if(supports.length)return [{...item,supports}];
+    dropped.add(facet);return [];
+  });
   const times=filterInstruction('time',parsed.times).flatMap(time=>{
+    const supports=sanitizeSupports('time',time.supports);
+    if(!supports.length){dropped.add('time');return [];}
+    time={...time,supports};
     if(time.supports.every(item=>item.source==='visual')){
       dropped.add('time');reviewItems.push(`UNSUPPORTED_VISUAL_TIME_DROPPED:${photo.photoId}`);return [];
     }
@@ -142,9 +172,11 @@ export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate
   });
   const candidate:Observation={
     ...parsed,
-    places:filterInstruction('place',parsed.places),
-    events:filterInstruction('event',parsed.events),
-    scenes:filterInstruction('scene',parsed.scenes),
+    people,
+    mentions,
+    places:sanitizeItems('place',parsed.places),
+    events:sanitizeItems('event',parsed.events),
+    scenes:sanitizeItems('scene',parsed.scenes),
     times,
     unknownFacets:[],
     conflicts:parsed.conflicts.filter(facet=>!dropped.has(facet))

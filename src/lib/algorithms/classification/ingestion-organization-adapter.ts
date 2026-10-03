@@ -18,7 +18,7 @@ import {
 } from './ingestion-contract';
 import { digest } from './stage-a-contract';
 
-export const INGESTION_ORGANIZATION_ADAPTER_VERSION = 'ingestion-organization-adapter.1';
+export const INGESTION_ORGANIZATION_ADAPTER_VERSION = 'ingestion-organization-adapter.2';
 
 export interface IngestionPayloads {
   textByEvidenceId: Record<string, string>;
@@ -118,6 +118,44 @@ function candidateForBinding(binding: EvidenceBinding, targetContentId: string, 
   });
 }
 
+const uncertainBatchRelation=/(?:可能|也许|大概|好像|似乎|疑似|不确定|未必|不一定|may(?:be)?|might|perhaps|possibly|uncertain)/i;
+const negatedBatchRelation=/(?:不是|并非|不全是|不同(?:一次|一场|一个)|分别(?:是|属于)|not\s+(?:the\s+)?same|different\s+(?:event|story|occasion))/i;
+const explicitSameBatchRelation=/(?:这(?:几|两|三|四|五|六|七|八|九|十|\d+)?张|这些(?:照片|图片|影像)?|全部(?:照片|图片|影像)?|所有(?:照片|图片|影像)?).{0,32}(?:都是|全是|同一次|同一场|同一个(?:故事|事件|活动|聚会|旅行|生日|婚礼))|(?:these|all)\s+(?:photos|images).{0,48}(?:same\s+(?:event|story|occasion|trip)|all\s+(?:are|belong))/i;
+
+/**
+ * Recognizes only an explicit all-photo relationship statement. The note stays
+ * an independent batch-level Content item; none of its facets are copied onto
+ * an image. The result is an AI organization candidate, not a confirmed fact.
+ */
+function candidatesForExplicitBatchStatement(
+  binding: EvidenceBinding,
+  contents: readonly ContentItem[],
+  envelope: IngestionEnvelope
+): RetrievalCandidate[] {
+  if(binding.authority!=='user_explicit'||binding.state!=='active'||binding.target.kind!=='batch')return [];
+  const source=contents.find(content=>content.contentId===binding.sourceContentId&&content.lifecycle==='active');
+  const text=source?.originalText?.normalize('NFKC').trim()??'';
+  const images=contents.filter(content=>content.lifecycle==='active'&&content.modality==='photo');
+  if(images.length<2||!text||uncertainBatchRelation.test(text)||negatedBatchRelation.test(text)||!explicitSameBatchRelation.test(text))return [];
+  return images.map((image,index)=>RetrievalCandidateSchema.parse({
+    schemaVersion:HYBRID_SCHEMA_VERSION,
+    contractVersion:HYBRID_CONTRACT_VERSION,
+    candidateId:`candidate_${digest([INGESTION_ORGANIZATION_ADAPTER_VERSION,'batch_same_story',binding.bindingId,image.contentId]).slice(7,31)}`,
+    scope:envelope.scope,
+    fromContentId:source!.contentId,
+    toContentId:image.contentId,
+    relation:'same_story',
+    rank:index+1,
+    stageDecision:'same',
+    method:'batch-text-explicit-relation.1',
+    coverage:'selected',
+    reasons:['user_batch_same_story_statement'],
+    featureRefs:[],
+    evidenceRefs:pairEvidenceRefs(binding,image.contentId,envelope),
+    createdAt:binding.createdAt
+  }));
+}
+
 export function adaptIngestionForOrganization(raw: unknown, payloads: IngestionPayloads): IngestionOrganizationOutput {
   const envelope = parseIngestionEnvelope(raw);
   const contents = envelope.contents.map(item => {
@@ -146,6 +184,7 @@ export function adaptIngestionForOrganization(raw: unknown, payloads: IngestionP
         state: binding.state,
         evidenceRefs: [...binding.evidenceRefs]
       });
+      retrievalCandidates.push(...candidatesForExplicitBatchStatement(binding,contents,envelope));
       continue;
     }
     for(const targetContentId of binding.target.contentIds) {

@@ -50,10 +50,10 @@ const versions = {
   gitCommit: env.SGX_GIT_COMMIT,
   contractVersion: env.SGX_CONTRACT_VERSION ?? 'classification-ingestion.2',
   providerVersion: env.SGX_PROVIDER_VERSION
-    ?? `${vlmProvider}:${vlmModel}:${promptVersion}:stage-a-validation.2`,
+    ?? `${vlmProvider}:${vlmModel}:${promptVersion}:stage-a-validation.3`,
   promptVersion,
   guardVersion: env.SGX_GUARD_VERSION ?? 'classification-lab-guard.1',
-  adapterVersion: env.SGX_ADAPTER_VERSION ?? 'classification-lab-stage-a-composition.1',
+  adapterVersion: env.SGX_ADAPTER_VERSION ?? 'classification-lab-stage-a-composition.2',
   taxonomyVersion: env.SGX_TAXONOMY_VERSION ?? 'classification-lab-taxonomy.1',
   ocrVersion: env.SGX_OCR_MODEL_REVISION ?? 'unconfigured',
   embeddingVersion: env.SGX_EMBEDDING_REVISION ?? 'unconfigured',

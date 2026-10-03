@@ -19,7 +19,7 @@ import {
 } from './lab-stage-a-composition';
 import { organizeSparseContent } from './content-organization';
 import { buildCrossRoundAssociations } from './cross-round-association';
-import { retrieveExactCandidates } from './exact-retrieval';
+import { mergeRetrievalCandidates, retrieveExactCandidates } from './exact-retrieval';
 import { DeterministicTextExtractor } from './text-extractor';
 import {
   ACTIVE_EVIDENCE_RULE_POLICY_VERSION,
@@ -309,7 +309,7 @@ class StageALabExecutor implements LabExecutionExecutor {
         scope: context.job.envelope.scope,
         contents: composed.contents,
         observations: composed.observations,
-        retrievalCandidates: [...composed.retrievalCandidates, ...retrieval.candidates],
+        retrievalCandidates: mergeRetrievalCandidates(composed.retrievalCandidates,retrieval.candidates),
         explicitAssociations: composed.explicitAssociations,
         decisionPolicy: buildActiveEvidenceRulePolicy({
           maxCandidatesPerContent: context.job.budgetPolicy.maxCandidatesPerContent,

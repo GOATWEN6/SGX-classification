@@ -14,7 +14,7 @@ import { ApiVisionProvider, PROVIDER_ENDPOINTS, type Transport } from './stage-a
 import { ClassificationEngine } from './stage-a-pipeline';
 import { PROMPT_VERSION, STAGE_A_VALIDATION_VERSION, StageError, digest } from './stage-a-contract';
 import { DeterministicTextExtractor } from './text-extractor';
-import { retrieveExactCandidates } from './exact-retrieval';
+import { mergeRetrievalCandidates, retrieveExactCandidates } from './exact-retrieval';
 import { organizeSparseContent } from './content-organization';
 import {
   buildActiveEvidenceRulePolicy,
@@ -375,7 +375,7 @@ export async function runRealSmoke(
       scope: built.envelope.scope,
       contents: composed.contents,
       observations: composed.observations,
-      retrievalCandidates: [...composed.retrievalCandidates, ...retrieval.candidates],
+      retrievalCandidates: mergeRetrievalCandidates(composed.retrievalCandidates,retrieval.candidates),
       explicitAssociations: composed.explicitAssociations,
       decisionPolicy: buildActiveEvidenceRulePolicy({
         maxCandidatesPerContent: 8,

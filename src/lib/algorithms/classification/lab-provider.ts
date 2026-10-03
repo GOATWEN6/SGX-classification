@@ -4,7 +4,7 @@ import {
   type ContentObservation,
   type SparseOrganizationResult
 } from './content-organization';
-import { retrieveExactCandidates } from './exact-retrieval';
+import { mergeRetrievalCandidates, retrieveExactCandidates } from './exact-retrieval';
 import { adaptIngestionForOrganization, type IngestionPayloads } from './ingestion-organization-adapter';
 import type { IngestionEnvelope } from './ingestion-contract';
 import type { LabHighImpactClaim } from './lab-execution-contract';
@@ -81,7 +81,7 @@ export class DeterministicLabProvider implements ClassificationLabProvider {
       scope: envelope.scope,
       contents: adapted.contents,
       observations,
-      retrievalCandidates: [...adapted.retrievalCandidates, ...retrieval.candidates],
+      retrievalCandidates: mergeRetrievalCandidates(adapted.retrievalCandidates,retrieval.candidates),
       explicitAssociations: adapted.explicitAssociations,
       decisionPolicy: {
         schemaVersion: '2.0',
