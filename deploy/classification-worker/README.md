@@ -24,7 +24,7 @@ user -> product frontend -> product backend -> DB/object store/lease
 Before a `stage_a_real` job can be leased, the product control plane must load
 `CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH`. The referenced JSON is a
 deployment-specific, non-secret authorization receipt. It freezes the provider
-and model, the cumulative `150` request / `¥25` / zero-retry cap, person-matching
+and model, the cumulative `200` request / `¥25` / zero-retry cap, person-matching
 permission, expiry, and the reconciled usage from all earlier real campaigns.
 The checked-in `real-call-authorization.example.json` is deliberately expired.
 

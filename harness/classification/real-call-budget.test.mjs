@@ -56,6 +56,18 @@ test('real-call authorization rejects an opening balance above the user cap', ()
   })).success, false);
 });
 
+test('real-call authorization accepts the approved fifty-call extension but keeps a hard ceiling', () => {
+  assert.equal(RealCallAuthorizationSchema.safeParse(authorization({
+    authorizationId: 'sgx_internal_t1_postfix_20261003',
+    caps: { maxRequests: 200, maxCostCny: 25, maxRetries: 0 },
+    openingUsage: { requests: 149, costCny: 22.775116, sourceRefs: ['prior-ledger'] },
+    authorizationEvidenceRef: 'user-approved-additional-50-requests-existing-25-cny-cap-20261003',
+  })).success, true);
+  assert.equal(RealCallAuthorizationSchema.safeParse(authorization({
+    caps: { maxRequests: 201, maxCostCny: 25, maxRetries: 0 },
+  })).success, false);
+});
+
 test('shared real-call ledger starts from prior runs and releases unused reservation', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-real-call-budget.'));
   t.after(() => rm(root, { recursive: true, force: true }));

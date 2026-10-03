@@ -24,12 +24,12 @@ export const RealCallAuthorizationSchema = z.object({
   providerVersion: id,
   modelVersion: id,
   caps: z.object({
-    maxRequests: z.number().int().min(1).max(150),
+    maxRequests: z.number().int().min(1).max(200),
     maxCostCny: z.number().positive().max(25),
     maxRetries: z.literal(0),
   }).strict(),
   openingUsage: z.object({
-    requests: z.number().int().nonnegative().max(150),
+    requests: z.number().int().nonnegative().max(200),
     costCny: z.number().nonnegative().max(25),
     sourceRefs: z.array(z.string().min(1)).min(1),
   }).strict(),
@@ -78,7 +78,7 @@ const RealCallLedgerSchema = z.object({
   authorizationId: id,
   configDigest: sha256,
   caps: z.object({
-    maxRequests: z.number().int().min(1).max(150),
+    maxRequests: z.number().int().min(1).max(200),
     maxCostMicroCny: z.number().int().positive().max(25_000_000),
     maxRetries: z.literal(0),
   }).strict(),
