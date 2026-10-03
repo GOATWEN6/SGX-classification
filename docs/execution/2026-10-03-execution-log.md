@@ -173,3 +173,19 @@ SHA-256 为
 2. 修正 formal evaluator 的 taxonomy、相对时间 alias、系统时间来源和人物框口径，再运行封闭 validation；
 3. 在 `/classification-lab/real` 接入多轮多图、文字、真实音频 ASR 和持久化，完成用户可操作的 T0/T1 本地体验；
 4. 只在上述混合链和页面完成后制作新的全栈交付包。当前包不能描述为最终算法交付。
+
+## 真实混合 T1 与全栈交付完成计划冻结
+
+用户要求把剩余目标、执行顺序、验收门槛和 ZIP 交付边界写成文档并按文档执行。新计划已写入：
+
+`docs/superpowers/plans/2026-10-03-classification-hybrid-t1-handoff-completion-plan.md`
+
+计划保留已有组件与真实运行成果，不重复搭建 Feature Service、Worker、Prompt 或单图真实页面。当前实现顺序冻结为：
+
+1. 在任何 face embedding 调用前校验逐图片人物授权；
+2. 将 face embedding 形成匿名候选，并增加同 household/subject 的跨轮历史检索契约与文件型参考实现；
+3. 增加原始语音 ASR 前置步骤，统一多图、多轮、文字绑定、人物授权和真实 Qwen 页面；
+4. 修正 evaluator 的 taxonomy、时间来源、OCR 注入和框语义，再做真实混合探索与冻结 validation；
+5. 完成页面人工验收后更新算法、部署、接口和验证文档，生成新的 T0/T1 全栈交付 ZIP。
+
+本计划的完成定义要求真实 Qwen 与真实 Feature Service 在同一完整链中运行，并同时证明跨轮检索、授权先于人脸计算、撤权/隔离/迟到结果门禁和原始语音到 final ASR。产品业务数据库、对象存储、pgvector、正式账号鉴权和队列仍由全栈工程师在 T2 接入。
