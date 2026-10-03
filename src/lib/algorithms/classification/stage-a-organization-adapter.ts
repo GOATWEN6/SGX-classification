@@ -33,7 +33,7 @@ import {
 import { validateRelation, type CachedObservation, type Edge, type Group } from './stage-a-association';
 import type { StageResult } from './stage-a-pipeline';
 
-export const STAGE_A_ORGANIZATION_ADAPTER_VERSION = 'stage-a-organization-adapter.1';
+export const STAGE_A_ORGANIZATION_ADAPTER_VERSION = 'stage-a-organization-adapter.2';
 
 export interface StageAOrganizationInput {
   request: Request;
@@ -387,6 +387,37 @@ function retrievalFromEdge(edge: Edge, sourceEdgeId: string, scope: Request['sco
   });
 }
 
+function mergePersonRetrievalCandidates(
+  left: RetrievalCandidate,
+  right: RetrievalCandidate
+): RetrievalCandidate {
+  if(left.relation !== 'same_person' || right.relation !== 'same_person'
+    || pairKey(left.fromContentId, left.toContentId, left.relation) !== pairKey(right.fromContentId, right.toContentId, right.relation)) {
+    fail('DUPLICATE_STAGE_A_EDGE');
+  }
+  const decisions = [left.stageDecision, right.stageDecision];
+  const stageDecision = decisions.includes('same')
+    ? 'same' as const
+    : decisions.includes('unknown') ? 'unknown' as const : 'different' as const;
+  const evidenceRefs = unique([...left.evidenceRefs, ...right.evidenceRefs]).sort();
+  const reasons = unique([...left.reasons, ...right.reasons, 'multiple_face_pairs_collapsed']).sort();
+  return RetrievalCandidateSchema.parse({
+    ...left,
+    candidateId: `candidate_${digest([
+      STAGE_A_ORGANIZATION_ADAPTER_VERSION,
+      'collapsed_person_edges',
+      [...[left.fromContentId, left.toContentId].sort()],
+      stageDecision,
+      evidenceRefs,
+      reasons
+    ]).slice(7, 31)}`,
+    stageDecision,
+    reasons,
+    evidenceRefs,
+    rank: Math.min(left.rank, right.rank)
+  });
+}
+
 function explicitFromUserEventEdge(edge: Edge, sourceEdgeId: string, contentById: Map<string, ContentItem>, createdAt: string): AssociationCandidate {
   return AssociationCandidateSchema.parse({
     associationId: `assoc_${digest([STAGE_A_ORGANIZATION_ADAPTER_VERSION, 'user_event', sourceEdgeId, edge.left, edge.right, edge.decision]).slice(7, 31)}`,
@@ -508,6 +539,7 @@ export function adaptStageAForOrganization(raw: StageAOrganizationInput): StageA
   const retrievalCandidates: RetrievalCandidate[] = [];
   const explicitAssociations: AssociationCandidate[] = [];
   const existingPairs = new Set<string>();
+  const retrievalIndexByPair = new Map<string, number>();
   for(const unvalidatedEdge of snapshotEdges) {
     const edge = validateSnapshotEdge(unvalidatedEdge, request, validatedObservations, photoById);
     const left = contentByStagePhotoId.get(edge.left.photoId);
@@ -522,8 +554,14 @@ export function adaptStageAForOrganization(raw: StageAOrganizationInput): StageA
     }
     const candidate = retrievalFromEdge(mappedEdge, sourceEdgeId, request.scope, contentById, raw.createdAt);
     const key = pairKey(candidate.fromContentId, candidate.toContentId, candidate.relation);
-    if(existingPairs.has(key)) fail('DUPLICATE_STAGE_A_EDGE');
+    if(existingPairs.has(key)) {
+      const existingIndex = retrievalIndexByPair.get(key);
+      if(candidate.relation !== 'same_person' || existingIndex === undefined) fail('DUPLICATE_STAGE_A_EDGE');
+      retrievalCandidates[existingIndex] = mergePersonRetrievalCandidates(retrievalCandidates[existingIndex], candidate);
+      continue;
+    }
     existingPairs.add(key);
+    retrievalIndexByPair.set(key, retrievalCandidates.length);
     retrievalCandidates.push(candidate);
   }
   retrievalCandidates.push(...retrievalFromGroups(snapshotGroups.map(group => remapGroup(group, contentIdByPhotoId)), request.scope, contentById, existingPairs, raw.createdAt));

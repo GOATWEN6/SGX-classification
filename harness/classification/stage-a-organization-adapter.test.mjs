@@ -167,6 +167,42 @@ test('event edge records when both sides are supported by user-provided text', (
   assert.ok(event.reasons.includes('two_sided_user_text_support'));
 });
 
+test('multiple anonymous face matches collapse to one content-level person candidate', () => {
+  const value = fixture();
+  value.result.snapshot.observations.photo_1.value.people.push({
+    faceId: 'face_3',
+    description: '另一位老人',
+    box: { x: 0.4, y: 0.1, width: 0.2, height: 0.2 },
+    supports: [support('photo_1')]
+  });
+  value.result.snapshot.observations.photo_2.value.people.push({
+    faceId: 'face_4',
+    description: '另一位老人',
+    box: { x: 0.4, y: 0.1, width: 0.2, height: 0.2 },
+    supports: [support('photo_2')]
+  });
+  const personEdge = (leftFaceId, rightFaceId, decision) => ({
+    kind: 'person',
+    left: { photoId: 'photo_1', faceId: leftFaceId },
+    right: { photoId: 'photo_2', faceId: rightFaceId },
+    decision,
+    supports: [support('photo_1'), support('photo_2')],
+    rationale: '匿名人物候选匹配',
+    deps: { ...value.edge.deps },
+    origin: 'ai'
+  });
+  value.result.snapshot.edges.push(
+    personEdge('face_1', 'face_2', 'same'),
+    personEdge('face_3', 'face_4', 'different')
+  );
+
+  const adapted = adaptStageAForOrganization({ request: value.request, result: value.result, createdAt });
+  const people = adapted.retrievalCandidates.filter(item => item.relation === 'same_person');
+  assert.equal(people.length, 1);
+  assert.equal(people[0].stageDecision, 'same');
+  assert.ok(people[0].reasons.includes('multiple_face_pairs_collapsed'));
+});
+
 test('an explicit user event correction is the only bridge path to user_confirmed', () => {
   const { request, result, edge } = fixture();
   request.corrections = [{
