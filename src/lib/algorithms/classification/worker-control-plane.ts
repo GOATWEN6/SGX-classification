@@ -37,6 +37,7 @@ export const WORKER_PIPELINE_RESULT_VERSION = 'classification-worker-pipeline-re
 export const WORKER_CONTROL_STATE_VERSION = 'classification-worker-control-state.1' as const;
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+const modelRef = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/);
 const sha256 = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const dateTime = z.string().datetime({ offset: true });
 const scope = z.object({ householdId: id, subjectId: id }).strict();
@@ -236,8 +237,8 @@ function normalizedVector(raw: unknown): {
   const norm = Math.sqrt(vector.reduce((sum, item) => sum + item * item, 0));
   if(!Number.isFinite(norm) || norm <= 0) return undefined;
   return {
-    modelId: id.parse(value.modelId),
-    modelRevision: id.parse(value.modelRevision),
+    modelId: modelRef.parse(value.modelId),
+    modelRevision: modelRef.parse(value.modelRevision),
     dimensions: value.dimensions as number,
     vector: vector.map(item => item / norm),
   };

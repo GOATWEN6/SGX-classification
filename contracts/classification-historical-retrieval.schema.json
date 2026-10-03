@@ -9,6 +9,12 @@
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
     },
+    "ModelRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$"
+    },
     "Sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "DateTime": { "type": "string", "format": "date-time" },
     "Scope": {
@@ -77,8 +83,8 @@
         "evidenceRevision": { "type": "integer", "minimum": 1 },
         "sourceHash": { "$ref": "#/definitions/Sha256" },
         "kind": { "enum": ["image_text_embedding", "face_embedding"] },
-        "modelId": { "$ref": "#/definitions/Id" },
-        "modelRevision": { "$ref": "#/definitions/Id" },
+        "modelId": { "$ref": "#/definitions/ModelRef" },
+        "modelRevision": { "$ref": "#/definitions/ModelRef" },
         "dimensions": { "type": "integer", "minimum": 1, "maximum": 65536 },
         "normalized": { "const": true },
         "vector": {
@@ -127,8 +133,8 @@
         "sourceEvidenceId": { "$ref": "#/definitions/Id" },
         "sourceFaceId": { "type": "string", "pattern": "^face_[a-f0-9]{32}$" },
         "kind": { "enum": ["image_text_embedding", "face_embedding"] },
-        "modelId": { "$ref": "#/definitions/Id" },
-        "modelRevision": { "$ref": "#/definitions/Id" },
+        "modelId": { "$ref": "#/definitions/ModelRef" },
+        "modelRevision": { "$ref": "#/definitions/ModelRef" },
         "dimensions": { "type": "integer", "minimum": 1, "maximum": 65536 },
         "normalized": { "const": true },
         "vector": {
@@ -215,8 +221,8 @@
         "historicalEvidenceId": { "$ref": "#/definitions/Id" },
         "kind": { "enum": ["image_text_embedding", "face_embedding"] },
         "rank": { "type": "integer", "minimum": 1, "maximum": 32 },
-        "modelId": { "$ref": "#/definitions/Id" },
-        "modelRevision": { "$ref": "#/definitions/Id" },
+        "modelId": { "$ref": "#/definitions/ModelRef" },
+        "modelRevision": { "$ref": "#/definitions/ModelRef" },
         "reasons": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/definitions/Id" } },
         "featureRefs": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/definitions/Id" } },
         "evidenceRefs": { "type": "array", "minItems": 2, "maxItems": 32, "items": { "$ref": "#/definitions/Id" } },

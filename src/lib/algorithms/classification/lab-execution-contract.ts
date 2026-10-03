@@ -1181,14 +1181,26 @@ export function validateLabExecutionResultAgainstEnvelope(
     }
     return values;
   };
+  const observationEvidenceForContent = (contentId: string): Set<string> => {
+    const content = contentById.get(contentId);
+    if(!content) throw new Error('FOREIGN_RESULT_CONTENT');
+    const values = new Set([content.evidenceId]);
+    for(const binding of envelope.bindings) {
+      if(binding.state !== 'active' || binding.target.kind !== 'contents'
+        || !binding.target.contentIds.includes(contentId)) continue;
+      const source = contentById.get(binding.sourceContentId);
+      if(source) values.add(source.evidenceId);
+    }
+    return values;
+  };
 
   for(const observation of result.output.observations) {
-    const content = contentById.get(observation.contentId);
-    if(!content || observation.evidenceId !== content.evidenceId) throw new Error('FOREIGN_RESULT_OBSERVATION');
+    const allowed = observationEvidenceForContent(observation.contentId);
+    if(!allowed.has(observation.evidenceId)) throw new Error('FOREIGN_RESULT_OBSERVATION');
     if(!observation.supports.some(support => support.evidenceId === observation.evidenceId)) {
       throw new Error('RESULT_PRIMARY_SUPPORT_MISSING');
     }
-    if(observation.supports.some(support => support.evidenceId !== content.evidenceId)) {
+    if(observation.supports.some(support => !allowed.has(support.evidenceId))) {
       throw new Error('FOREIGN_RESULT_SUPPORT');
     }
   }

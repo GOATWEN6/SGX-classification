@@ -10,6 +10,7 @@ export const HISTORICAL_RETRIEVAL_CONTRACT_VERSION = 'classification-historical-
 export const HISTORICAL_RETRIEVAL_STORE_VERSION = 'classification-historical-retrieval-store.1';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+const modelRef = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/);
 const sha256 = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const dateTime = z.string().datetime({ offset: true });
 const faceId = z.string().regex(/^face_[a-f0-9]{32}$/);
@@ -48,8 +49,8 @@ export const HistoricalFeatureRecordSchema = z.object({
   evidenceRevision: z.number().int().positive(),
   sourceHash: sha256,
   kind: featureKind,
-  modelId: id,
-  modelRevision: id,
+  modelId: modelRef,
+  modelRevision: modelRef,
   dimensions: z.number().int().positive().max(65536),
   normalized: z.literal(true),
   vector: z.array(finiteNumber).min(1).max(65536),
@@ -82,8 +83,8 @@ export const HistoricalRetrievalSourceSchema = z.object({
   sourceEvidenceId: id,
   sourceFaceId: faceId.optional(),
   kind: featureKind,
-  modelId: id,
-  modelRevision: id,
+  modelId: modelRef,
+  modelRevision: modelRef,
   dimensions: z.number().int().positive().max(65536),
   normalized: z.literal(true),
   vector: z.array(finiteNumber).min(1).max(65536),
@@ -121,8 +122,8 @@ export const HistoricalRetrievalCandidateSchema = z.object({
   historicalEvidenceId: id,
   kind: featureKind,
   rank: z.number().int().positive().max(32),
-  modelId: id,
-  modelRevision: id,
+  modelId: modelRef,
+  modelRevision: modelRef,
   reasons: z.array(id).min(1).max(8),
   featureRefs: z.array(id).min(1).max(32),
   evidenceRefs: z.array(id).min(2).max(32),

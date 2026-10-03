@@ -11,6 +11,7 @@ const { buildLabSubmission } = require(`${build}/src/lib/algorithms/classificati
 const {
   LAB_EXECUTION_RESULT_VERSION,
   buildTrustedLabGuardSnapshot,
+  validateLabExecutionResultAgainstEnvelope,
 } = require(`${build}/src/lib/algorithms/classification/lab-execution-contract.js`);
 const { FileTrustedLabGuardStore } = require(`${build}/src/lib/algorithms/classification/lab-execution-guard-store.js`);
 const { FileClassificationLabV2Store } = require(`${build}/src/lib/algorithms/classification/lab-execution-store.js`);
@@ -216,7 +217,7 @@ function featureBundle(record, built, vector = [1, 0]) {
           imageEmbedding: {
             sourceSha256: evidence.sourceHash.slice(7),
             sourceByteLength: evidence.byteLength,
-            modelId: 'embedding_test',
+            modelId: 'damo/multi-modal_clip-vit-base-patch16_zh',
             modelRevision: 'embedding_rev_1',
             dimensions: 2,
             normalized: true,
@@ -227,7 +228,7 @@ function featureBundle(record, built, vector = [1, 0]) {
             sourceByteLength: evidence.byteLength,
             detectorModelId: 'yunet_test',
             detectorModelRevision: 'yunet_rev_1',
-            embeddingModelId: 'sface_test',
+            embeddingModelId: 'opencv-zoo/face_recognition_sface_2021dec',
             embeddingModelRevision: 'sface_rev_1',
             dimensions: 2,
             normalized: true,
@@ -245,7 +246,7 @@ function featureBundle(record, built, vector = [1, 0]) {
           textEmbedding: {
             sourceSha256: evidence.sourceHash.slice(7),
             sourceByteLength: evidence.byteLength,
-            modelId: 'embedding_test',
+            modelId: 'damo/multi-modal_clip-vit-base-patch16_zh',
             modelRevision: 'embedding_rev_1',
             dimensions: 2,
             normalized: true,
@@ -397,6 +398,36 @@ test('reference control plane leases, fences, persists result and enables cross-
   assert.equal(context.binding.authorizationRevision, authorizationRevision);
 
   const firstClassification = await classificationResult(await store.get(firstRecord.jobId));
+  const firstImageContent = firstBuilt.envelope.contents.find(value => value.modality === 'image');
+  const firstTextContent = firstBuilt.envelope.contents.find(value => value.modality === 'user_text');
+  firstClassification.output.observations.push({
+    contentId: firstImageContent.contentId,
+    evidenceId: firstTextContent.evidenceId,
+    facet: 'event',
+    rawValue: '家庭照片',
+    normalizedValue: '家庭照片',
+    supports: [{
+      evidenceId: firstTextContent.evidenceId,
+      sourceType: 'user_text',
+      quote: '第1轮家庭照片',
+    }],
+    state: 'candidate',
+  });
+  const foreignObservation = structuredClone(firstClassification);
+  foreignObservation.output.observations.at(-1).evidenceId = 'evidence_not_bound';
+  foreignObservation.output.observations.at(-1).supports = [{
+    evidenceId: 'evidence_not_bound',
+    sourceType: 'user_text',
+    quote: '第1轮家庭照片',
+  }];
+  assert.throws(
+    () => validateLabExecutionResultAgainstEnvelope(
+      foreignObservation,
+      firstRecord.envelope,
+      firstRecord.executionProfile,
+    ),
+    /FOREIGN_RESULT_OBSERVATION/,
+  );
   const firstPipeline = {
     schemaVersion: WORKER_PIPELINE_RESULT_VERSION,
     generatedAt: new Date(clock.value).toISOString(),
@@ -471,7 +502,7 @@ test('reference control plane leases, fences, persists result and enables cross-
         sourceContentId: secondImage.contentId,
         sourceEvidenceId: secondImage.evidenceId,
         kind: 'image_text_embedding',
-        modelId: 'embedding_test',
+        modelId: 'damo/multi-modal_clip-vit-base-patch16_zh',
         modelRevision: 'embedding_rev_1',
         dimensions: 2,
         normalized: true,
