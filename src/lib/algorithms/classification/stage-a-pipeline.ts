@@ -98,16 +98,32 @@ export class ClassificationEngine {
       result.candidateTraces=selected.traces;
       if(!stopFurtherCalls)for(const pair of selected.pairs){
         const photos=pair.map(id=>current.get(id)!);
+        const pairPersonMatchingEnabled=initialAuthorization.allowPersonMatching&&pair.every(id=>observations[id].value.people.length>0);
         const oldPair=edges.filter(e=>[e.left.photoId,e.right.photoId].sort().join('/')===pair.join('/'));
         if(oldPair.length&&!pair.some(p=>changed.includes(p))&&!refChanged&&!correctionChanged)continue;
         // Old dependencies are removed before review; failed review cannot quietly reuse them.
         edges=edges.filter(e=>!oldPair.includes(e));
         try{
-          const raw=RelateSchema.parse(await call('relate',photos,{requestedPairs:[pair],personMatchingEnabled:initialAuthorization.allowPersonMatching,
+          const raw=RelateSchema.parse(await call('relate',photos,{requestedPairs:[pair],personMatchingEnabled:pairPersonMatchingEnabled,
             observations:pair.map(id=>observations[id].value),references:validReferences.filter(ref=>pair.includes(ref.endpoint.photoId))}));
-          const validated=raw.relations.map(e=>validateRelation(e,photos,observations,pair));
+          const validated:Edge[]=[];
+          for(const candidate of raw.relations){
+            if(candidate.kind==='person'&&!pairPersonMatchingEnabled){
+              if(!initialAuthorization.allowPersonMatching)throw new StageError('PERSON_MATCHING_NOT_AUTHORIZED');
+              candidateReviewItems.push(`PERSON_RELATION_IGNORED_NO_FACE:${pair.join(':')}`);
+              continue;
+            }
+            try{validated.push(validateRelation(candidate,photos,observations,pair));}
+            catch(error){
+              if(candidate.kind==='person'&&error instanceof StageError&&error.code==='UNKNOWN_FACE'){
+                candidateReviewItems.push(`PERSON_RELATION_DROPPED_UNKNOWN_FACE:${pair.join(':')}`);
+                continue;
+              }
+              throw error;
+            }
+          }
           if(!validated.some(e=>e.kind==='event'))throw new StageError('RELATION_COVERAGE');
-          if(initialAuthorization.allowPersonMatching&&pair.every(id=>observations[id].value.people.length)&&!validated.some(e=>e.kind==='person')){
+          if(pairPersonMatchingEnabled&&!validated.some(e=>e.kind==='person')){
             // A missing identity comparison must not discard valid event and facet results.
             // Keep the people separate and surface an auditable review item; the model prompt
             // asks for an explicit unknown relation, but this fallback protects product flow.

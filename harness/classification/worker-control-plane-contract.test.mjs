@@ -23,7 +23,7 @@ const versions = {
   gitCommit: '8654a83',
   contractVersion: 'classification-ingestion-v2.0.0',
   providerVersion: 'stage-a-provider.1',
-  promptVersion: 'sgx-five-facets.15',
+  promptVersion: 'sgx-five-facets.16',
   guardVersion: 'stage-a-guard.1',
   adapterVersion: 'cloud-worker.1',
   taxonomyVersion: 'sgx-taxonomy.1',

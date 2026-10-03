@@ -23,6 +23,19 @@ test('missing person relation keeps valid classification and safely leaves peopl
   assert.ok(r.reviewItems.includes('PERSON_RELATION_UNRESOLVED:a:b'));
   assert.ok(!r.errors.some(error=>error.code==='PERSON_RELATION_COVERAGE'));
 });
+test('relation pair without faces disables person matching and ignores a spurious face edge',async()=>{
+  const a=photo('a','同一次活动'),b=photo('b','同一次活动');
+  const s=setup([a,b],{a:observation(a,{event:'兴趣活动',face:true}),b:observation(b,{event:'兴趣活动'})},{eventDecision:()=> 'same',alterOutput:(value,stage)=>{
+    if(stage==='relate')value.relations.push({kind:'person',left:{photoId:'a',faceId:'face_1'},right:{photoId:'b',faceId:'invented_face'},decision:'unknown',supports:[{photoId:'a',source:'visual',quote:'可见人物'},{photoId:'b',source:'visual',quote:'无清晰人物'}],rationale:'无法判断'});
+    return value;
+  }});
+  const r=await run(s);
+  const relateContext=JSON.parse(s.calls.at(-1).body.messages[1].content[0].text).untrustedContext;
+  assert.equal(relateContext.personMatchingEnabled,false);
+  assert.deepEqual(groupMembers(r,'event'),[['a','b']]);
+  assert.ok(r.reviewItems.includes('PERSON_RELATION_IGNORED_NO_FACE:a:b'));
+  assert.ok(!r.errors.some(error=>error.code==='UNKNOWN_FACE'));
+});
 test('same person birthdays in different years remain separate even when model proposes same',async()=>{
   const s=two({eventDecision:()=> 'same',personDecision:()=> 'same'});s.req.photos[1].caption='2009 生日';s.bank.b=observation(s.req.photos[1],{time:'2009',event:'生日',face:true});s.sync();
   const r=await run(s);assert.equal(groupMembers(r,'event').length,2);assert.equal(groupMembers(r,'person').length,1);
@@ -298,7 +311,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.15\/stage-a-validation\.2$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.16\/stage-a-validation\.2$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{
