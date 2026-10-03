@@ -6,10 +6,13 @@ import {
   WorkerControlPlaneError,
   verifyWorkerBearer,
 } from './worker-control-plane';
+import { ClassificationT1AsrService } from './t1-asr-prejob';
 
 type WorkerOperation = (control: ClassificationWorkerControlPlane, body: unknown) => Promise<unknown>;
+type AsrWorkerOperation = (control: ClassificationT1AsrService, body: unknown) => Promise<unknown>;
 
 let cached: { signature: string; control: ClassificationWorkerControlPlane } | undefined;
+let asrCached: { signature: string; control: ClassificationT1AsrService } | undefined;
 
 function noStore(headers: HeadersInit = {}): HeadersInit {
   return { ...headers, 'Cache-Control': 'no-store' };
@@ -36,8 +39,32 @@ export function getClassificationWorkerControlPlane(): ClassificationWorkerContr
   return control;
 }
 
+export function getClassificationT1AsrService(): ClassificationT1AsrService {
+  requireEnabled();
+  const dataRoot = process.env.CLASSIFICATION_LAB_DATA_DIR ?? '';
+  const publicBaseUrl = process.env.CLASSIFICATION_WORKER_PUBLIC_BASE_URL
+    ?? `http://127.0.0.1:${process.env.PORT ?? '3137'}`;
+  const signature = JSON.stringify({ dataRoot, publicBaseUrl });
+  if(asrCached?.signature === signature) return asrCached.control;
+  const control = new ClassificationT1AsrService({
+    ...(dataRoot ? { dataRoot } : {}),
+    publicBaseUrl,
+  });
+  asrCached = { signature, control };
+  return control;
+}
+
 export function requireWorkerService(request: Request): ClassificationWorkerControlPlane {
   const control = getClassificationWorkerControlPlane();
+  verifyWorkerBearer(
+    request.headers.get('authorization'),
+    process.env.CLASSIFICATION_WORKER_CONTROL_TOKEN ?? '',
+  );
+  return control;
+}
+
+export function requireAsrWorkerService(request: Request): ClassificationT1AsrService {
+  const control = getClassificationT1AsrService();
   verifyWorkerBearer(
     request.headers.get('authorization'),
     process.env.CLASSIFICATION_WORKER_CONTROL_TOKEN ?? '',
@@ -75,3 +102,15 @@ export async function workerJsonPost(request: Request, operation: WorkerOperatio
   }
 }
 
+export async function workerAsrJsonPost(request: Request, operation: AsrWorkerOperation): Promise<NextResponse> {
+  try {
+    const control = requireAsrWorkerService(request);
+    const contentType = (request.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
+    if(contentType !== 'application/json') throw new WorkerControlPlaneError('CONTROL_PLANE_JSON_REQUIRED', 415);
+    const body = await request.json();
+    const result = await operation(control, body);
+    return NextResponse.json(result, { headers: noStore() });
+  } catch(error) {
+    return workerControlErrorResponse(error);
+  }
+}

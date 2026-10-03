@@ -14,6 +14,7 @@ import {
   StageAPipelineProcessor,
   SubprocessStageABridge,
 } from './pipeline-processor.mjs';
+import { AsrWorkerRuntime } from './asr-worker-runtime.mjs';
 
 function boolean(value, fallback = false) {
   if (value === undefined) return fallback;
@@ -35,6 +36,7 @@ const processorMode = env.SGX_PROCESSOR_MODE ?? 'stage_a';
 const vlmProvider = env.SGX_VLM_PROVIDER ?? 'qwen';
 const vlmModel = env.SGX_VLM_MODEL ?? 'qwen3.7-flash-2026-07-15';
 const promptVersion = env.SGX_PROMPT_VERSION ?? 'sgx-five-facets.16';
+const asrPrejobEnabled = boolean(env.SGX_ASR_PREJOB_ENABLED, false);
 if (!['stage_a', 'feature_bundle_only'].includes(processorMode)) {
   throw new Error('invalid SGX_PROCESSOR_MODE');
 }
@@ -75,6 +77,7 @@ const controlPlane = new HttpControlPlaneClient({
   baseUrl: env.SGX_CONTROL_PLANE_BASE_URL,
   token: env.SGX_CONTROL_PLANE_TOKEN,
 });
+const artifacts = new HttpArtifactClient({});
 const featureProcessor = new LocalFeatureBundleProcessor({
   featureService,
   personMatchingEnabled,
@@ -94,7 +97,7 @@ const runtime = new WorkerRuntime({
   versions,
   capabilities,
   controlPlane,
-  artifacts: new HttpArtifactClient({}),
+  artifacts,
   processor,
   scratchRoot: env.SGX_JOB_TMP_ROOT ?? '/tmp/sgx-classification/jobs',
   maxJobs: integer(env.SGX_MAX_CONCURRENCY, 1),
@@ -103,10 +106,25 @@ const runtime = new WorkerRuntime({
   pollIntervalMs: integer(env.SGX_POLL_INTERVAL_MS, 2_000),
   logger,
 });
+const asrRuntime = asrPrejobEnabled
+  ? new AsrWorkerRuntime({
+    workerId: env.SGX_WORKER_ID,
+    controlPlane,
+    artifacts,
+    featureService,
+    scratchRoot: env.SGX_ASR_JOB_TMP_ROOT ?? '/tmp/sgx-classification/asr',
+    maxJobs: integer(env.SGX_ASR_MAX_CONCURRENCY, 1),
+    pollIntervalMs: integer(env.SGX_ASR_POLL_INTERVAL_MS, 2_000),
+    logger,
+  })
+  : null;
 
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => controller.abort());
 }
 
-await runtime.runForever({ signal: controller.signal });
+await Promise.all([
+  runtime.runForever({ signal: controller.signal }),
+  ...(asrRuntime ? [asrRuntime.runForever({ signal: controller.signal })] : []),
+]);

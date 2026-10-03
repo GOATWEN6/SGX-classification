@@ -107,6 +107,37 @@ export class HttpControlPlaneClient {
   cancelAck(jobId, body, options) {
     return this.#post(`/internal/v1/classification/jobs/${encodeURIComponent(jobId)}/cancel-ack`, body, 'cancel_ack', options);
   }
+
+  asrLease(body, options) {
+    return this.#post('/internal/v1/classification/asr/leases', body, 'asr_lease', options);
+  }
+
+  asrHeartbeat(jobId, body, options) {
+    return this.#post(
+      `/internal/v1/classification/asr/jobs/${encodeURIComponent(jobId)}/heartbeat`,
+      body,
+      'asr_heartbeat',
+      options,
+    );
+  }
+
+  asrComplete(jobId, body, options) {
+    return this.#post(
+      `/internal/v1/classification/asr/jobs/${encodeURIComponent(jobId)}/complete`,
+      body,
+      'asr_complete',
+      options,
+    );
+  }
+
+  asrFail(jobId, body, options) {
+    return this.#post(
+      `/internal/v1/classification/asr/jobs/${encodeURIComponent(jobId)}/fail`,
+      body,
+      'asr_fail',
+      options,
+    );
+  }
 }
 
 export class HttpArtifactClient {
@@ -200,6 +231,10 @@ export class LocalFeatureServiceClient {
 
   faceEmbeddings(source, options) {
     return this.#call('/internal/v1/features/face-embeddings', source, options);
+  }
+
+  asr(source, options) {
+    return this.#call('/internal/v1/features/asr', source, options);
   }
 }
 

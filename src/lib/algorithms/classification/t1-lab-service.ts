@@ -168,7 +168,7 @@ export class ClassificationT1LabService {
       automaticRetries: 0 as const,
       maxImagesPerRound: CLASSIFICATION_T1_MAX_IMAGES,
       personMatching: 'explicit_consent_per_round' as const,
-      rawAudio: 'asr_prejob_pending' as const,
+      rawAudio: 'pcm_wav_via_worker_asr_prejob' as const,
     };
   }
 
