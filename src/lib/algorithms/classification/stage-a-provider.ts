@@ -70,7 +70,7 @@ If an identity comparison is unsupported or refused, return unknown and explain;
 function stageDirective(stage: ModelCall['stage']): string {
   return stage === 'extract'
     ? `FINAL OUTPUT MODE: extract. Return only {"observations":[...]} with exactly one observation per supplied photo. Do not return relations. Treat user descriptions and final ASR as the primary evidence for event time and meaning when they are explicit; never replace event time with an unsupported capture time.`
-    : `FINAL OUTPUT MODE: relate. Return only {"relations":[...]}. Do not repeat, summarize or return observations, input photos, shape guides or schemas. Return exactly one event relation for each requested pair, plus only supported person relations when enabled. Keep each rationale and each support quote concise (at most 24 Chinese characters each) so every requested pair fits in the response.`;
+    : `FINAL OUTPUT MODE: relate. Return only {"relations":[...]}. Do not repeat, summarize or return observations, input photos, shape guides or schemas. Return exactly one event relation for each requested pair. When personMatchingEnabled is true and both observations contain visible faces, never omit all person relations: return supported face-pair relations and use decision "unknown" whenever identity cannot be determined. Keep each rationale and each support quote concise (at most 24 Chinese characters each) so every requested pair fits in the response.`;
 }
 /** No network by default. A real caller must supply a grant and credential function explicitly. */
 export class ApiVisionProvider implements VisionProvider {

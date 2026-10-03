@@ -107,7 +107,12 @@ export class ClassificationEngine {
             observations:pair.map(id=>observations[id].value),references:validReferences.filter(ref=>pair.includes(ref.endpoint.photoId))}));
           const validated=raw.relations.map(e=>validateRelation(e,photos,observations,pair));
           if(!validated.some(e=>e.kind==='event'))throw new StageError('RELATION_COVERAGE');
-          if(initialAuthorization.allowPersonMatching&&pair.every(id=>observations[id].value.people.length)&&!validated.some(e=>e.kind==='person'))throw new StageError('PERSON_RELATION_COVERAGE');
+          if(initialAuthorization.allowPersonMatching&&pair.every(id=>observations[id].value.people.length)&&!validated.some(e=>e.kind==='person')){
+            // A missing identity comparison must not discard valid event and facet results.
+            // Keep the people separate and surface an auditable review item; the model prompt
+            // asks for an explicit unknown relation, but this fallback protects product flow.
+            candidateReviewItems.push(`PERSON_RELATION_UNRESOLVED:${pair.join(':')}`);
+          }
           if(new Set(validated.map(e=>pairKey(e.kind,e.left,e.right))).size!==validated.length)throw new StageError('DUPLICATE_RELATION');
           if(!initialAuthorization.allowPersonMatching&&validated.some(e=>e.kind==='person'))throw new StageError('PERSON_MATCHING_NOT_AUTHORIZED');
           edges.push(...validated);

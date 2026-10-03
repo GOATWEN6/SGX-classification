@@ -14,6 +14,15 @@ test('stage A: actual multi-stage API body, observations, event instance and vie
   assert.equal(s.calls[2].body.messages[1].content.filter(c=>c.type==='image_url').length,2);
   s.req.trigger='view';const cached=await run(s);assert.equal(cached.usage.requests,0);assert.deepEqual(cached.snapshot.groups,r.snapshot.groups);
 });
+test('missing person relation keeps valid classification and safely leaves people separate',async()=>{
+  const s=two({eventDecision:()=> 'same',alterOutput:(value,stage)=>stage==='relate'?{relations:value.relations.filter(item=>item.kind!=='person')}:value});
+  const r=await run(s);
+  assert.equal(r.workflowStatus,'needs_review');
+  assert.deepEqual(groupMembers(r,'event'),[['a','b']]);
+  assert.equal(groupMembers(r,'person').length,2);
+  assert.ok(r.reviewItems.includes('PERSON_RELATION_UNRESOLVED:a:b'));
+  assert.ok(!r.errors.some(error=>error.code==='PERSON_RELATION_COVERAGE'));
+});
 test('same person birthdays in different years remain separate even when model proposes same',async()=>{
   const s=two({eventDecision:()=> 'same',personDecision:()=> 'same'});s.req.photos[1].caption='2009 生日';s.bank.b=observation(s.req.photos[1],{time:'2009',event:'生日',face:true});s.sync();
   const r=await run(s);assert.equal(groupMembers(r,'event').length,2);assert.equal(groupMembers(r,'person').length,1);
@@ -289,7 +298,7 @@ test('real-mode orchestration stops after first error; no repeated requests or s
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
   const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.14\/stage-a-validation\.2$/);
+  assert.match(r.providerVersion,/sgx-five-facets\.15\/stage-a-validation\.2$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{
