@@ -112,7 +112,7 @@ const asrRuntime = asrPrejobEnabled
     controlPlane,
     artifacts,
     featureService,
-    scratchRoot: env.SGX_ASR_JOB_TMP_ROOT ?? '/tmp/sgx-classification/asr',
+    scratchRoot: env.SGX_ASR_JOB_TMP_ROOT ?? '/tmp/sgx-classification/jobs/asr',
     maxJobs: integer(env.SGX_ASR_MAX_CONCURRENCY, 1),
     pollIntervalMs: integer(env.SGX_ASR_POLL_INTERVAL_MS, 2_000),
     logger,

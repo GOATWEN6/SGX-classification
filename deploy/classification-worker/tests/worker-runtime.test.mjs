@@ -734,6 +734,8 @@ test('worker defaults and release examples use the Stage A prompt source version
   const t1TaxonomyVersion = 'classification-lab-taxonomy.1';
   assert.match(main, new RegExp(`SGX_TAXONOMY_VERSION \\?\\? '${t1TaxonomyVersion}'`));
   assert.match(environment, new RegExp(`SGX_TAXONOMY_VERSION=${t1TaxonomyVersion}(?:\\n|$)`));
+  assert.match(main, /SGX_ASR_JOB_TMP_ROOT \?\? '\/tmp\/sgx-classification\/jobs\/asr'/);
+  assert.match(environment, /SGX_ASR_JOB_TMP_ROOT=\/tmp\/sgx-classification\/jobs\/asr(?:\n|$)/);
 });
 
 test('pipeline processor binds feature extraction, trusted context and canonical classification result', async (t) => {

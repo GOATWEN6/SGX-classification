@@ -84,7 +84,7 @@ export class AsrWorkerRuntime {
     controlPlane,
     artifacts,
     featureService,
-    scratchRoot = '/tmp/sgx-classification/asr',
+    scratchRoot = '/tmp/sgx-classification/jobs/asr',
     maxJobs = 1,
     pollIntervalMs = 2_000,
     now = () => Date.now(),
