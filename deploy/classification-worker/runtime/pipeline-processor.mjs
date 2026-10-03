@@ -762,13 +762,18 @@ export class StageAPipelineProcessor {
     if (built.historicalSources.length && this.historicalRetrieval?.historicalQuery) {
       try {
         const historical = await this.historicalRetrieval.historicalQuery(lease.jobId, {
-          schemaVersion: HISTORICAL_RETRIEVAL_SCHEMA_VERSION,
-          contractVersion: HISTORICAL_RETRIEVAL_CONTRACT_VERSION,
-          scope: lease.scope,
-          authorizationRevision: lease.authorizationRevision,
-          sources: built.historicalSources,
-          maxCandidatesPerSource: execution.job.budgetPolicy.maxCandidatesPerContent,
-          excludeEvidenceIds: files.map((file) => file.evidence.evidenceId),
+          protocolVersion: PROTOCOL_VERSION,
+          requestId: this.idFactory(),
+          identity,
+          query: {
+            schemaVersion: HISTORICAL_RETRIEVAL_SCHEMA_VERSION,
+            contractVersion: HISTORICAL_RETRIEVAL_CONTRACT_VERSION,
+            scope: lease.scope,
+            authorizationRevision: lease.authorizationRevision,
+            sources: built.historicalSources,
+            maxCandidatesPerSource: execution.job.budgetPolicy.maxCandidatesPerContent,
+            excludeEvidenceIds: files.map((file) => file.evidence.evidenceId),
+          },
         }, { signal });
         const checked = validateHistoricalRetrievalResult(historical, {
           lease,

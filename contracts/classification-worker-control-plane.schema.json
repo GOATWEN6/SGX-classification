@@ -260,6 +260,18 @@
         "identity": { "$ref": "#/definitions/RunIdentity" }
       }
     },
+    "HistoricalQueryRequest": {
+      "$comment": "Historical retrieval is both worker-authenticated and bound to the exact active lease identity; the nested query remains the frozen retrieval v2 contract.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "identity", "query"],
+      "properties": {
+        "protocolVersion": { "const": "classification-worker-control-plane.v1" },
+        "requestId": { "$ref": "#/definitions/Id" },
+        "identity": { "$ref": "#/definitions/RunIdentity" },
+        "query": { "$ref": "urn:sgx:classification-historical-retrieval:v2#/definitions/QueryRequest" }
+      }
+    },
     "ExecutionContextResponse": {
       "$comment": "job and guard are immutable trusted snapshots validated again by the Stage A runtime. No credential or signed media URL is allowed inside execution.",
       "type": "object",

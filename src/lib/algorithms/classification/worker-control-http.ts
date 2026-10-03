@@ -1,0 +1,77 @@
+import { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
+
+import {
+  ClassificationWorkerControlPlane,
+  WorkerControlPlaneError,
+  verifyWorkerBearer,
+} from './worker-control-plane';
+
+type WorkerOperation = (control: ClassificationWorkerControlPlane, body: unknown) => Promise<unknown>;
+
+let cached: { signature: string; control: ClassificationWorkerControlPlane } | undefined;
+
+function noStore(headers: HeadersInit = {}): HeadersInit {
+  return { ...headers, 'Cache-Control': 'no-store' };
+}
+
+function requireEnabled(): void {
+  if(process.env.CLASSIFICATION_WORKER_CONTROL_ENABLED !== 'true') {
+    throw new WorkerControlPlaneError('CONTROL_PLANE_DISABLED', 503);
+  }
+}
+
+export function getClassificationWorkerControlPlane(): ClassificationWorkerControlPlane {
+  requireEnabled();
+  const dataRoot = process.env.CLASSIFICATION_LAB_DATA_DIR ?? '';
+  const publicBaseUrl = process.env.CLASSIFICATION_WORKER_PUBLIC_BASE_URL
+    ?? `http://127.0.0.1:${process.env.PORT ?? '3137'}`;
+  const signature = JSON.stringify({ dataRoot, publicBaseUrl });
+  if(cached?.signature === signature) return cached.control;
+  const control = new ClassificationWorkerControlPlane({
+    ...(dataRoot ? { dataRoot } : {}),
+    publicBaseUrl,
+  });
+  cached = { signature, control };
+  return control;
+}
+
+export function requireWorkerService(request: Request): ClassificationWorkerControlPlane {
+  const control = getClassificationWorkerControlPlane();
+  verifyWorkerBearer(
+    request.headers.get('authorization'),
+    process.env.CLASSIFICATION_WORKER_CONTROL_TOKEN ?? '',
+  );
+  return control;
+}
+
+export function workerControlErrorResponse(error: unknown): NextResponse {
+  const status = error instanceof WorkerControlPlaneError ? error.status
+    : error instanceof ZodError || error instanceof SyntaxError ? 400
+      : 500;
+  const code = error instanceof WorkerControlPlaneError ? error.code
+    : error instanceof ZodError ? 'CONTROL_PLANE_REQUEST_INVALID'
+      : error instanceof SyntaxError ? 'CONTROL_PLANE_JSON_INVALID'
+        : 'CONTROL_PLANE_INTERNAL_ERROR';
+  return NextResponse.json(
+    { ok: false, error: { code } },
+    {
+      status,
+      headers: noStore(status === 401 ? { 'WWW-Authenticate': 'Bearer' } : {}),
+    },
+  );
+}
+
+export async function workerJsonPost(request: Request, operation: WorkerOperation): Promise<NextResponse> {
+  try {
+    const control = requireWorkerService(request);
+    const contentType = (request.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
+    if(contentType !== 'application/json') throw new WorkerControlPlaneError('CONTROL_PLANE_JSON_REQUIRED', 415);
+    const body = await request.json();
+    const result = await operation(control, body);
+    return NextResponse.json(result, { headers: noStore() });
+  } catch(error) {
+    return workerControlErrorResponse(error);
+  }
+}
+

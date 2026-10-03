@@ -848,7 +848,7 @@ test('pipeline rejects a cross-scope historical response before the Stage A brid
     },
     historicalRetrieval: {
       async historicalQuery(_jobId, request) {
-        return { ...historicalResult(request), scope: { householdId: 'other-household', subjectId: 'subject-1' } };
+        return { ...historicalResult(request.query), scope: { householdId: 'other-household', subjectId: 'subject-1' } };
       },
     },
     bridge: { async run() { bridgeCalls += 1; } },
@@ -1169,8 +1169,8 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
     historicalRetrieval: {
       async historicalQuery(_jobId, request) {
         historicalRequest = request;
-        const source = request.sources.find((item) => item.sourceContentId === 'content-2');
-        return historicalResult(request, [historicalCandidate(source, { suffix: 'semantic-1' })]);
+        const source = request.query.sources.find((item) => item.sourceContentId === 'content-2');
+        return historicalResult(request.query, [historicalCandidate(source, { suffix: 'semantic-1' })]);
       },
     },
     bridge: {
@@ -1207,10 +1207,12 @@ test('pipeline feeds OCR evidence and text-prioritized embedding Top-K hints int
       && hint.rank === 1
   )));
   assert.deepEqual(
-    historicalRequest.sources.find((item) => item.sourceContentId === 'content-2').vector,
+    historicalRequest.query.sources.find((item) => item.sourceContentId === 'content-2').vector,
     [1, 0],
     'user-bound text embedding must take priority over the raw image embedding',
   );
+  assert.equal(historicalRequest.identity.leaseToken, lease.leaseToken);
+  assert.equal(historicalRequest.protocolVersion, PROTOCOL_VERSION);
   assert.equal(bridgeInput.derivedFeatures.historicalRetrieval, 'historical_topk');
   assert.equal(bridgeInput.derivedFeatures.historicalCandidates[0].historicalEvidenceId, 'historical-evidence-semantic-1');
   assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('similarity'), false);
@@ -1284,8 +1286,8 @@ test('pipeline emits authorized face Top-K hints without promoting detections to
     historicalRetrieval: {
       async historicalQuery(_jobId, request) {
         historicalRequest = request;
-        const source = request.sources.find((item) => item.kind === 'face_embedding');
-        return historicalResult(request, [historicalCandidate(source, { suffix: 'face-1', faceSuffix: 'e' })]);
+        const source = request.query.sources.find((item) => item.kind === 'face_embedding');
+        return historicalResult(request.query, [historicalCandidate(source, { suffix: 'face-1', faceSuffix: 'e' })]);
       },
     },
     bridge: {
@@ -1327,7 +1329,7 @@ test('pipeline emits authorized face Top-K hints without promoting detections to
   );
   assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('"vector"'), false);
   assert.equal(JSON.stringify(bridgeInput.derivedFeatures).includes('personIdentity'), false);
-  const faceSource = historicalRequest.sources.find((item) => item.kind === 'face_embedding');
+  const faceSource = historicalRequest.query.sources.find((item) => item.kind === 'face_embedding');
   assert.equal(faceSource.sourceFaceId, `face_${'a'.repeat(32)}`);
   assert.equal(faceSource.personConsentRef, 'person-consent-evidence-face-1');
   assert.equal(bridgeInput.derivedFeatures.historicalCandidates[0].sourceFaceId, `face_${'a'.repeat(32)}`);

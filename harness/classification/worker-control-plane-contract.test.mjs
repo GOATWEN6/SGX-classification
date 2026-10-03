@@ -170,6 +170,36 @@ test('execution context is a frozen lease-bound request and response', async () 
   }), false, 'execution envelope remains closed to credential fields');
 });
 
+test('historical retrieval request is fenced by the exact lease identity', async () => {
+  const validate = await validator('HistoricalQueryRequest');
+  const request = {
+    protocolVersion: 'classification-worker-control-plane.v1',
+    requestId: 'request-history-1',
+    identity,
+    query: {
+      schemaVersion: '2.0',
+      contractVersion: 'classification-historical-retrieval.2',
+      scope: executionContextBinding.scope,
+      authorizationRevision: identity.authorizationRevision,
+      sources: [{
+        sourceContentId: 'content-1',
+        sourceEvidenceId: 'evidence-image-1',
+        kind: 'image_text_embedding',
+        modelId: 'embedding-test',
+        modelRevision: 'embedding-test-r1',
+        dimensions: 2,
+        normalized: true,
+        vector: [1, 0],
+      }],
+      maxCandidatesPerSource: 8,
+      excludeEvidenceIds: ['evidence-image-1'],
+    },
+  };
+  assert.equal(validate(request), true, JSON.stringify(validate.errors));
+  assert.equal(validate({ ...request, identity: undefined }), false);
+  assert.equal(validate({ ...request, query: { ...request.query, authorizationRevision: undefined } }), false);
+});
+
 test('worker failure and cancel acknowledgement preserve cost and cleanup evidence', async () => {
   const [validateFailure, validateCancel] = await Promise.all([
     validator('FailRequest'),

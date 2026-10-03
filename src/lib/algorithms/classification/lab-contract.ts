@@ -65,6 +65,15 @@ export interface BuiltLabSubmission {
   assets: LabAsset[];
 }
 
+/**
+ * Trusted service-side overrides used by the multi-round T1 harness. These
+ * values must come from the server session store, never from browser metadata.
+ */
+export interface BuildLabSubmissionOptions {
+  consentRef?: string;
+  authorizationRevision?: string;
+}
+
 export class LabContractError extends Error {
   constructor(public readonly code: string) { super(code); }
 }
@@ -85,7 +94,15 @@ function bindingTarget(indexes: number[] | null, imageContents: IngestionContent
   return { kind: 'contents', contentIds: contentIds as string[] };
 }
 
-export function buildLabSubmission(raw: LabSubmission, consentRef = 'classification_lab_local_consent'): BuiltLabSubmission {
+export function buildLabSubmission(
+  raw: LabSubmission,
+  options: string | BuildLabSubmissionOptions = {}
+): BuiltLabSubmission {
+  const trusted = typeof options === 'string' ? { consentRef: options } : options;
+  const consentRef = id.parse(trusted.consentRef ?? 'classification_lab_local_consent');
+  const trustedAuthorizationRevision = trusted.authorizationRevision === undefined
+    ? undefined
+    : id.parse(trusted.authorizationRevision);
   const { images, ...metadataInput } = raw;
   const metadata = LabSubmissionMetadataSchema.parse(metadataInput);
   if(images.length > LAB_MAX_IMAGES) fail('TOO_MANY_IMAGES');
@@ -182,7 +199,7 @@ export function buildLabSubmission(raw: LabSubmission, consentRef = 'classificat
     context: metadata.contextKind === 'family_transfer'
       ? { kind: 'family_transfer', senderId: metadata.senderId, recipientIds: metadata.recipientIds }
       : { kind: 'album_upload' },
-    authorizationRevision: `lab_auth_${key}`,
+    authorizationRevision: trustedAuthorizationRevision ?? `lab_auth_${key}`,
     taxonomyVersion: 'classification-lab-taxonomy.1',
     purposes: ['classification', 'album_organization', 'search_candidate', 'interview_candidate'],
     evidence,
