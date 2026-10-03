@@ -4,7 +4,7 @@
 
 |日期|主题|状态|
 |---|---|---|
-|[2026-10-03](2026-10-03-execution-log.md)|VirtAI 持久化、OCR/embedding/匿名人脸/ASR 冻结、统一 HTTP 验证与正式混合评测准备|`8c4b887` 已固化持久下载缓存；Node 472/472、远端 pytest 32/32；关系分母已更正为 7/11/3，核心口径为 51 次 Provider 调用加 4 个确定性评估；campaign ledger 与 pointer/approval v2 尚未提交，未执行新的付费调用或形成真实准确率/产品就绪结论|
+|[2026-10-03](2026-10-03-execution-log.md)|VirtAI 混合能力冻结与 Qwen3.7 Flash 真实探索|远端 OCR/embedding/匿名人脸/ASR 已验证；正式探索累计执行 81 次真实 Provider 调用、账本费用 ¥0.745861。r8 完成 31/31 次固定探索并暴露 `UNKNOWN_FACE`；`e784b68` 修复后 r9b 定点 3/3 通过。当前证明真实链路可运行并定位了模型/适配器问题，不构成真实准确率、完整混合链或产品就绪结论|
 |[2026-10-02](2026-10-02-execution-log.md)|云端混合分类服务、开源选型、VirtAI 专用 SSH 身份与完整评测计划|专用 SSH 与隔离目录已验证；Source/Design Gate 已冻结；后续远端执行见 2026-10-03 日志|
 |[2026-09-30](2026-09-30-execution-log.md)|本地真实模型 T0 页面、9 次 Qwen 冒烟、三项 Guard 修复|单图真实链路可运行；9/10 次、¥0.110598，396/396 回归通过；剩余 1 次人工测试，完整 v2 lifecycle 与多图 T1 待接入|
 |[2026-09-29](2026-09-29-execution-log.md)|Qwen 6 例真实模型探索、时间 Guard 修复、E0 产物 registry、E1 语义冻结、E2 评分器与后续执行计划|历史 6/6 调用完成；E0 已实现，E1 已冻结，E2 `sgx-semantic-scorer.2.0.0` 已实现（focused 25/25、全量 303/303、无新 API/费用），E3 Stage A/Lab adapter 为下一项；旧 r5 不可 exact rescore，E2 不代表准确率或产品效果|

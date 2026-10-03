@@ -62,11 +62,11 @@ SHA-256 为
 
 ### 正式混合评测准备状态
 
-- 当前共享工作树已实现跨 `exploration` / `validation` 的 campaign ledger，以及 pointer / approval v2 绑定与相关测试；这些改动尚未提交，不属于 `8c4b887`，也不能按已发布能力对外描述；
+- 当前共享工作树已实现跨 `exploration` / `validation` 的 campaign ledger，以及 pointer / approval v2 绑定；后续真实运行和版本状态见下方“Qwen3.7 Flash 真实探索与方向纠偏”；
 - campaign 总硬上限维持为 `150` 次真实 Provider 调用、总费用不超过 `¥25`、自动重试 `0`；单案例失败继续其他独立案例，授权、预算、模型或 scope 级错误停止全局执行；
 - 经当前数据逐对复核，关系固定分母更正为 `same / different / unknown = 7 / 11 / 3`；旧的 `11 / 7 / 3` 口径不再使用；
 - 核心正式计划为 `51` 次真实 Provider 调用加 `4` 个确定性产品评估，共 `55` 个评估单元。两类调用分别记账，确定性评估不占 Provider 调用额度；
-- 本轮没有执行新的付费 Provider 调用，正式 campaign 尚未生成或运行；
+- 本节记录的是正式运行前的准备快照；新的付费 Provider 运行事实见下方更新，不再使用“尚未运行”的旧状态判断当前进度；
 - `472/472` 只证明当前工程契约与门禁行为，不构成真实家庭图片准确率、人物身份可靠性、真实老人语音准确率或产品就绪证据。
 
 ### ASR 失败、修复与结果
@@ -117,7 +117,7 @@ SHA-256 为
 合成数据，不能据此声称真实家庭图片准确率、人物身份可靠性、真实老人
 语音准确率、生产 SLA 或用户收益。
 
-## 下一步 Gate
+## 准备阶段的下一步 Gate（已由下方真实探索更新）
 
 1. 冻结并生成 formal campaign，包含 `exploration` / `validation` manifest、pointer、approval、dataset root 和累计账本绑定；
 2. 在任何付费调用前，把 formal campaign 完整复制到 `/gemini/code/sgx-classification` 持久盘并复核 hash、权限、`150` 次 / `¥25` / `0` 重试上限；
@@ -126,3 +126,50 @@ SHA-256 为
 5. 用当前真实配置重建全栈交付包，包含架构、接口、环境变量、持久盘布局、启动/回退命令和证据索引；
 6. 全栈工程师接入对象存储、业务数据库、outbox/lease/CAS 和真实相册页面后，进入 T1 产品联调；
 7. SFace 预训练权重的商业/训练数据来源审查完成前，只用于内部评估。
+
+## Qwen3.7 Flash 真实探索与方向纠偏
+
+### 为什么执行
+
+工程门禁已经足以保护授权、预算、版本和持久化边界，继续扩大纯工程回归不能回答“真实模型能否完成分类与归纳”。本轮因此把主循环改为：真实模型批量运行、按产品结果分析失败、只修复可泛化根因、再做有界真实复测。没有因单个样本去修改真值或加入硬打分阈值。
+
+### 真实执行事实
+
+- 模型固定为 `qwen3.7-flash-2026-07-15`，人物匹配开启，自动重试为 `0`；
+- r5：8 次，因相对时间被错误表示为绝对时间而停止；账本费用 `¥0.054257`；
+- r6：22 次，关系输出在 1024 token 上限处截断两例；账本费用 `¥0.268340`；
+- r7：17 次，模型漏掉应返回的人物关系，严格 coverage guard 停止；账本费用 `¥0.126701`；
+- r8：31/31 次固定探索全部调用完成，18 张不同图片、44 次图片发送、输入 136128 token、输出 23438 token、墙钟约 230 秒、账本费用 `¥0.275856`；无截断、限流、授权、预算或模型版本错误；结束标记为 `UNKNOWN_FACE`；
+- r9b：针对 r8 的“有人人像与无人静物配对”执行 3 次真实调用，3/3 完成、无错误、无人工项、费用 `¥0.020707`；模型只返回事件关系，没有再生成虚构 faceId；
+- 上述 campaign 累计 81 次真实 Provider 调用，账本费用 `¥0.745861`；原始总授权剩余 69 次、`¥24.254139`。旧失败与每轮原始响应均保留，未覆盖。
+
+主要证据：
+
+- r8 报告：`classification-lab-data.local/real-batch/campaigns/sgx_formal_v2_20261003_r8/results/exploration-real-r8/REPORT.md`；
+- r8 原始响应：同目录 `provider-responses.jsonl`；
+- r9b 报告：`classification-lab-data.local/real-batch/campaigns/sgx_targeted_no_face_20261003_r9b/results/targeted-real-r9b/REPORT.md`；
+- 每轮累计调用和费用以对应 `campaign-ledger.json` 为准。
+
+### 真实模型发现
+
+1. **运行链已经真实可用**：Qwen 能接收图片、用户文字和 final ASR，返回人物候选、时间、地点、事件、场景及图间事件/人物关系；r8 的 31 次调用全部获得指定模型的 usage 与 response id。
+2. **关系输出不能只靠扩大 token**：提升 relate 上限和增加 stage-specific prompt 后，r8 不再发生截断，但多人关系会产生大量组合与解释，速度和 token 成本明显高于单图提取。正式产品应由本地 face/image embedding 先召回少量候选，VLM 只判断困难关系与故事语义。
+3. **人物链需要 adapter 保护**：r8 把 `personMatchingEnabled=true` 传给一张有人、一张无人的配对，模型为无人照片虚构 faceId。`e784b68` 改为只有双方存在人物候选时才请求人物匹配，并在模型仍返回不存在 faceId 时只隔离该人物边，不丢失事件与五维结果。r9b 真实复测通过。
+4. **事件语义仍有模型弱点**：三张相同老自行车照片/裁切/翻拍中，模型对三个配对给出 `same / different / same`，形成传递冲突；系统安全地阻止了不一致合并。三张同一天社区花园照片则全部正确归为同一事件，且与旧旅行照保持分离。
+5. **当前数字 scorer 不能直接当准确率**：人物真值只覆盖少数照片且检测框口径不同；上传时间、扫描时间和 OCR 尚未完整注入本轮 VLM manifest；部分场景标签需要应用 taxonomy adapter；相对时间 aliases 也未完全归一。因此 r8 的 facet/person 数字只用于发现问题，不能作为上线 Gate。
+
+### 已提交的通用修复
+
+- `b908e33`：隔离非法模型时间输出，保留其他维度；
+- `93dd4df`：关系阶段使用精简输出指令，并把上限从 1024 提升到 2048；
+- `4a1cff9`：模型漏答人物关系时降级为未确认，保留分类结果；
+- `e784b68`：只对双方都有人物候选的配对启用人物关系，并隔离未知 faceId。
+
+每次只运行 TypeScript 编译和 2–3 个直接相关用例，然后进入真实模型验证；没有再运行 472 项全量回归。
+
+### 更新后的下一步优先级
+
+1. 把 VirtAI 的 RapidOCR、image/text embedding、YuNet/SFace 和 SenseVoice 输出真正注入 Stage A，而不是继续让 VLM 独自承担 OCR、全量人物组合和所有召回；
+2. 修正 formal evaluator 的 taxonomy、相对时间 alias、系统时间来源和人物框口径，再运行封闭 validation；
+3. 在 `/classification-lab/real` 接入多轮多图、文字、真实音频 ASR 和持久化，完成用户可操作的 T0/T1 本地体验；
+4. 只在上述混合链和页面完成后制作新的全栈交付包。当前包不能描述为最终算法交付。
