@@ -59,6 +59,16 @@ The 2026-10-02 read-only preflight established:
 - `nvidia-smi` is an Orion wrapper, so scripts must not assume standard NVIDIA CLI output;
 - direct Hugging Face access timed out; PyPI and ModelScope were reachable.
 
+The 2026-10-04 T1 run also established that this VirtAI Notebook can terminate
+long-running processes after the platform idle window (observed through
+`ORION_TASK_IDLE_TIME=3600`). Re-launching the Feature Service from the frozen
+venv and persistent model store required no download, but a notebook process is
+not a production supervisor. Before internal users depend on this service, T2
+must provide a persistent supervisor and health-based restart, or deploy the
+same frozen release in an inference environment without notebook idle
+termination. The Worker and Feature Service health endpoints remain the
+readiness source; a PID file alone is insufficient.
+
 These observations do not authorize a download or installation. SigLIP2 remains `pending_transport`: its exact revision must arrive through an approved transport, then its files, model copyright/license and hashes must be frozen before benchmark or activation. Reachable ModelScope/PyPI endpoints are not evidence that the named model or package has been acquired.
 
 ## Files
