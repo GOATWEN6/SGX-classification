@@ -213,6 +213,81 @@ test('real Stage A mock transport runs through the durable v2 lifecycle', async 
   assert.ok(completed.result.output.observations.some(item => item.facet === 'scene'));
 });
 
+test('historical Top-K reaches the canonical result without silently merging prior content', async t => {
+  const value = await fixture(t);
+  const calls = [];
+  const factory = new StageALabExecutorFactory({
+    profile: value.executionProfile,
+    provider: 'qwen',
+    model: value.model,
+    inputCnyPerMillion: 0,
+    outputCnyPerMillion: 0,
+    placeKindPolicy: placePolicy(value.built.envelope.taxonomyVersion),
+    transport: transportFor(value.model, calls),
+  });
+  const pending = await submitLabExecutionJob(value.input, value.store, clock);
+  const sourceContent = pending.envelope.contents.find(item => item.modality === 'image');
+  const sourceEvidence = pending.envelope.evidence.find(item => item.evidenceId === sourceContent.evidenceId);
+  assert.ok(sourceContent);
+  assert.ok(sourceEvidence);
+  const context = {
+    job: pending,
+    signal: new AbortController().signal,
+    clock,
+    getGuard: async () => structuredClone(value.guard),
+    readAsset: async evidenceId => {
+      assert.equal(evidenceId, sourceEvidence.evidenceId);
+      return new Uint8Array(png);
+    },
+    derivedFeatures: {
+      version: 'classification-worker-derived-features.2',
+      ocrTextByEvidenceId: {},
+      retrievalHints: [],
+      historicalCandidates: [{
+        candidateId: 'historical_candidate_executor_1',
+        sourceContentId: sourceContent.contentId,
+        sourceEvidenceId: sourceEvidence.evidenceId,
+        historicalContentId: 'content_previous_round_1',
+        historicalEvidenceId: 'evidence_previous_round_1',
+        kind: 'image_text_embedding',
+        rank: 1,
+        modelId: 'bge_visualized_m3',
+        modelRevision: 'frozen_revision_1',
+        reasons: ['semantic_neighbor', 'historical_projection_authorized'],
+        featureRefs: ['feature_previous_round_1'],
+        evidenceRefs: [sourceEvidence.evidenceId, 'evidence_previous_round_1'],
+        historicalProjection: {
+          contentId: 'content_previous_round_1',
+          evidenceId: 'evidence_previous_round_1',
+          evidenceRevision: 1,
+          sourceHash: hash(Buffer.from('previous-round-image')),
+          artifactId: 'artifact_previous_round_1',
+          mimeType: 'image/jpeg',
+          byteLength: 1024,
+          consentRef: 'consent_previous_round_1',
+          confirmedReferenceIds: [],
+          lifecycleState: 'active',
+        },
+      }],
+      embeddingRetrieval: 'batch_topk',
+      historicalRetrieval: 'historical_topk',
+    },
+  };
+  const executor = factory.create(value.executionProfile, context);
+  const outcome = await executor.execute(context);
+  assert.equal(calls.length, 1);
+  assert.equal(outcome.result.output.crossRoundAssociations.length, 1);
+  const association = outcome.result.output.crossRoundAssociations[0];
+  assert.equal(association.historicalContentId, 'content_previous_round_1');
+  assert.equal(association.status, 'candidate_only');
+  assert.equal(association.decisionBasis, 'retrieval_only');
+  assert.equal('score' in association, false);
+  assert.ok(outcome.result.output.organization.stories.every(story => (
+    !story.memberContentIds.includes('content_previous_round_1')
+  )));
+  assert.ok(outcome.result.output.organization.reviewItems.every(item => !item.includes(association.associationId)));
+});
+
 test('consent-gated person matching reaches the model and only produces unnamed AI candidates', async t => {
   const value = await fixture(t, 'stage_a_mock', {
     submission: {

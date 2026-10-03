@@ -66,6 +66,15 @@ type T1Job = {
       organization: { stories: Story[]; reviewItems: string[] };
       observations: Observation[];
       highImpactClaims: Array<{ claimId: string; claimKind: string; value: string; reviewRequired: true }>;
+      crossRoundAssociations: Array<{
+        associationId: string;
+        sourceContentId: string;
+        historicalContentId: string;
+        method: 'image_text_embedding_topk' | 'authorized_face_embedding_topk';
+        rank: number;
+        relation: 'possibly_related';
+        status: 'candidate_only';
+      }>;
       retrieval: { candidateCount: number; comparisonCount: number; maxCandidatesPerContent: number };
     };
   };
@@ -448,6 +457,15 @@ export default function ClassificationT1Page() {
             <div className={styles.row}><span>实际比较</span><strong>{job.result.output.retrieval.comparisonCount}</strong></div>
             <div className={styles.row}><span>每项上限</span><strong>{job.result.output.retrieval.maxCandidatesPerContent}</strong></div>
             <p className={styles.help}>检索值只负责缩小候选范围，不作为概率、真实准确率或自动确认事实。</p>
+          </section>
+          <section className={styles.detailCard}><h3>跨轮次候选关联</h3>
+            {job.result.output.crossRoundAssociations.length === 0
+              ? <p className={styles.empty}>本轮没有找到已授权的历史候选。</p>
+              : job.result.output.crossRoundAssociations.map(item => <div className={styles.row} key={item.associationId}>
+                <span>{item.method === 'authorized_face_embedding_topk' ? '匿名人物候选' : '图文语义候选'} · 第 {item.rank} 位</span>
+                <strong>{item.sourceContentId} → {item.historicalContentId}</strong>
+              </div>)}
+            <p className={styles.help}>这里只表示“可能相关”，可用于搜索和相册建议；不会据此确认身份、亲属关系、同一事件或长期 Memory。</p>
           </section>
           <section className={styles.detailCard}><h3>待确认高影响信息</h3>
             {job.result.output.highImpactClaims.length === 0 && job.result.output.organization.reviewItems.length === 0

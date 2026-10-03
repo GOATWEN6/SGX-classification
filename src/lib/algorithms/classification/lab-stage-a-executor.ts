@@ -18,6 +18,7 @@ import {
   type PlaceKindPolicy
 } from './lab-stage-a-composition';
 import { organizeSparseContent } from './content-organization';
+import { buildCrossRoundAssociations } from './cross-round-association';
 import { retrieveExactCandidates } from './exact-retrieval';
 import { DeterministicTextExtractor } from './text-extractor';
 import {
@@ -285,6 +286,13 @@ class StageALabExecutor implements LabExecutionExecutor {
           organized.reviewItems
         )
       };
+      const crossRoundAssociations = buildCrossRoundAssociations({
+        scope: context.job.envelope.scope,
+        authorizationRevision: context.job.envelope.authorizationRevision,
+        contents: composed.contents,
+        candidates: context.derivedFeatures?.historicalCandidates ?? [],
+        createdAt: context.job.envelope.createdAt,
+      });
       const workflowStatus = organization.reviewItems.length > 0 || stage?.workflowStatus === 'needs_review'
         ? 'needs_review' as const
         : 'succeeded' as const;
@@ -315,6 +323,7 @@ class StageALabExecutor implements LabExecutionExecutor {
             observations: composed.observations,
             batchBindings: composed.batchBindings,
             highImpactClaims: [],
+            crossRoundAssociations,
             retrieval: {
               candidateCount: organization.retrievalAudit.candidateCount,
               comparisonCount: retrieval.audit.comparisonCount,

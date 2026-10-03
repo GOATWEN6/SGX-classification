@@ -8,6 +8,7 @@ import { retrieveExactCandidates } from './exact-retrieval';
 import { adaptIngestionForOrganization, type IngestionPayloads } from './ingestion-organization-adapter';
 import type { IngestionEnvelope } from './ingestion-contract';
 import type { LabHighImpactClaim } from './lab-execution-contract';
+import type { CrossRoundAssociationCandidate } from './cross-round-association';
 import { DeterministicTextExtractor } from './text-extractor';
 
 export type LabProviderMode = 'deterministic';
@@ -25,6 +26,7 @@ export interface LabProviderResult {
   observations: ContentObservation[];
   batchBindings: ReturnType<typeof adaptIngestionForOrganization>['batchBindings'];
   highImpactClaims: LabHighImpactClaim[];
+  crossRoundAssociations: CrossRoundAssociationCandidate[];
   retrieval: {
     candidateCount: number;
     comparisonCount: number;
@@ -107,6 +109,7 @@ export class DeterministicLabProvider implements ClassificationLabProvider {
       observations,
       batchBindings: adapted.batchBindings,
       highImpactClaims: [],
+      crossRoundAssociations: [],
       retrieval: {
         candidateCount: retrieval.audit.candidateCount,
         comparisonCount: retrieval.audit.comparisonCount,

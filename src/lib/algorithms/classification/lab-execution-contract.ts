@@ -15,6 +15,7 @@ import {
 } from './ingestion-contract';
 import type { BuiltLabSubmission } from './lab-contract';
 import { userExplicitAssociationForBinding } from './ingestion-organization-adapter';
+import { CrossRoundAssociationCandidateSchema } from './cross-round-association';
 import {
   CorrectionSchema,
   ReferenceSchema,
@@ -708,6 +709,9 @@ const CanonicalOrganizationOutputShape = {
   observations: z.array(ContentObservationSchema).max(30_000),
   batchBindings: z.array(BatchEvidenceBindingSchema).max(10_000),
   highImpactClaims: z.array(LabHighImpactClaimSchema).max(10_000),
+  // Defaults preserve read compatibility for frozen pre-cross-round artifacts.
+  // New executors always write this field explicitly.
+  crossRoundAssociations: z.array(CrossRoundAssociationCandidateSchema).max(30_000).default([]),
   retrieval: z.object({
     candidateCount: z.number().int().nonnegative().max(30_000),
     comparisonCount: z.number().int().nonnegative(),
@@ -1273,6 +1277,29 @@ export function validateLabExecutionResultAgainstEnvelope(
   if(returnedUserAssociationIds.size !== expectedUserAssociations.length
     || expectedUserAssociations.some(association => !returnedUserAssociationIds.has(association.associationId))) {
     throw new Error('RESULT_USER_ASSOCIATION_COVERAGE_INCOMPLETE');
+  }
+
+  const crossRoundAssociationIds = new Set<string>();
+  for(const association of result.output.crossRoundAssociations) {
+    if(crossRoundAssociationIds.has(association.associationId)) {
+      throw new Error('DUPLICATE_CROSS_ROUND_ASSOCIATION');
+    }
+    crossRoundAssociationIds.add(association.associationId);
+    if(!sameStable(association.scope, envelope.scope)) throw new Error('CROSS_SCOPE_CROSS_ROUND_ASSOCIATION');
+    if(association.authorizationRevision !== envelope.authorizationRevision) {
+      throw new Error('STALE_CROSS_ROUND_ASSOCIATION');
+    }
+    const source = contentById.get(association.sourceContentId);
+    if(!source || source.evidenceId !== association.sourceEvidenceId) {
+      throw new Error('FOREIGN_CROSS_ROUND_SOURCE');
+    }
+    const allowed = evidenceForContents([association.sourceContentId]);
+    if(association.currentEvidenceRefs.some(ref => !allowed.has(ref) || !evidenceIds.has(ref))) {
+      throw new Error('FOREIGN_CROSS_ROUND_CURRENT_EVIDENCE');
+    }
+    if(association.historicalEvidenceRefs.some(ref => evidenceIds.has(ref))) {
+      throw new Error('CROSS_ROUND_HISTORY_REFERENCES_CURRENT_EVIDENCE');
+    }
   }
 
   const bindingIds = new Set<string>();
