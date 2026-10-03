@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -1619,6 +1619,7 @@ test('stage-a child bridge runs the compiled VLM mock and StoryUnit organizer en
     buildDir: process.env.CLASSIFICATION_BUILD_DIR,
     environment: {
       ...process.env,
+      SGX_PROVIDER_AUDIT_DIR: path.join(root, 'provider-audit'),
       SGX_VLM_PROVIDER: 'qwen',
       SGX_VLM_MODEL: model,
       SGX_VLM_INPUT_CNY_PER_MILLION: '0',
@@ -1626,17 +1627,30 @@ test('stage-a child bridge runs the compiled VLM mock and StoryUnit organizer en
     },
   });
 
-  const completed = await bridge.run({
-    identity: identityFor(lease),
-    lease,
-    execution: { job, guard, placeKindPolicy },
-    files: assets,
-    signal: new AbortController().signal,
-  });
+  let completed;
+  try {
+    completed = await bridge.run({
+      identity: identityFor(lease),
+      lease,
+      execution: { job, guard, placeKindPolicy },
+      files: assets,
+      signal: new AbortController().signal,
+    });
+  } catch (error) {
+    assert.fail(`stage-a bridge failed: ${error?.errorCode ?? error?.message}/${error?.diagnosticCode ?? 'NO_DIAGNOSTIC'}`);
+  }
 
   assert.ok(['succeeded', 'needs_review'].includes(completed.status));
   assert.equal(completed.result.output.provider.mode, 'stage_a_mock');
   assert.equal(completed.result.output.provider.accuracyClaim, 'not_evaluated');
   assert.equal(completed.usage.providerCalls, 1);
   assert.ok(completed.result.output.organization.stories.length >= 1);
+  const auditPath = path.join(root, 'provider-audit', `${job.jobId}.provider-responses.jsonl`);
+  const auditEntries = (await readFile(auditPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(auditEntries.length, 1);
+  assert.equal(auditEntries[0].schemaVersion, 'classification-provider-response-audit.1');
+  assert.equal(auditEntries[0].jobId, job.jobId);
+  assert.equal(auditEntries[0].runId, job.runId);
+  assert.equal(auditEntries[0].raw.choices[0].finish_reason, 'stop');
+  assert.equal((await stat(auditPath)).mode & 0o777, 0o600);
 });

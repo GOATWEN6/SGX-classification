@@ -201,6 +201,7 @@ Copy `nonsecret.env.example` to `shared/config/nonsecret.env` only as a reviewed
 - embedding on `cuda:0`, concurrency 1 and batch size 1 for the assigned 5.81 GiB vGPU;
 - Hugging Face, ModelScope, ONNX, Torch, pip, uv and generic download caches below `/gemini/code/sgx-classification/shared/cache`;
 - source downloads below `shared/downloads`, wheels below `shared/wheelhouse`, and verified model artifacts below `shared/models`;
+- rejected or accepted raw provider envelopes below the restricted `SGX_PROVIDER_AUDIT_DIR`, written as per-Job mode-0600 JSONL for diagnosis and never returned to clients or logs;
 - only unpacked venvs and generated/compiled caches below `/quota/sgx-classification`;
 - `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `SGX_ALLOW_MODEL_DOWNLOADS=false`.
 

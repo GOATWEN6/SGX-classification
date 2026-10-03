@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
+import {
+  closeSync,
+  constants as fsConstants,
+  fchmodSync,
+  mkdirSync,
+  openSync,
+  writeSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -37,6 +45,7 @@ const SAFE_DIAGNOSTICS = new Map([
   ['RESERVATION_OVERRUN', 'BRIDGE_RESERVATION_OVERRUN'],
   ['MODEL_NOT_CONFIGURED', 'BRIDGE_MODEL_NOT_CONFIGURED'],
   ['AUTHORIZATION_CHECK_REQUIRED', 'BRIDGE_AUTHORIZATION_CHECK_REQUIRED'],
+  ['PROVIDER_AUDIT_FAILED', 'BRIDGE_PROVIDER_AUDIT_FAILED'],
 ]);
 
 const STAGE_DIAGNOSTIC_PHASES = new Set(['provider_envelope', 'content_json', 'schema']);
@@ -95,6 +104,40 @@ function parseNonnegative(value, fallback) {
   const parsed = Number(value ?? fallback);
   ensure(Number.isFinite(parsed) && parsed >= 0, 'LAB_RUN_IDENTITY_MISMATCH');
   return parsed;
+}
+
+function providerResponseRecorder(job) {
+  const root = process.env.SGX_PROVIDER_AUDIT_DIR;
+  if (!root) return undefined;
+  ensure(path.isAbsolute(root), 'LAB_RUN_IDENTITY_MISMATCH');
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  const target = path.join(root, `${job.jobId}.provider-responses.jsonl`);
+  return (entry) => {
+    try {
+      const bytes = Buffer.from(`${JSON.stringify({
+        schemaVersion: 'classification-provider-response-audit.1',
+        recordedAt: new Date().toISOString(),
+        jobId: job.jobId,
+        runId: job.runId,
+        ...entry,
+      })}\n`);
+      ensure(bytes.length <= 1_100_000, 'PROVIDER_AUDIT_FAILED');
+      const descriptor = openSync(
+        target,
+        fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_APPEND | fsConstants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        fchmodSync(descriptor, 0o600);
+        writeSync(descriptor, bytes);
+      } finally {
+        closeSync(descriptor);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'PROVIDER_AUDIT_FAILED') throw error;
+      throw new Error('PROVIDER_AUDIT_FAILED', { cause: error });
+    }
+  };
 }
 
 function bindingFromJob(job) {
@@ -182,7 +225,7 @@ function mappedFailure(error, providerCalled) {
   }
   if (['PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED', 'MODEL_NOT_CONFIGURED',
     'AUTHORIZATION_CHECK_REQUIRED', 'BUDGET_EXHAUSTED', 'BUDGET_OVERRUN',
-    'RESERVATION_OVERRUN'].includes(raw)) {
+    'RESERVATION_OVERRUN', 'PROVIDER_AUDIT_FAILED'].includes(raw)) {
     return { errorCode: 'INTERNAL_ERROR', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   return {
@@ -300,6 +343,7 @@ async function execute(requestPath, responsePath) {
       return value;
     }
     : undefined;
+  const recordProviderResponse = providerResponseRecorder(job);
   const factory = new stageA.StageALabExecutorFactory({
     profile,
     provider,
@@ -308,6 +352,7 @@ async function execute(requestPath, responsePath) {
     outputCnyPerMillion,
     placeKindPolicy: request.execution.placeKindPolicy,
     transport,
+    ...(recordProviderResponse ? { recordProviderResponse } : {}),
     ...(credential ? { credential } : {}),
   });
   const controller = new AbortController();
