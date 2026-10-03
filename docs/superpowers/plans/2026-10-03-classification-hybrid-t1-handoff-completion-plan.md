@@ -74,22 +74,27 @@ Feature Service 已生成人脸向量，但 Worker 还没有形成 `face_embeddi
 - 查询前按 `householdId + subjectId + active lifecycle + authorizationRevision` 过滤；
 - 支持 image/text embedding、face embedding、近重复和已确认参考多路候选；
 - 第一轮写入本地参考索引，第二轮能够检索第一轮；
+- 历史候选必须连同当前授权可读的历史投影、观察或受控资产引用进入 Stage A，不能只返回会被当前目录过滤掉的旧 Evidence ID；
 - 算法包提供文件型参考实现，全栈工程师可映射到 PostgreSQL + pgvector；
 - 产品数据库和对象存储仍由全栈负责，算法不能绕过后端直接写业务库。
 
 ### P1-1 原始语音没有进入分类前置链
 
-必须在本地 T1 加入独立 ASR 前置步骤：
+必须在本地 T1 加入独立 ASR 前置 Job：
 
-- 原始音频上传到服务端，不把模型密钥或内部服务暴露给浏览器；
-- 调用 `/internal/v1/features/asr`；
+- 原始音频先保存为受控临时资产，由 reference control plane 租赁给 Worker；
+- Worker 在与 Feature Service 同机的可信边界调用 `/internal/v1/features/asr`，浏览器和普通产品 Next 进程不能直连 loopback 服务；
 - 成功后生成带 producer/model revision 的 final ASR Evidence；
 - ASR 失败时保留音频和明确错误，不虚构转写；
 - 有 final ASR 时不重复转写。
 
+当前真实 ASR adapter 只接受 16-bit uncompressed PCM WAV。T1 首版显式校验并支持这一格式；WebM/Opus 或损坏文件返回 `UNSUPPORTED_MEDIA`。如后续需要浏览器直接录音，再由全栈在可信服务端加入受限转码，不把静默转码混进分类算法。
+
 ### P1-2 两个页面没有形成真实混合体验
 
-必须提供统一 T1 页面，复用现有页面和 API，不重写 UI：
+必须先提供文件型 reference control plane，再提供统一 T1 页面。control plane 至少实现 lease、heartbeat、execution-context、complete、fail、cancel-ack 和受控 artifact 下载/上传；它只用于 T1 证明 Worker 契约，全栈在 T2 替换为产品数据库、对象存储和队列。
+
+统一页面复用现有页面和 API，不重写 UI：
 
 - 单图与多图；
 - 文本/ASR 的单图、指定多图和批次绑定；
@@ -150,23 +155,25 @@ Gate：测试能证明“授权检查发生在人脸计算之前”；其他维�
 
 1. 生成批内 `face_embedding_topk`；
 2. 定义历史索引 upsert/query/delete/revoke 契约；
-3. 合并批内和历史候选并去重；
-4. 证明跨家庭、跨主体、已撤回 Evidence 不可被召回；
-5. 证明第二轮能找到第一轮已确认参考，且不会自动写姓名。
+3. 定义历史候选的授权投影/观察/资产引用，并扩展 Stage A 接收边界；
+4. 合并批内和历史候选并去重；
+5. 证明跨家庭、跨主体、已撤回 Evidence 不可被召回；
+6. 证明第二轮能找到第一轮已确认参考，且不会自动写姓名。
 
 Gate：固定夹具通过跨轮检索、双家庭隔离、多主体隔离、撤回过滤和模型版本边界。
 
-### Phase 3：ASR 前置步骤与统一真实 T1 页面
+### Phase 3：reference control plane、ASR 前置 Job 与统一真实 T1 页面
 
 执行：
 
-1. 增加服务端 ASR proxy 和大小/格式/超时/错误边界；
-2. 将 ASR 输出转成 final ASR Evidence；
-3. 新增统一真实混合 route，复用 V2 runtime、历史索引和 Stage A；
-4. 更新页面支持多图、多轮、语音、文本绑定和人物授权；
-5. 保留原页面作为回退入口。
+1. 实现文件型 reference control plane 六个 Worker 接口、租约 fence 和 artifact adapter；
+2. 增加 ASR pre-job 的大小、PCM WAV 格式、超时和错误边界；
+3. 由 Worker 调用本机 ASR，并将成功输出转成 final ASR Evidence；
+4. 新增统一真实混合 route，通过 reference control plane 驱动真实 Worker、历史索引和 Stage A；
+5. 更新页面支持多图、多轮、语音、文本绑定和人物授权；
+6. 保留原页面作为回退入口。
 
-Gate：本地页面能完成四轮连续上传；至少覆盖图片、图文、图文语音、纯文本或纯语音中的代表组合；刷新后会话和历史仍能读取。
+Gate：本地页面能完成四轮连续上传，且结果证明来自 Worker pipeline 而不是 Next 进程直跑的空 `derivedFeatures` Stage A；至少覆盖图片、图文、图文语音、纯文本或纯语音中的代表组合；刷新后会话和历史仍能读取。
 
 ### Phase 4：真实混合链探索
 
@@ -257,6 +264,7 @@ Gate：在新的干净输出目录生成唯一 ZIP；全栈工程师按 README �
 
 - 真实 Qwen 与真实 Feature Service 在同一完整主链中执行过；
 - 多图、文字、final ASR、原始音频前置 ASR 和跨轮历史均有可复现实例；
+- reference control plane 能在进程重启后恢复任务、租约和结果，且全栈替换边界清楚；
 - 人物匹配开启时逐图片授权先于计算，输出仍是匿名候选；
 - 未授权、撤权、删除、跨家庭、跨主体和迟到结果 fail closed；
 - 页面能供产品负责人实际上传、查看、纠正和复测；
@@ -265,4 +273,3 @@ Gate：在新的干净输出目录生成唯一 ZIP；全栈工程师按 README �
 - 最终 ZIP 通过完整性和密钥扫描。
 
 全栈工程师接手后仍需完成 T2：产品账号鉴权、业务数据库、对象存储、pgvector、队列/outbox、正式监控、产品 UI 接入和内部用户环境部署。算法侧交付的参考索引与文件存储用于证明契约和行为，不能替代产品数据库。
-
