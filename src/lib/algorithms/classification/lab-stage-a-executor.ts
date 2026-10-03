@@ -28,7 +28,13 @@ import {
 } from './evidence-rule-policy';
 import { ApiVisionProvider, PROVIDER_ENDPOINTS, type Transport } from './stage-a-provider';
 import { ClassificationEngine, type StageResult } from './stage-a-pipeline';
-import { PROMPT_VERSION, STAGE_A_VALIDATION_VERSION, StageError, stable } from './stage-a-contract';
+import {
+  PROMPT_VERSION,
+  STAGE_A_VALIDATION_VERSION,
+  StageError,
+  stable,
+  type StageDiagnostic
+} from './stage-a-contract';
 
 export const STAGE_A_LAB_EXECUTOR_VERSION = 'classification-lab-stage-a-executor.1';
 export const STAGE_A_LAB_DECISION_POLICY_VERSION = ACTIVE_EVIDENCE_RULE_POLICY_VERSION;
@@ -55,7 +61,13 @@ export interface StageALabExecutorFactoryOptions {
 
 function clone<T>(value: T): T { return structuredClone(value); }
 function equal(left: unknown, right: unknown): boolean { return stable(left) === stable(right); }
-function fail(code: string): never { throw new Error(code); }
+type DiagnosableError = Error & { diagnostic?: StageDiagnostic };
+
+function fail(code: string, diagnostic?: StageDiagnostic): never {
+  const error: DiagnosableError = new Error(code);
+  if(diagnostic) error.diagnostic = clone(diagnostic);
+  throw error;
+}
 
 export function stageALabProviderVersion(provider: 'qwen' | 'glm', model: string): string {
   return `${provider}:${model}:${PROMPT_VERSION}:${STAGE_A_VALIDATION_VERSION}`;
@@ -110,19 +122,26 @@ function authorizationFromGuard(
 }
 
 function mapStageFailure(stage: StageResult): never {
-  const code = stage.errors[0]?.code ?? (stage.workflowStatus === 'cancelled' ? 'CANCELLED' : 'LAB_PROVIDER_UNAVAILABLE');
+  const first = stage.errors[0];
+  const code = first?.code ?? (stage.workflowStatus === 'cancelled' ? 'CANCELLED' : 'LAB_PROVIDER_UNAVAILABLE');
   if(code === 'CANCELLED') fail('CANCELLED');
   if(code === 'AUTHORIZATION_CHANGED' || code === 'CALL_NOT_AUTHORIZED') fail('AUTHORIZATION_CHANGED');
   if(code === 'SOURCE_OR_AUTHORIZATION_CHANGED') fail('EVIDENCE_CHANGED');
   if(code === 'TIMEOUT') fail('LAB_RUN_TIMEOUT');
   if(code === 'INVALID_OUTPUT' || code === 'MODEL_VERSION_MISMATCH' || code === 'MISSING_USAGE_OR_PROVENANCE') {
-    fail('INVALID_OUTPUT');
+    fail('INVALID_OUTPUT', first?.diagnostic);
   }
+  if(['BUDGET_EXHAUSTED', 'BUDGET_OVERRUN', 'RESERVATION_OVERRUN', 'OUTPUT_TRUNCATED',
+    'RESPONSE_LIMIT', 'RATE_LIMITED', 'PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED',
+    'MODEL_NOT_CONFIGURED', 'AUTHORIZATION_CHECK_REQUIRED'].includes(code)) fail(code);
   fail('LAB_PROVIDER_UNAVAILABLE');
 }
 
 function mapThrownError(error: unknown): never {
   const code = error instanceof StageError ? error.code : error instanceof Error ? error.message : '';
+  const diagnostic = error instanceof StageError
+    ? error.diagnostic
+    : (error as DiagnosableError | undefined)?.diagnostic;
   if(code === 'CANCELLED') fail('CANCELLED');
   if(code === 'AUTHORIZATION_REVOKED') fail('AUTHORIZATION_REVOKED');
   if(code === 'AUTHORIZATION_CHANGED' || code === 'CALL_NOT_AUTHORIZED') fail('AUTHORIZATION_CHANGED');
@@ -134,8 +153,11 @@ function mapThrownError(error: unknown): never {
     || code === 'MODEL_VERSION_MISMATCH'
     || code === 'MISSING_USAGE_OR_PROVENANCE'
     || (error instanceof Error && error.name === 'ZodError')) {
-    fail('INVALID_OUTPUT');
+    fail('INVALID_OUTPUT', diagnostic);
   }
+  if(['BUDGET_EXHAUSTED', 'BUDGET_OVERRUN', 'RESERVATION_OVERRUN', 'OUTPUT_TRUNCATED',
+    'RESPONSE_LIMIT', 'RATE_LIMITED', 'PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED',
+    'MODEL_NOT_CONFIGURED', 'AUTHORIZATION_CHECK_REQUIRED'].includes(code)) fail(code);
   if(code === 'LAB_RUN_IDENTITY_MISMATCH') fail(code);
   if(code === 'LAB_RUN_TIMEOUT' || code === 'LAB_PROVIDER_UNAVAILABLE') fail(code);
   fail('LAB_PROVIDER_UNAVAILABLE');

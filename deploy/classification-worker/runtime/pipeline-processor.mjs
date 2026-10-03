@@ -44,6 +44,8 @@ const STOP_REASONS = new Set([
   'evidence_inactive',
 ]);
 const BRIDGE_DIAGNOSTIC_PATTERN = /^BRIDGE_[A-Z0-9_]{3,96}$/;
+const STAGE_DIAGNOSTIC_PHASES = new Set(['provider_envelope', 'content_json', 'schema']);
+const STAGE_DIAGNOSTIC_TOKEN = /^[A-Za-z0-9_$?.:-]{1,128}$/;
 const FORBIDDEN_CONTEXT_KEYS = new Set([
   'apiKey',
   'api_key',
@@ -93,6 +95,28 @@ function safeBridgeDiagnostic(response, stderr, exit) {
   if (/heap out of memory|allocation failed/i.test(text)) return 'BRIDGE_RESOURCE_EXHAUSTED';
   if (exit?.signal) return 'BRIDGE_SIGNAL_EXIT';
   return 'BRIDGE_RESPONSE_UNAVAILABLE';
+}
+
+function safeStageDiagnostic(raw) {
+  if (!raw || !STAGE_DIAGNOSTIC_PHASES.has(raw.phase) || !Array.isArray(raw.issues)
+    || raw.issues.length < 1 || raw.issues.length > 20) return undefined;
+  const issues = [];
+  for (const issue of raw.issues) {
+    if (!issue || !STAGE_DIAGNOSTIC_TOKEN.test(issue.path ?? '')
+      || !STAGE_DIAGNOSTIC_TOKEN.test(issue.code ?? '')) return undefined;
+    const keys = issue.keys === undefined ? undefined : Array.isArray(issue.keys)
+      && issue.keys.length <= 20 && issue.keys.every((key) => STAGE_DIAGNOSTIC_TOKEN.test(key))
+      ? issue.keys : null;
+    if (keys === null || (issue.expected !== undefined
+      && !STAGE_DIAGNOSTIC_TOKEN.test(issue.expected))) return undefined;
+    issues.push({
+      path: issue.path,
+      code: issue.code,
+      ...(keys?.length ? { keys } : {}),
+      ...(issue.expected ? { expected: issue.expected } : {}),
+    });
+  }
+  return { phase: raw.phase, issues };
 }
 
 export function validateExecutionContext(raw, { requestId, identity, lease }) {
@@ -712,6 +736,7 @@ export class SubprocessStageABridge {
       throw new WorkerExecutionError(errorCode, response?.stage ?? 'vlm_extract', errorCode, {
         providerCalled: response?.providerCalled === true,
         diagnosticCode: safeBridgeDiagnostic(response, stderr, exit),
+        diagnostic: safeStageDiagnostic(response?.stageDiagnostic),
       });
     }
     ensure(response.schemaVersion === BRIDGE_RESPONSE_VERSION, 'PROVIDER_INVALID_OUTPUT', 'organizing');

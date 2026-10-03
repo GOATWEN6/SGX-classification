@@ -28,7 +28,38 @@ const SAFE_DIAGNOSTICS = new Map([
   ['MODEL_VERSION_MISMATCH', 'BRIDGE_MODEL_VERSION_MISMATCH'],
   ['MISSING_USAGE_OR_PROVENANCE', 'BRIDGE_MISSING_USAGE_OR_PROVENANCE'],
   ['RATE_LIMITED', 'BRIDGE_RATE_LIMITED'],
+  ['PROVIDER_UNAVAILABLE', 'BRIDGE_PROVIDER_UNAVAILABLE'],
+  ['PROVIDER_REJECTED', 'BRIDGE_PROVIDER_REJECTED'],
+  ['OUTPUT_TRUNCATED', 'BRIDGE_OUTPUT_TRUNCATED'],
+  ['RESPONSE_LIMIT', 'BRIDGE_RESPONSE_LIMIT'],
+  ['BUDGET_EXHAUSTED', 'BRIDGE_BUDGET_EXHAUSTED'],
+  ['BUDGET_OVERRUN', 'BRIDGE_BUDGET_OVERRUN'],
+  ['RESERVATION_OVERRUN', 'BRIDGE_RESERVATION_OVERRUN'],
+  ['MODEL_NOT_CONFIGURED', 'BRIDGE_MODEL_NOT_CONFIGURED'],
+  ['AUTHORIZATION_CHECK_REQUIRED', 'BRIDGE_AUTHORIZATION_CHECK_REQUIRED'],
 ]);
+
+const STAGE_DIAGNOSTIC_PHASES = new Set(['provider_envelope', 'content_json', 'schema']);
+const SAFE_TOKEN = /^[A-Za-z0-9_$?.:-]{1,128}$/;
+
+function stageDiagnostic(error) {
+  const raw = error?.diagnostic;
+  if (!raw || !STAGE_DIAGNOSTIC_PHASES.has(raw.phase) || !Array.isArray(raw.issues)) return undefined;
+  const issues = raw.issues.slice(0, 20).flatMap((issue) => {
+    if (!issue || !SAFE_TOKEN.test(issue.path ?? '') || !SAFE_TOKEN.test(issue.code ?? '')) return [];
+    const keys = Array.isArray(issue.keys)
+      ? issue.keys.filter((key) => SAFE_TOKEN.test(key)).slice(0, 20)
+      : undefined;
+    const expected = SAFE_TOKEN.test(issue.expected ?? '') ? issue.expected : undefined;
+    return [{
+      path: issue.path,
+      code: issue.code,
+      ...(keys?.length ? { keys } : {}),
+      ...(expected ? { expected } : {}),
+    }];
+  });
+  return issues.length ? { phase: raw.phase, issues } : undefined;
+}
 
 function diagnosticCode(error) {
   const raw = error instanceof Error ? error.message : '';
@@ -121,6 +152,7 @@ function mockTransport(model, onCall) {
 
 function mappedFailure(error, providerCalled) {
   const raw = error instanceof Error ? error.message : '';
+  const diagnostic = stageDiagnostic(error);
   if (raw === 'CANCELLED') {
     return { stopReason: 'cancelled', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
@@ -134,10 +166,24 @@ function mappedFailure(error, providerCalled) {
     return { errorCode: 'PROVIDER_TIMEOUT', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   if (raw === 'INVALID_OUTPUT' || raw === 'MODEL_VERSION_MISMATCH' || raw === 'MISSING_USAGE_OR_PROVENANCE') {
-    return { errorCode: 'PROVIDER_INVALID_OUTPUT', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
+    return {
+      errorCode: 'PROVIDER_INVALID_OUTPUT',
+      stage: 'vlm_extract',
+      providerCalled,
+      diagnosticCode: diagnosticCode(error),
+      ...(diagnostic ? { stageDiagnostic: diagnostic } : {}),
+    };
   }
   if (raw === 'RATE_LIMITED') {
     return { errorCode: 'PROVIDER_RATE_LIMITED', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
+  }
+  if (['OUTPUT_TRUNCATED', 'RESPONSE_LIMIT'].includes(raw)) {
+    return { errorCode: 'PROVIDER_INVALID_OUTPUT', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
+  }
+  if (['PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED', 'MODEL_NOT_CONFIGURED',
+    'AUTHORIZATION_CHECK_REQUIRED', 'BUDGET_EXHAUSTED', 'BUDGET_OVERRUN',
+    'RESERVATION_OVERRUN'].includes(raw)) {
+    return { errorCode: 'INTERNAL_ERROR', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
   return {
     errorCode: 'INTERNAL_ERROR',

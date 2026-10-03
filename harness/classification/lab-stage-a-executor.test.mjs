@@ -441,6 +441,54 @@ test('invalid Provider JSON fails terminally without an automatic retry', async 
   assert.equal(completed.error.code, 'INVALID_OUTPUT');
 });
 
+test('direct Stage A execution preserves bounded provider schema diagnostics for the worker bridge', async t => {
+  const value = await fixture(t);
+  const calls = [];
+  const factory = new StageALabExecutorFactory({
+    profile: value.executionProfile,
+    provider: 'qwen',
+    model: value.model,
+    inputCnyPerMillion: 0,
+    outputCnyPerMillion: 0,
+    placeKindPolicy: placePolicy(value.built.envelope.taxonomyVersion),
+    transport: transportFor(value.model, calls, ({ photoId }) => ({
+      observations: [{
+        photoId,
+        people: [], mentions: [], times: [],
+        places: [{
+          label: '北京',
+          'canonical?': '北京市',
+          supports: [{ photoId, source: 'visual', quote: '画面可见北京' }]
+        }],
+        events: [], scenes: [],
+        unknownFacets: ['person', 'time', 'event', 'scene'],
+        conflicts: []
+      }]
+    }))
+  });
+  const pending = await submitLabExecutionJob(value.input, value.store, clock);
+  const context = {
+    job: pending,
+    signal: new AbortController().signal,
+    clock,
+    getGuard: async () => structuredClone(value.guard),
+    readAsset: async () => new Uint8Array(png)
+  };
+  const executor = factory.create(value.executionProfile, context);
+
+  await assert.rejects(
+    () => executor.execute(context),
+    error => error.message === 'INVALID_OUTPUT'
+      && error.diagnostic?.phase === 'schema'
+      && error.diagnostic.issues.some(issue => (
+        issue.path === 'observations.0.places.0'
+          && issue.code === 'unrecognized_keys'
+          && issue.keys.includes('canonical?')
+      ))
+  );
+  assert.equal(calls.length, 1);
+});
+
 test('processing cancellation aborts Stage A and a late transport cannot revive the job', async t => {
   const value = await fixture(t);
   const started = deferred();

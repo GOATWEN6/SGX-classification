@@ -1402,6 +1402,46 @@ test('subprocess bridge reports a sanitized diagnostic when the child cannot loa
   );
 });
 
+test('subprocess bridge preserves only bounded structured provider diagnostics', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-bridge-stage-diagnostic.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const fakeBridge = path.join(root, 'fake-bridge.mjs');
+  await writeFile(fakeBridge, `
+    import { writeFile } from 'node:fs/promises';
+    const value = name => process.argv[process.argv.indexOf(name) + 1];
+    await writeFile(value('--response'), JSON.stringify({
+      schemaVersion: 'classification-worker-stage-a-bridge-response.1',
+      errorCode: 'PROVIDER_INVALID_OUTPUT',
+      stage: 'vlm_extract',
+      providerCalled: true,
+      diagnosticCode: 'BRIDGE_INVALID_OUTPUT',
+      stageDiagnostic: {
+        phase: 'schema',
+        issues: [{ path: 'observations.0.places.0', code: 'unrecognized_keys', keys: ['canonical?'] }]
+      }
+    }), { flag: 'wx', mode: 0o600 });
+    process.exitCode = 2;
+  `);
+  const lease = makeLease();
+  const sourcePath = path.join(root, 'source.jpg');
+  await writeFile(sourcePath, Buffer.from('image-one'));
+  const bridge = new SubprocessStageABridge({ buildDir: root, bridgePath: fakeBridge });
+
+  await assert.rejects(
+    () => bridge.run({
+      identity: identityFor(lease),
+      lease,
+      execution: { job: {}, guard: {}, placeKindPolicy: {} },
+      files: [{ evidence: lease.evidence[0], sourcePath, byteLength: 9 }],
+      signal: new AbortController().signal,
+    }),
+    error => error.errorCode === 'PROVIDER_INVALID_OUTPUT'
+      && error.diagnosticCode === 'BRIDGE_INVALID_OUTPUT'
+      && error.diagnostic?.phase === 'schema'
+      && error.diagnostic.issues[0].keys[0] === 'canonical?',
+  );
+});
+
 test('HTTP control-plane client fetches an immutable execution context through the internal route', async () => {
   const requests = [];
   const client = new HttpControlPlaneClient({
