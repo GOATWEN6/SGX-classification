@@ -1,5 +1,13 @@
 # 分类 v1 契约与第一批交付
 
+> 2026-10-03：新增 T1 跨轮稀疏召回契约
+> [`classification-historical-retrieval.schema.json`](classification-historical-retrieval.schema.json)。
+> 文件型参考实现只在相同 `householdId + subjectId + authorizationRevision`、active 生命周期和
+> 相同模型 revision 内召回 image/text embedding 或授权后的人脸 embedding。返回值包含可由后端
+> 重新授权读取的历史投影，不返回向量或相似度；排序不是概率，也不能自动确认人物姓名、亲属关系、
+> 事件或长期 Memory。该文件存储是 T1 内部参考实现，全栈接入时应替换为受鉴权的对象存储与
+> PostgreSQL/pgvector，同时保持本契约、撤回和删除语义。
+
 > 2026-10-02：混合召回与内容组织契约升级为
 > [`classification-hybrid.schema.json`](classification-hybrid.schema.json) v2（`schemaVersion=2.0`、
 > `contractVersion=classification-hybrid.2`）。v2 要求显式 `decisionMode`，当前仅开放

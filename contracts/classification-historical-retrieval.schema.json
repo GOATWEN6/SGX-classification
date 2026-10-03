@@ -1,0 +1,286 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:sgx:classification-historical-retrieval:v1",
+  "$comment": "T1 reference contract for sparse cross-round retrieval. Vector similarity only orders candidates; it is not a probability and cannot confirm identity, relationship, event or Memory facts.",
+  "definitions": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "DateTime": { "type": "string", "format": "date-time" },
+    "Scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["householdId", "subjectId"],
+      "properties": {
+        "householdId": { "$ref": "#/definitions/Id" },
+        "subjectId": { "$ref": "#/definitions/Id" }
+      }
+    },
+    "VersionFields": {
+      "type": "object",
+      "required": ["schemaVersion", "contractVersion"],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" }
+      }
+    },
+    "HistoricalProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contentId", "evidenceId", "evidenceRevision", "sourceHash", "artifactId",
+        "mimeType", "byteLength", "consentRef", "confirmedReferenceIds", "lifecycleState"
+      ],
+      "properties": {
+        "contentId": { "$ref": "#/definitions/Id" },
+        "evidenceId": { "$ref": "#/definitions/Id" },
+        "evidenceRevision": { "type": "integer", "minimum": 1 },
+        "sourceHash": { "$ref": "#/definitions/Sha256" },
+        "artifactId": { "$ref": "#/definitions/Id" },
+        "mimeType": { "enum": ["image/jpeg", "image/png", "image/webp", "image/heic"] },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "consentRef": { "$ref": "#/definitions/Id" },
+        "personConsentRef": { "$ref": "#/definitions/Id" },
+        "faceId": { "type": "string", "pattern": "^face_[a-f0-9]{32}$" },
+        "observationRef": { "$ref": "#/definitions/Id" },
+        "confirmedReferenceIds": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/Id" }
+        },
+        "lifecycleState": { "const": "active" }
+      }
+    },
+    "HistoricalFeatureRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contractVersion", "recordId", "featureId", "scope",
+        "authorizationRevision", "contentId", "evidenceId", "evidenceRevision", "sourceHash",
+        "kind", "modelId", "modelRevision", "dimensions", "normalized", "vector",
+        "lifecycleState", "projection", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "recordId": { "$ref": "#/definitions/Id" },
+        "featureId": { "$ref": "#/definitions/Id" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "contentId": { "$ref": "#/definitions/Id" },
+        "evidenceId": { "$ref": "#/definitions/Id" },
+        "evidenceRevision": { "type": "integer", "minimum": 1 },
+        "sourceHash": { "$ref": "#/definitions/Sha256" },
+        "kind": { "enum": ["image_text_embedding", "face_embedding"] },
+        "modelId": { "$ref": "#/definitions/Id" },
+        "modelRevision": { "$ref": "#/definitions/Id" },
+        "dimensions": { "type": "integer", "minimum": 1, "maximum": 65536 },
+        "normalized": { "const": true },
+        "vector": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 65536,
+          "items": { "type": "number" }
+        },
+        "lifecycleState": { "enum": ["active", "invalidated", "withdrawn"] },
+        "projection": { "$ref": "#/definitions/HistoricalProjection" },
+        "createdAt": { "$ref": "#/definitions/DateTime" },
+        "updatedAt": { "$ref": "#/definitions/DateTime" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "face_embedding" } } },
+          "then": {
+            "properties": {
+              "projection": { "required": ["personConsentRef", "faceId"] }
+            }
+          },
+          "else": {
+            "properties": {
+              "projection": {
+                "not": {
+                  "anyOf": [
+                    { "required": ["personConsentRef"] },
+                    { "required": ["faceId"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RetrievalSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceContentId", "sourceEvidenceId", "kind", "modelId", "modelRevision",
+        "dimensions", "normalized", "vector"
+      ],
+      "properties": {
+        "sourceContentId": { "$ref": "#/definitions/Id" },
+        "sourceEvidenceId": { "$ref": "#/definitions/Id" },
+        "kind": { "enum": ["image_text_embedding", "face_embedding"] },
+        "modelId": { "$ref": "#/definitions/Id" },
+        "modelRevision": { "$ref": "#/definitions/Id" },
+        "dimensions": { "type": "integer", "minimum": 1, "maximum": 65536 },
+        "normalized": { "const": true },
+        "vector": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 65536,
+          "items": { "type": "number" }
+        },
+        "personConsentRef": { "$ref": "#/definitions/Id" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "face_embedding" } } },
+          "then": { "required": ["personConsentRef"] },
+          "else": { "not": { "required": ["personConsentRef"] } }
+        }
+      ]
+    },
+    "UpsertRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "contractVersion", "scope", "authorizationRevision", "records"],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": { "$ref": "#/definitions/HistoricalFeatureRecord" }
+        }
+      }
+    },
+    "QueryRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contractVersion", "scope", "authorizationRevision",
+        "sources", "maxCandidatesPerSource", "excludeEvidenceIds"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/definitions/RetrievalSource" }
+        },
+        "maxCandidatesPerSource": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "excludeEvidenceIds": {
+          "type": "array",
+          "maxItems": 5000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/Id" }
+        }
+      }
+    },
+    "HistoricalCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId", "sourceContentId", "sourceEvidenceId", "historicalContentId",
+        "historicalEvidenceId", "kind", "rank", "modelId", "modelRevision", "reasons",
+        "featureRefs", "evidenceRefs", "historicalProjection"
+      ],
+      "properties": {
+        "candidateId": { "$ref": "#/definitions/Id" },
+        "sourceContentId": { "$ref": "#/definitions/Id" },
+        "sourceEvidenceId": { "$ref": "#/definitions/Id" },
+        "historicalContentId": { "$ref": "#/definitions/Id" },
+        "historicalEvidenceId": { "$ref": "#/definitions/Id" },
+        "kind": { "enum": ["image_text_embedding", "face_embedding"] },
+        "rank": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "modelId": { "$ref": "#/definitions/Id" },
+        "modelRevision": { "$ref": "#/definitions/Id" },
+        "reasons": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/definitions/Id" } },
+        "featureRefs": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/definitions/Id" } },
+        "evidenceRefs": { "type": "array", "minItems": 2, "maxItems": 32, "items": { "$ref": "#/definitions/Id" } },
+        "historicalProjection": { "$ref": "#/definitions/HistoricalProjection" }
+      }
+    },
+    "QueryResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contractVersion", "scope", "authorizationRevision",
+        "candidates", "traces", "scoreMeaning"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "candidates": { "type": "array", "maxItems": 8192, "items": { "$ref": "#/definitions/HistoricalCandidate" } },
+        "traces": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sourceContentId", "sourceEvidenceId", "eligibleCount", "selectedCandidateIds", "coverage"],
+            "properties": {
+              "sourceContentId": { "$ref": "#/definitions/Id" },
+              "sourceEvidenceId": { "$ref": "#/definitions/Id" },
+              "eligibleCount": { "type": "integer", "minimum": 0 },
+              "selectedCandidateIds": { "type": "array", "maxItems": 32, "items": { "$ref": "#/definitions/Id" } },
+              "coverage": { "enum": ["complete", "truncated"] }
+            }
+          }
+        },
+        "scoreMeaning": { "const": "retrieval_order_not_probability" }
+      }
+    },
+    "RevokeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contractVersion", "scope", "authorizationRevision",
+        "evidenceId", "lifecycleState", "updatedAt"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "authorizationRevision": { "$ref": "#/definitions/Id" },
+        "evidenceId": { "$ref": "#/definitions/Id" },
+        "lifecycleState": { "enum": ["invalidated", "withdrawn"] },
+        "updatedAt": { "$ref": "#/definitions/DateTime" }
+      }
+    },
+    "DeleteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "contractVersion", "scope", "evidenceId"],
+      "properties": {
+        "schemaVersion": { "const": "2.0" },
+        "contractVersion": { "const": "classification-historical-retrieval.1" },
+        "scope": { "$ref": "#/definitions/Scope" },
+        "evidenceId": { "$ref": "#/definitions/Id" }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/definitions/HistoricalFeatureRecord" },
+    { "$ref": "#/definitions/UpsertRequest" },
+    { "$ref": "#/definitions/QueryRequest" },
+    { "$ref": "#/definitions/QueryResult" },
+    { "$ref": "#/definitions/RevokeRequest" },
+    { "$ref": "#/definitions/DeleteRequest" }
+  ]
+}
