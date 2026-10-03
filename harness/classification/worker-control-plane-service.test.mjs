@@ -164,7 +164,9 @@ function identity(lease, workerId = 'worker_t1') {
   };
 }
 
-async function submit({ built, root, store, guardStore, clock, contextRevision, profileValue = profile() }) {
+async function submit({
+  built, root, store, guardStore, clock, contextRevision, profileValue = profile(), budgetPatch = {},
+}) {
   const trusted = guard(built, contextRevision);
   const record = await submitLabExecutionJob({
     built,
@@ -183,6 +185,7 @@ async function submit({ built, root, store, guardStore, clock, contextRevision, 
       maxCostCny: 5,
       maxCandidatesPerContent: 8,
       maxCallDurationMs: 60000,
+      ...budgetPatch,
     },
     attemptRevision: 1,
     deadlineAt: new Date(clock.value + 10 * 60_000).toISOString(),
@@ -638,4 +641,41 @@ test('real worker lease requires and settles the shared user-authorized budget',
   });
   assert.deepEqual(failed.realCallBudget.used, { requests: 81, costCny: 0.745861 });
   assert.equal((await store.get(record.jobId)).status, 'failed_retryable');
+});
+
+test('real worker skips a pending job that cannot fit the remaining cost budget', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-worker-budget-skip.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const clock = { value: FIXED_NOW };
+  const store = new FileClassificationLabV2Store(root);
+  const guardStore = new FileTrustedLabGuardStore(root);
+  const expensiveBuilt = buildLabSubmission(submission(5), {
+    authorizationRevision: 't1_auth_budget_skip', consentRef: 't1_consent_budget_skip',
+  });
+  const expensive = await submit({
+    built: expensiveBuilt, root, store, guardStore, clock,
+    contextRevision: 't1_context_budget_skip_expensive', profileValue: realProfile(),
+  });
+  clock.value += 1;
+  const affordableBuilt = buildLabSubmission(submission(6), {
+    authorizationRevision: 't1_auth_budget_skip', consentRef: 't1_consent_budget_skip',
+  });
+  const affordable = await submit({
+    built: affordableBuilt, root, store, guardStore, clock,
+    contextRevision: 't1_context_budget_skip_affordable', profileValue: realProfile(),
+    budgetPatch: { maxRequests: 1, maxCostCny: 0.25 },
+  });
+  const authorization = realAuthorization();
+  authorization.openingUsage = { requests: 81, costCny: 21, sourceRefs: ['prior-authorized-usage'] };
+  const budget = new FileRealCallBudgetGate({ dataRoot: root, authorization, nowMs: () => clock.value });
+  const control = new ClassificationWorkerControlPlane({
+    dataRoot: root, publicBaseUrl: 'http://127.0.0.1:3137', store, guardStore,
+    realCallBudget: budget, clock: { nowMs: () => clock.value },
+  });
+
+  const response = await control.lease(worker(realProfile()));
+  assert.equal(response.leases.length, 1);
+  assert.equal(response.leases[0].jobId, affordable.jobId);
+  assert.equal((await store.get(expensive.jobId)).status, 'pending');
+  assert.equal((await store.get(affordable.jobId)).status, 'processing');
 });

@@ -111,15 +111,22 @@ function profile(config: ClassificationT1LabConfig, taxonomyVersion: string): La
   };
 }
 
-function budget(): LabBudgetPolicy {
+function budget(imageCount: number): LabBudgetPolicy {
+  const maxCandidatesPerContent = 5;
+  const relationUpperBound = Math.min(
+    imageCount * Math.max(0, imageCount - 1) / 2,
+    imageCount * maxCandidatesPerContent,
+  );
+  const maxRequests = Math.max(1, Math.min(40, imageCount + relationUpperBound));
   return {
-    // Eight extracts plus bounded sparse relation review. This is an execution
-    // ceiling, not a request target and never enables automatic retries.
-    maxRequests: 40,
+    // Reserve only calls reachable from this round. ¥0.25 per reachable call
+    // is a fail-closed upper bound for the configured Flash token ceilings;
+    // the provider still reports and settles exact usage after each call.
+    maxRequests,
     maxInputTokens: 3_000_000,
     maxOutputTokens: 160_000,
-    maxCostCny: 5,
-    maxCandidatesPerContent: 5,
+    maxCostCny: Math.min(5, maxRequests * 0.25),
+    maxCandidatesPerContent,
     maxCallDurationMs: 60_000,
   };
 }
@@ -236,7 +243,7 @@ export class ClassificationT1LabService {
       profile: profile(this.config, built.envelope.taxonomyVersion),
       guard,
       semanticContext: semanticContext(this.nowMs()),
-      budgetPolicy: budget(),
+      budgetPolicy: budget(built.envelope.contents.filter((value) => value.modality === 'image').length),
       attemptRevision: 1,
       deadlineAt: new Date(this.nowMs() + 20 * 60_000).toISOString(),
     }, this.store, {

@@ -565,7 +565,15 @@ export class ClassificationWorkerControlPlane {
       catch { continue; }
       if(!this.workerMatches(candidate, guard, request.versions, request.capabilities)) continue;
 
-      const realCallReservation = await this.reserveRealCall(candidate, guard);
+      let realCallReservation: RealCallReservation | undefined;
+      try {
+        realCallReservation = await this.reserveRealCall(candidate, guard);
+      } catch(error) {
+        // A legacy or unusually large pending job must not prevent later jobs
+        // that still fit within the same user-authorized global budget.
+        if(error instanceof WorkerControlPlaneError && error.code === 'REAL_CALL_BUDGET_EXHAUSTED') continue;
+        throw error;
+      }
 
       const at = later(candidate.updatedAt, iso(() => this.clock.nowMs()));
       let claimed;

@@ -64,6 +64,8 @@ test('T1 lab submits worker-pull jobs with stable session authorization and cons
   const firstGuard = await service.guardStore.get(first.job.jobId);
   assert.equal(firstRecord.executionProfile.providerMode, 'stage_a_real');
   assert.equal(firstRecord.executionProfile.modelVersion, 'qwen3.7-flash-2026-07-15');
+  assert.equal(firstRecord.budgetPolicy.maxRequests, 1);
+  assert.equal(firstRecord.budgetPolicy.maxCostCny, 0.25);
   assert.equal(firstGuard.allowPersonMatching, true);
   assert.equal(firstGuard.personMatchingEvidenceIds.length, 1);
   assert.ok(firstGuard.evidence.find((value) => value.evidenceId === firstGuard.personMatchingEvidenceIds[0]).personConsentRef);
@@ -82,6 +84,20 @@ test('T1 lab submits worker-pull jobs with stable session authorization and cons
   assert.equal(secondGuard.allowPersonMatching, false);
   assert.deepEqual(secondGuard.personMatchingEvidenceIds ?? [], []);
   assert.equal((await service.list(first.session.sessionId)).length, 2);
+
+  const multi = await service.submit({
+    submission: submission(4, {
+      images: [
+        { filename: 'multi-a.png', mimeType: 'image/png', bytes: png(41) },
+        { filename: 'multi-b.png', mimeType: 'image/png', bytes: png(42) },
+      ],
+      userTextTargetIndexes: null,
+    }),
+    personMatchingAuthorized: true,
+  });
+  const multiRecord = await service.store.get(multi.job.jobId);
+  assert.equal(multiRecord.budgetPolicy.maxRequests, 3);
+  assert.equal(multiRecord.budgetPolicy.maxCostCny, 0.75);
 
   await assert.rejects(service.submit({
     sessionId: first.session.sessionId,
