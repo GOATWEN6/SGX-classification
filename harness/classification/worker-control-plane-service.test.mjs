@@ -618,7 +618,7 @@ test('real worker lease requires and settles the shared user-authorized budget',
   });
   const lease = (await gated.lease(worker(realProfile()))).leases[0];
   assert.equal(lease.jobId, record.jobId);
-  assert.equal((await budget.readStatus()).used.requests, 89, 'the job budget reserves eight possible calls');
+  assert.equal((await budget.readStatus()).used.requests, 82, 'one image reserves its single reachable extraction call');
   const failed = await gated.fail(lease.jobId, {
     protocolVersion: WORKER_CONTROL_PLANE_VERSION,
     requestId: 'fail_real_before_provider',

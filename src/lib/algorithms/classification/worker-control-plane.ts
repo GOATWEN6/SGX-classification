@@ -401,6 +401,19 @@ export class ClassificationWorkerControlPlane {
   ): Promise<RealCallReservation | undefined> {
     if(job.executionProfile.providerMode !== 'stage_a_real') return undefined;
     if(!this.realCallBudget) fail('REAL_CALL_AUTHORIZATION_NOT_CONFIGURED', 503);
+    const imageCount = job.envelope.evidence.filter(value =>
+      value.lifecycleState === 'active' && value.modality === 'image').length;
+    const relationUpperBound = Math.min(
+      imageCount * Math.max(0, imageCount - 1) / 2,
+      imageCount * job.budgetPolicy.maxCandidatesPerContent,
+    );
+    // Reserve only the calls reachable by this input: one extraction per image
+    // plus bounded unique relations. Keep one fail-closed slot for text-only
+    // jobs even though their deterministic path normally makes no provider call.
+    const maxRequests = Math.max(1, Math.min(
+      job.budgetPolicy.maxRequests,
+      imageCount + relationUpperBound,
+    ));
     try {
       return await this.realCallBudget.reserve({
         jobId: job.jobId,
@@ -411,7 +424,7 @@ export class ClassificationWorkerControlPlane {
         modelVersion: job.executionProfile.modelVersion,
         promptVersion: job.executionProfile.promptVersion,
         allowPersonMatching: guard.allowPersonMatching,
-        maxRequests: job.budgetPolicy.maxRequests,
+        maxRequests,
         maxCostCny: job.budgetPolicy.maxCostCny,
       });
     } catch(error) {
