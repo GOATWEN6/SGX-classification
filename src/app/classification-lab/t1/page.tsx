@@ -2,7 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element -- guarded local lab assets and object URLs are intentionally rendered without the production optimizer. */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createMonoPcm16Wav } from '@/lib/algorithms/classification/browser-wav';
 import styles from '../classification-lab.module.css';
 
 const SESSION_KEY = 'sgx-classification-t1-session-v1';
@@ -164,13 +165,34 @@ export default function ClassificationT1Page() {
   const [job, setJob] = useState<T1Job>();
   const [history, setHistory] = useState<T1Job[]>([]);
   const [phase, setPhase] = useState<'idle' | 'asr' | 'classification'>('idle');
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [error, setError] = useState('');
+  const audioContextRef = useRef<AudioContext>();
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode>();
+  const audioProcessorRef = useRef<ScriptProcessorNode>();
+  const audioSinkRef = useRef<GainNode>();
+  const microphoneStreamRef = useRef<MediaStream>();
+  const audioChunksRef = useRef<Float32Array[]>([]);
+  const recordingRef = useRef(false);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const recordingLimitRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     const urls = files.map(file => URL.createObjectURL(file));
     setPreviews(urls);
     return () => urls.forEach(url => URL.revokeObjectURL(url));
   }, [files]);
+
+  useEffect(() => () => {
+    if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if(recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
+    audioProcessorRef.current?.disconnect();
+    audioSourceRef.current?.disconnect();
+    audioSinkRef.current?.disconnect();
+    microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+    void audioContextRef.current?.close();
+  }, []);
 
   const rememberSession = (value: Session) => {
     setSession(value);
@@ -225,13 +247,13 @@ export default function ClassificationT1Page() {
     throw new Error('T1_ASR_POLL_TIMEOUT');
   };
 
-  const transcribe = async () => {
-    if(!audio || phase !== 'idle') return;
+  const transcribe = async (selectedAudio: File | undefined = audio) => {
+    if(!selectedAudio || phase !== 'idle') return;
     setPhase('asr');
     setError('');
     try {
       const form = new FormData();
-      form.append('audio', audio);
+      form.append('audio', selectedAudio);
       form.append('metadata', JSON.stringify({
         ...(session ? { sessionId: session.sessionId } : {}),
         scope: { householdId, subjectId },
@@ -253,6 +275,89 @@ export default function ClassificationT1Page() {
       const code = value instanceof Error ? value.message : 'T1_ASR_FAILED';
       setError(message(code));
     } finally { setPhase('idle'); }
+  };
+
+  const stopRecording = async () => {
+    if(!recordingRef.current) return;
+    recordingRef.current = false;
+    if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if(recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
+    const context = audioContextRef.current;
+    const chunks = audioChunksRef.current;
+    audioProcessorRef.current?.disconnect();
+    audioSourceRef.current?.disconnect();
+    audioSinkRef.current?.disconnect();
+    microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+    if(context && context.state !== 'closed') await context.close();
+    audioContextRef.current = undefined;
+    audioSourceRef.current = undefined;
+    audioProcessorRef.current = undefined;
+    audioSinkRef.current = undefined;
+    microphoneStreamRef.current = undefined;
+    setRecording(false);
+    try {
+      if(!context || !chunks.length) throw new Error('EMPTY_AUDIO');
+      const wav = createMonoPcm16Wav(chunks, context.sampleRate);
+      const wavBuffer = new ArrayBuffer(wav.byteLength);
+      new Uint8Array(wavBuffer).set(wav);
+      const recorded = new File([wavBuffer], `sgx-microphone-${Date.now()}.wav`, { type: 'audio/wav' });
+      setAudio(recorded);
+      setAsrJob(undefined);
+      setFinalAsr('');
+      await transcribe(recorded);
+    } catch(value) {
+      setError(value instanceof Error && value.message === 'EMPTY_AUDIO'
+        ? '没有采集到有效语音，请检查麦克风后重试。'
+        : '录音转换失败，请重新录制。');
+    }
+  };
+
+  const startRecording = async () => {
+    if(recordingRef.current || recording || phase !== 'idle') return;
+    recordingRef.current = true;
+    setError('');
+    setAsrJob(undefined);
+    setFinalAsr('');
+    try {
+      if(!navigator.mediaDevices?.getUserMedia) throw new Error('MICROPHONE_UNSUPPORTED');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      microphoneStreamRef.current = stream;
+      const context = new AudioContext();
+      audioContextRef.current = context;
+      await context.resume();
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      const sink = context.createGain();
+      sink.gain.value = 0;
+      audioChunksRef.current = [];
+      processor.onaudioprocess = event => {
+        audioChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      };
+      source.connect(processor);
+      processor.connect(sink);
+      sink.connect(context.destination);
+      audioSourceRef.current = source;
+      audioProcessorRef.current = processor;
+      audioSinkRef.current = sink;
+      setAudio(undefined);
+      setRecordingSeconds(0);
+      setRecording(true);
+      const startedAt = Date.now();
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000)), 250);
+      recordingLimitRef.current = setTimeout(() => void stopRecording(), 120_000);
+    } catch(value) {
+      recordingRef.current = false;
+      microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+      if(audioContextRef.current?.state !== 'closed') void audioContextRef.current?.close();
+      microphoneStreamRef.current = undefined;
+      audioContextRef.current = undefined;
+      const code = value instanceof Error ? value.name || value.message : '';
+      setError(code === 'NotAllowedError'
+        ? '麦克风权限被拒绝。请允许本页面使用麦克风后重试。'
+        : '无法启动麦克风，请检查浏览器麦克风权限和设备。');
+    }
   };
 
   const pollClassification = async (sessionId: string, jobId: string): Promise<T1Job> => {
@@ -337,6 +442,7 @@ export default function ClassificationT1Page() {
         <p className={styles.eyebrow}>SGX · T1 真实混合链</p>
         <h1>多轮图文语音分类与归纳</h1>
         <p>本页连接产品控制面、VirtAI Worker、OCR、Embedding、授权后人物候选、SenseVoice ASR 与 Qwen/GLM Flash。每轮最多 8 张照片，结果会持久化并在后续轮次进行同家庭稀疏检索。</p>
+        <a className={styles.albumAction} href="/classification-lab/t1/album">打开智能相册</a>
       </div>
       <div className={styles.modeCard}>
         <strong>Worker Pull · 真实模型</strong>
@@ -373,17 +479,28 @@ export default function ClassificationT1Page() {
           <label>最终 ASR（可修改）<textarea rows={4} value={finalAsr} onChange={event => setFinalAsr(event.target.value)} placeholder="运行下方真实 ASR 后自动填入；也可手工粘贴最终转写" /></label>
         </div>
 
-        <div className={styles.sectionHeading}><div><span>02</span><h2>真实语音识别</h2></div><small>PCM WAV · 最大 50 MiB</small></div>
-        <label className={styles.dropzone}>
-          <input type="file" accept="audio/wav,audio/x-wav" onChange={event => {
-            setAudio(event.target.files?.[0]); setAsrJob(undefined); setFinalAsr('');
-          }} />
-          <strong>{audio?.name ?? '选择一段真实或合成 WAV 语音'}</strong>
-          <span>{audio ? `${(audio.size / 1024 / 1024).toFixed(2)} MiB` : '当前服务器 ASR 只接受 16-bit PCM WAV；压缩音频会明确拒绝'}</span>
-        </label>
-        <button type="button" className={styles.secondaryAction} disabled={!audio || phase !== 'idle'} onClick={() => void transcribe()}>
-          {phase === 'asr' ? `ASR：${statusCopy(asrJob?.status ?? 'pending')}…` : '先运行真实 ASR 并查看转写'}
-        </button>
+        <div className={styles.sectionHeading}><div><span>02</span><h2>用麦克风补充说明</h2></div><small>最长 2 分钟 · 停止后自动识别</small></div>
+        <div className={recording ? styles.recordingPanel : styles.microphonePanel}>
+          <strong>{recording ? `正在聆听 ${recordingSeconds} 秒` : phase === 'asr' ? '正在进行真实 ASR…' : audio ? '语音已采集' : '点击后直接说话'}</strong>
+          <span>{recording ? '说完后点击“结束并识别”' : audio ? `${audio.name} · ${(audio.size / 1024).toFixed(1)} KiB` : '浏览器只在你点击后申请麦克风权限；停止录音后才上传。'}</span>
+          <button type="button" className={recording ? styles.stopRecordingAction : styles.recordingAction}
+            disabled={phase !== 'idle'} onClick={() => void (recording ? stopRecording() : startRecording())}>
+            {recording ? '结束并识别' : '开始语音输入'}
+          </button>
+        </div>
+        <details className={styles.developerFallback}>
+          <summary>开发调试：上传已有 WAV</summary>
+          <label className={styles.dropzone}>
+            <input type="file" accept="audio/wav,audio/x-wav" disabled={recording} onChange={event => {
+              setAudio(event.target.files?.[0]); setAsrJob(undefined); setFinalAsr('');
+            }} />
+            <strong>{audio?.name ?? '选择 PCM WAV'}</strong>
+            <span>只用于调试；正常使用请直接点击上方麦克风。</span>
+          </label>
+          <button type="button" className={styles.secondaryAction} disabled={!audio || phase !== 'idle' || recording} onClick={() => void transcribe()}>
+            {phase === 'asr' ? `ASR：${statusCopy(asrJob?.status ?? 'pending')}…` : '识别这个 WAV'}
+          </button>
+        </details>
         {asrJob && <div className={asrJob.status === 'succeeded' ? styles.success : styles.notice}>
           <strong>{statusCopy(asrJob.status)}</strong>
           {asrJob.result

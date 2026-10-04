@@ -20,7 +20,7 @@
 - 可运行的 Node Worker：lease、heartbeat、签名下载、hash 校验、Feature Service、Stage A 子进程、结果上传、complete/fail/cancel-ack 和清理。
 - localhost-only Python Feature Service：真实 RapidOCR、Chinese-CLIP、匿名人脸候选和 SenseVoice ASR 的稳定接口、离线 adapter 与统一进程验证证据。
 - JSON Schema：输入、Job、结果、复核、混合特征和 Worker 控制面，包含 execution-context。
-- 实验页和 BFF 参考实现：用于本地上传和真实模型功能测试，不替代产品后端。
+- 实验页和 BFF 参考实现：`/classification-lab/t1` 支持多轮图片、文字和浏览器麦克风录音，停止录音后生成 16 kHz/16-bit/mono WAV 并进入真实 SenseVoice ASR；`/classification-lab/t1/album` 从同一持久化会话展示故事、图片、用户原文、最终 ASR、AI 标题、摘要和标签。这些页面用于 T1 功能验证，不替代产品后端和正式产品 UI。
 - 自动化门禁：Node/TypeScript、Worker、部署回滚、Python、密钥扫描和 diff 检查。
 
 ## 3. 不能从本包直接得出的结论
@@ -131,6 +131,8 @@ Worker 内部协议至少实现：
 ## 8. 第一轮联调完成标准
 
 - 单图、两图、五图和图文/ASR 组合都能创建异步 Job；
+- 用户可在浏览器直接点击麦克风说话，停止后得到可编辑的最终 ASR；原始录音与最终转写走服务端授权和持久化链；
+- 智能相册页面能跨页面刷新读取同一会话的已完成故事，不使用静态演示数据；
 - Worker 无需 SSH 人工操作即可拉取并上报结果；
 - 输出能展示 AI 标题、摘要、时间线和人物/时间/地点/事件/场景筛选；
 - 用户原文可见，AI 结果明确标记；
