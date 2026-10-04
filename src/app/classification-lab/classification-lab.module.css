@@ -2,6 +2,8 @@
 .hero { max-width: 1440px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 32px; align-items: flex-end; }
 .hero h1 { margin: 4px 0 8px; font-family: Georgia, 'Songti SC', serif; font-size: clamp(36px, 5vw, 66px); font-weight: 500; letter-spacing: -.04em; }
 .hero p { max-width: 760px; margin: 0; color: #6d6257; }
+.albumAction { display: inline-flex; align-items: center; min-height: 42px; margin-top: 18px; padding: 9px 15px; border: 1px solid #8cab99; border-radius: 12px; background: #edf4ef; color: #2f5b47; font-weight: 750; text-decoration: none; }
+.albumAction:hover { background: #dfece3; }
 .eyebrow { color: #8b6948 !important; font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .modeCard { min-width: 280px; padding: 18px 20px; border: 1px solid #d7c7b3; border-radius: 18px; background: rgba(255,255,255,.72); box-shadow: 0 16px 40px rgba(83,61,37,.08); }
 .modeCard strong, .modeCard span, .modeCard small { display: block; }
@@ -45,6 +47,17 @@
 .secondaryAction:hover { background: #e1ede5; }
 .secondaryAction:disabled { cursor: not-allowed; opacity: .5; }
 .success { margin: 12px 0 22px; padding: 13px 16px; border-left: 4px solid #4d8468; border-radius: 8px; background: #edf7f0; color: #315b47; }
+.microphonePanel, .recordingPanel { display: grid; justify-items: center; gap: 7px; margin-bottom: 14px; padding: 28px; border: 1px solid #b8cabe; border-radius: 18px; background: #f0f6f2; text-align: center; }
+.recordingPanel { border-color: #d99b91; background: #fff2ef; }
+.microphonePanel strong, .recordingPanel strong { font-size: 21px; }
+.microphonePanel span, .recordingPanel span { color: #756b62; font-size: 14px; }
+.recordingAction, .stopRecordingAction { min-width: 210px; min-height: 52px; margin-top: 10px; border-radius: 999px; background: #2f5b47; font-size: 17px; }
+.recordingAction:hover { background: #244a39; }
+.stopRecordingAction { background: #a64f43; }
+.stopRecordingAction:hover { background: #8f4036; }
+.developerFallback { margin: 10px 0 28px; color: #6d6257; }
+.developerFallback summary { cursor: pointer; font-size: 14px; font-weight: 700; }
+.developerFallback .dropzone { min-height: 110px; margin-top: 12px; }
 .consentRow { display: flex; align-items: flex-start; gap: 12px; margin: 22px 0 0; padding: 14px 16px; border: 1px solid #c8d7cd; border-radius: 14px; background: #f0f6f2; color: #385546; cursor: pointer; }
 .consentRow input { width: 19px; min-height: 19px; margin-top: 2px; }
 .consentRow span, .consentRow strong, .consentRow small { display: block; }
@@ -103,6 +116,13 @@
 .footer { max-width: 1440px; margin: 26px auto 0; padding: 22px; }
 .footer code { display: block; overflow-x: auto; margin: 10px 0; padding: 12px; border-radius: 10px; background: #2f2924; color: #f7ead8; font-size: 13px; }
 .footer p { margin: 0; color: #766a5f; font-size: 14px; }
+.albumGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; margin-top: 24px; }
+.albumCard { overflow: hidden; padding: 20px; border: 1px solid #ddd1c2; border-radius: 18px; background: #fff; }
+.albumCard h3 { margin: 7px 0 4px; font-family: Georgia, 'Songti SC', serif; font-size: 25px; }
+.albumMembers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
+.albumMembers img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: #ece8e1; }
+.albumMembers blockquote { display: grid; gap: 6px; min-height: 100px; margin: 0; padding: 12px; border-left: 3px solid #b79268; border-radius: 8px; background: #f8f5f0; color: #53473b; }
+.albumMembers blockquote small { color: #876d52; font-weight: 750; }
 
 @media (max-width: 980px) {
   .hero, .resultHeader { align-items: stretch; flex-direction: column; }
