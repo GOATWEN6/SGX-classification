@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
-import { requireLocalClassificationLab } from '@/lib/algorithms/classification/lab-http';
+import { LabHttpError, requireClassificationT1Access } from '@/lib/algorithms/classification/lab-http';
 import {
   ClassificationT1AsrService,
 } from '@/lib/algorithms/classification/t1-asr-prejob';
@@ -22,10 +22,12 @@ function service(): ClassificationT1AsrService {
 }
 
 function errorResponse(error: unknown): NextResponse {
-  const status = error instanceof WorkerControlPlaneError ? error.status
+  const status = error instanceof LabHttpError ? error.status
+    : error instanceof WorkerControlPlaneError ? error.status
     : error instanceof ZodError || error instanceof SyntaxError ? 400
       : 500;
-  const code = error instanceof WorkerControlPlaneError ? error.code
+  const code = error instanceof LabHttpError ? error.code
+    : error instanceof WorkerControlPlaneError ? error.code
     : error instanceof ZodError ? 'T1_ASR_INPUT_INVALID'
       : error instanceof SyntaxError ? 'T1_ASR_METADATA_INVALID'
         : 'T1_ASR_INTERNAL_ERROR';
@@ -37,7 +39,7 @@ function errorResponse(error: unknown): NextResponse {
 
 export async function GET(request: Request) {
   try {
-    requireLocalClassificationLab(request);
+    requireClassificationT1Access(request);
     const url = new URL(request.url);
     const sessionId = url.searchParams.get('sessionId');
     const jobId = url.searchParams.get('jobId');
@@ -50,7 +52,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireLocalClassificationLab(request, true);
+    requireClassificationT1Access(request, true);
     if(!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data')) {
       throw new WorkerControlPlaneError('T1_ASR_MULTIPART_REQUIRED', 415);
     }

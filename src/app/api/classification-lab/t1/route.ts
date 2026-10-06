@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
-import { requireLocalClassificationLab } from '@/lib/algorithms/classification/lab-http';
+import { LabHttpError, requireClassificationT1Access } from '@/lib/algorithms/classification/lab-http';
 import type { LabImageUpload, LabSubmission } from '@/lib/algorithms/classification/lab-contract';
 import {
   ClassificationT1LabService,
@@ -28,7 +28,8 @@ async function capabilities(lab: ClassificationT1LabService) {
 function errorResponse(error: unknown): NextResponse {
   const raw = error instanceof Error ? error.message : 'T1_LAB_INTERNAL_ERROR';
   const code = /^[A-Z][A-Z0-9_]{1,127}$/.test(raw) ? raw : 'T1_LAB_INTERNAL_ERROR';
-  const status = code.endsWith('_NOT_FOUND') ? 404
+  const status = error instanceof LabHttpError ? error.status
+    : code.endsWith('_NOT_FOUND') ? 404
     : code.includes('DISABLED') ? 503
       : code.includes('SCOPE') || code.includes('REVOKED') ? 403
         : code.includes('INVALID') || code.includes('REQUIRED') || code.includes('LIMIT')
@@ -42,7 +43,7 @@ function errorResponse(error: unknown): NextResponse {
 
 export async function GET(request: Request) {
   try {
-    requireLocalClassificationLab(request);
+    requireClassificationT1Access(request);
     const url = new URL(request.url);
     const sessionId = url.searchParams.get('sessionId');
     if(!sessionId) {
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireLocalClassificationLab(request, true);
+    requireClassificationT1Access(request, true);
     if(!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data')) {
       throw new Error('T1_MULTIPART_REQUIRED');
     }

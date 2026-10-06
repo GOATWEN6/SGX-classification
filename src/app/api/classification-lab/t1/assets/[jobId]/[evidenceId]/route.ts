@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { requireLocalClassificationLab } from '@/lib/algorithms/classification/lab-http';
+import { LabHttpError, requireClassificationT1Access } from '@/lib/algorithms/classification/lab-http';
 import {
   ClassificationT1LabService,
   classificationT1LabConfig,
@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: { jobId: string; evidenceId: string } },
 ) {
   try {
-    requireLocalClassificationLab(request);
+    requireClassificationT1Access(request);
     if(process.env.CLASSIFICATION_T1_LAB_ENABLED !== 'true') throw new Error('T1_LAB_DISABLED');
     const sessionId = new URL(request.url).searchParams.get('sessionId');
     if(!sessionId) throw new Error('T1_SESSION_REQUIRED');
@@ -33,7 +33,8 @@ export async function GET(
   } catch(error) {
     const raw = error instanceof Error ? error.message : 'T1_ASSET_INTERNAL_ERROR';
     const code = /^[A-Z][A-Z0-9_]{1,127}$/.test(raw) ? raw : 'T1_ASSET_INTERNAL_ERROR';
-    const status = code.endsWith('_NOT_FOUND') ? 404
+    const status = error instanceof LabHttpError ? error.status
+      : code.endsWith('_NOT_FOUND') ? 404
       : code.includes('REQUIRED') ? 400
         : code.includes('AUTHORIZED') || code.includes('SCOPE') ? 403
           : code.includes('DISABLED') ? 503

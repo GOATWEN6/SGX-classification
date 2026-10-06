@@ -11,7 +11,7 @@ const { buildLabSubmission } = require(`${build}/src/lib/algorithms/classificati
 const { DeterministicLabProvider, createConfiguredLabProvider } = require(`${build}/src/lib/algorithms/classification/lab-provider.js`);
 const { FileClassificationLabStore } = require(`${build}/src/lib/algorithms/classification/lab-store.js`);
 const { applyClassificationLabAction, canReadClassificationLabAsset } = require(`${build}/src/lib/algorithms/classification/lab-actions.js`);
-const { requireLocalClassificationLab } = require(`${build}/src/lib/algorithms/classification/lab-http.js`);
+const { requireClassificationT1Access, requireLocalClassificationLab } = require(`${build}/src/lib/algorithms/classification/lab-http.js`);
 const { submitClassificationLabJob, classificationLabCapabilities } = require(`${build}/src/lib/algorithms/classification/lab-service.js`);
 
 function png(index, width = 4, height = 3) {
@@ -108,6 +108,37 @@ test('lab HTTP gate is disabled by default, loopback-only and requires a mutatio
   assert.throws(() => requireLocalClassificationLab(new Request('http://127.0.0.1/api/classification-lab'), true), /CLASSIFICATION_LAB_HEADER_REQUIRED/);
   assert.doesNotThrow(() => requireLocalClassificationLab(new Request('http://127.0.0.1/api/classification-lab', { headers: { 'x-sgx-classification-lab': '1', origin: 'http://localhost:3000' } }), true));
   if(prior === undefined) delete process.env.CLASSIFICATION_LAB_ENABLED; else process.env.CLASSIFICATION_LAB_ENABLED = prior;
+});
+
+test('T1 staging access stays local by default and requires a separate bearer token externally', () => {
+  const prior = Object.fromEntries([
+    'CLASSIFICATION_LAB_ENABLED',
+    'CLASSIFICATION_T1_EXTERNAL_ACCESS_ENABLED',
+    'CLASSIFICATION_T1_EXTERNAL_ACCESS_TOKEN',
+  ].map(key => [key, process.env[key]]));
+  process.env.CLASSIFICATION_LAB_ENABLED = 'true';
+  delete process.env.CLASSIFICATION_T1_EXTERNAL_ACCESS_ENABLED;
+  delete process.env.CLASSIFICATION_T1_EXTERNAL_ACCESS_TOKEN;
+  assert.doesNotThrow(() => requireClassificationT1Access(new Request('http://127.0.0.1/api/classification-lab/t1')));
+  const externalRequest = (headers = {}) => new Request('http://127.0.0.1/api/classification-lab/t1', {
+    headers: { 'cf-ray': 'test-ray', 'x-forwarded-host': 'staging.example', ...headers },
+  });
+  assert.throws(() => requireClassificationT1Access(externalRequest()), /CLASSIFICATION_T1_EXTERNAL_ACCESS_DISABLED/);
+  process.env.CLASSIFICATION_T1_EXTERNAL_ACCESS_ENABLED = 'true';
+  process.env.CLASSIFICATION_T1_EXTERNAL_ACCESS_TOKEN = 't'.repeat(48);
+  assert.throws(() => requireClassificationT1Access(externalRequest()), /CLASSIFICATION_T1_EXTERNAL_ACCESS_UNAUTHORIZED/);
+  assert.throws(() => requireClassificationT1Access(externalRequest({
+    authorization: `Bearer ${'t'.repeat(48)}`, origin: 'https://frontend.example',
+  })), /CLASSIFICATION_T1_EXTERNAL_ORIGIN_REJECTED/);
+  assert.throws(() => requireClassificationT1Access(externalRequest({
+    authorization: `Bearer ${'t'.repeat(48)}`,
+  }), true), /CLASSIFICATION_LAB_HEADER_REQUIRED/);
+  assert.doesNotThrow(() => requireClassificationT1Access(externalRequest({
+    authorization: `Bearer ${'t'.repeat(48)}`, 'x-sgx-classification-lab': '1',
+  }), true));
+  for(const [key, value] of Object.entries(prior)) {
+    if(value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
 });
 
 test('lab store writes only bounded job and asset files', async t => {
