@@ -9,6 +9,7 @@ import test from 'node:test';
 import {
   LocalFeatureBundleProcessor,
   PROTOCOL_VERSION,
+  WorkerExecutionError,
   WorkerRuntime,
   writeDownloadedFile,
 } from '../runtime/worker-runtime.mjs';
@@ -569,6 +570,35 @@ test('result upload failure reports provider usage already returned by the proce
   assert.equal(failure.usage.inputTokens, 12_726);
   assert.equal(failure.usage.outputTokens, 3_419);
   assert.equal(failure.usage.costCny, 0.0316824);
+});
+
+test('processor failure reports partial provider usage instead of zero', async (t) => {
+  const fx = await fixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(fx.root, { recursive: true, force: true })));
+  fx.runtime.processor = {
+    async process() {
+      throw new WorkerExecutionError('PROVIDER_INVALID_OUTPUT', 'organizing', 'invalid organization', {
+        providerCalled: true,
+        usage: {
+          providerLatencyMs: 0,
+          inputTokens: 53_813,
+          outputTokens: 6_562,
+          costCny: 0.0960756,
+          providerCalls: 11,
+        },
+      });
+    },
+  };
+
+  const summary = await fx.runtime.runOnce();
+
+  assert.equal(summary.failed, 1);
+  const failure = fx.controlPlane.requests.fail[0].request;
+  assert.equal(failure.providerCalled, true);
+  assert.equal(failure.usage.providerCalls, 11);
+  assert.equal(failure.usage.inputTokens, 53_813);
+  assert.equal(failure.usage.outputTokens, 6_562);
+  assert.equal(failure.usage.costCny, 0.0960756);
 });
 
 test('artifact hash mismatch fails once without feature calls or upload and cleans scratch', async (t) => {
@@ -1525,6 +1555,42 @@ test('subprocess bridge preserves only bounded structured provider diagnostics',
       && error.diagnosticCode === 'BRIDGE_INVALID_OUTPUT'
       && error.diagnostic?.phase === 'schema'
       && error.diagnostic.issues[0].keys[0] === 'canonical?',
+  );
+});
+
+test('subprocess bridge preserves bounded partial usage on a failed response', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'sgx-worker-bridge-partial-usage.'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const fakeBridge = path.join(root, 'fake-bridge.mjs');
+  await writeFile(fakeBridge, `
+    import { writeFile } from 'node:fs/promises';
+    const value = name => process.argv[process.argv.indexOf(name) + 1];
+    await writeFile(value('--response'), JSON.stringify({
+      schemaVersion: 'classification-worker-stage-a-bridge-response.1',
+      errorCode: 'PROVIDER_INVALID_OUTPUT',
+      stage: 'organizing',
+      providerCalled: true,
+      diagnosticCode: 'BRIDGE_INVALID_OUTPUT',
+      usage: { providerLatencyMs: 0, inputTokens: 53813, outputTokens: 6562, costCny: 0.0960756, providerCalls: 11 }
+    }), { flag: 'wx', mode: 0o600 });
+    process.exitCode = 2;
+  `);
+  const lease = makeLease();
+  const sourcePath = path.join(root, 'source.jpg');
+  await writeFile(sourcePath, Buffer.from('image-one'));
+  const bridge = new SubprocessStageABridge({ buildDir: root, bridgePath: fakeBridge });
+
+  await assert.rejects(
+    () => bridge.run({
+      identity: identityFor(lease),
+      lease,
+      execution: { job: {}, guard: {}, placeKindPolicy: {} },
+      files: [{ evidence: lease.evidence[0], sourcePath, byteLength: 9 }],
+      signal: new AbortController().signal,
+    }),
+    error => error.errorCode === 'PROVIDER_INVALID_OUTPUT'
+      && error.usage?.providerCalls === 11
+      && error.usage?.costCny === 0.0960756,
   );
 });
 

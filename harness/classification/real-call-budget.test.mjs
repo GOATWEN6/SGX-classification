@@ -125,6 +125,20 @@ test('unknown terminal usage conservatively keeps the full reservation', async (
   );
 });
 
+test('a concurrent poller cannot acquire or settle an existing reservation', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sgx-real-call-duplicate.'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const gate = new FileRealCallBudgetGate({ dataRoot: root, authorization: authorization(), nowMs: () => NOW });
+  await gate.reserve(reservation(6, { maxRequests: 2, maxCostCny: 1 }));
+  await assert.rejects(
+    gate.reserve(reservation(6, { maxRequests: 2, maxCostCny: 1 })),
+    /DUPLICATE_REAL_CALL_RESERVATION/,
+  );
+  const status = await gate.readStatus();
+  assert.equal(status.used.requests, 83);
+  assert.equal(status.used.costCny, 1.745861);
+});
+
 test('reservation overrun is recorded and halts later real calls', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-real-call-overrun.'));
   t.after(() => rm(root, { recursive: true, force: true }));

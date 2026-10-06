@@ -31,6 +31,7 @@ paths=(
   "$SGX_ROOT/shared/cache/virtualenv"
   "$SGX_ROOT/shared/config"
   "$SGX_ROOT/shared/downloads"
+  "$SGX_ROOT/shared/logs"
   "$SGX_ROOT/shared/manifests"
   "$SGX_ROOT/shared/models"
   "$SGX_ROOT/shared/wheelhouse"

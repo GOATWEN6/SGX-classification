@@ -8,7 +8,7 @@ RUNTIME="${SGX_RUNTIME_ROOT:-/quota/sgx-classification}"
 PYTHON="${SGX_FEATURE_PYTHON:-$RUNTIME/venvs/feature-service-all-py310-20261003-r2/bin/python}"
 EXPECTED_RELEASE="${SGX_EXPECTED_RELEASE:?SGX_EXPECTED_RELEASE is required}"
 PID_FILE="$RUNTIME/runs/feature-service-$EXPECTED_RELEASE.pid"
-LOG="$RUNTIME/runs/feature-service-$EXPECTED_RELEASE.log"
+LOG="$ROOT/shared/logs/feature-service-$EXPECTED_RELEASE.log"
 
 [[ "$(readlink -f "$ROOT/current")" == "$ROOT/releases/$EXPECTED_RELEASE" ]] || {
   echo CURRENT_RELEASE_MISMATCH >&2
@@ -40,7 +40,7 @@ set -a
 . "$ROOT/shared/config/nonsecret.env"
 set +a
 export PYTHONPATH="$ROOT/current/feature-service/src"
-mkdir -p "$RUNTIME/runs" /tmp/sgx-classification/jobs
+mkdir -p "$RUNTIME/runs" "$ROOT/shared/logs" /tmp/sgx-classification/jobs
 
 nohup "$PYTHON" -m sgx_classification_feature_service </dev/null >"$LOG" 2>&1 &
 child=$!

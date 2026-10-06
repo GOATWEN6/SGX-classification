@@ -304,11 +304,11 @@ export class FileRealCallBudgetGate implements RealCallBudgetGate {
       ensure(ledger.state === 'active', 'REAL_CALL_AUTHORIZATION_HALTED');
       const existing = ledger.entries.find(entry => entry.reservationId === reservationId);
       if(existing) {
-        ensure(existing.status === 'reserved'
-          && existing.jobId === input.jobId
-          && existing.runId === input.runId
-          && existing.executionProfileDigest === input.executionProfileDigest, 'DUPLICATE_REAL_CALL_RESERVATION');
-        return reservation;
+        // A reservation belongs to the lease attempt that created it. Returning
+        // the same reservation to a concurrent poller lets the losing poller
+        // settle the winner's budget entry as unused. Fail closed instead; an
+        // operator can reconcile an abandoned reservation from audit evidence.
+        ensure(false, 'DUPLICATE_REAL_CALL_RESERVATION');
       }
       const reserved = { requests: input.maxRequests, costMicroCny: toMicroCny(input.maxCostCny) };
       const used = accounted(ledger);

@@ -26,6 +26,7 @@ assert_link() {
 for script in "$PACKAGE_ROOT"/bin/*.sh "$PACKAGE_ROOT"/tests/*.sh; do
   bash -n "$script"
 done
+[[ -x "$PACKAGE_ROOT/bin/start-worker.sh" ]] || fail 'start-worker.sh must be executable'
 
 python3 - \
   "$PACKAGE_ROOT/tools/acquire-modelscope-snapshot.py" \
@@ -204,6 +205,7 @@ for path in \
   shared/cache/virtualenv \
   shared/config \
   shared/downloads \
+  shared/logs \
   shared/manifests \
   shared/models \
   shared/wheelhouse \

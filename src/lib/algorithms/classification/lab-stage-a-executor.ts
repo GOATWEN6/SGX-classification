@@ -149,7 +149,11 @@ function mapStageFailure(stage: StageResult): never {
   if(STAGE_OUTPUT_VALIDATION_CODES.has(code)) {
     fail('INVALID_OUTPUT', { phase: 'schema', issues: [{ path: '$', code }] });
   }
-  fail('LAB_PROVIDER_UNAVAILABLE');
+  // Once the provider returned a structurally valid response, deterministic
+  // semantic/organization failures are output failures. Reporting them as a
+  // missing provider configuration hides the actionable cause and invites an
+  // unsafe paid retry.
+  fail('INVALID_OUTPUT', { phase: 'schema', issues: [{ path: '$', code }] });
 }
 
 function mapThrownError(error: unknown): never {
@@ -179,7 +183,10 @@ function mapThrownError(error: unknown): never {
   if(code === 'LAB_RUN_IDENTITY_MISMATCH') fail(code);
   if(['IMAGE_INPUT_LIMIT', 'IMAGE_BATCH_LIMIT', 'INVALID_IMAGE', 'SOURCE_HASH_MISMATCH'].includes(code)) fail(code);
   if(code === 'LAB_RUN_TIMEOUT' || code === 'LAB_PROVIDER_UNAVAILABLE') fail(code);
-  fail('LAB_PROVIDER_UNAVAILABLE');
+  fail('INVALID_OUTPUT', {
+    phase: 'schema',
+    issues: [{ path: '$', code: /^[A-Z0-9_]+$/.test(code) ? code : 'UNCLASSIFIED_STAGE_FAILURE' }]
+  });
 }
 
 class StageALabExecutor implements LabExecutionExecutor {

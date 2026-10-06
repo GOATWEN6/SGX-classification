@@ -93,6 +93,9 @@ export class WorkerExecutionError extends Error {
     this.diagnostic = options.diagnostic && typeof options.diagnostic === 'object'
       ? structuredClone(options.diagnostic)
       : undefined;
+    this.usage = options.usage && typeof options.usage === 'object'
+      ? structuredClone(options.usage)
+      : undefined;
     // This runtime never schedules an automatic retry. A later attempt requires
     // a new control-plane decision and identity.
     this.retryable = false;
@@ -723,6 +726,12 @@ export class WorkerRuntime {
         const executionError = error instanceof WorkerExecutionError
           ? error
           : new WorkerExecutionError('INTERNAL_ERROR', 'lease', 'worker execution failed', { cause: error });
+        if (executionError.usage) {
+          knownUsage = {
+            ...emptyUsage(startedAt, this.now),
+            ...executionError.usage,
+          };
+        }
         terminal = { kind: 'fail', error: executionError };
         outcome = 'failed';
       }

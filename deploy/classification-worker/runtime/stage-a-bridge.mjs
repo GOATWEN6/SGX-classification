@@ -20,6 +20,13 @@ import {
 const require = createRequire(import.meta.url);
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
 let providerCallObserved = false;
+const providerUsageObserved = {
+  providerLatencyMs: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  costCny: 0,
+  providerCalls: 0,
+};
 
 const SAFE_DIAGNOSTICS = new Map([
   ['BRIDGE_ARGUMENT_MISSING', 'BRIDGE_ARGUMENT_MISSING'],
@@ -110,7 +117,7 @@ function parseNonnegative(value, fallback) {
   return parsed;
 }
 
-function providerResponseRecorder(job) {
+function providerResponseRecorder(job, inputCnyPerMillion, outputCnyPerMillion) {
   const root = process.env.SGX_PROVIDER_AUDIT_DIR;
   if (!root) return undefined;
   ensure(path.isAbsolute(root), 'LAB_RUN_IDENTITY_MISMATCH');
@@ -118,6 +125,17 @@ function providerResponseRecorder(job) {
   const target = path.join(root, `${job.jobId}.provider-responses.jsonl`);
   return (entry) => {
     try {
+      const inputTokens = entry?.raw?.usage?.prompt_tokens;
+      const outputTokens = entry?.raw?.usage?.completion_tokens;
+      if (Number.isInteger(inputTokens) && inputTokens >= 0
+        && Number.isInteger(outputTokens) && outputTokens >= 0) {
+        providerUsageObserved.inputTokens += inputTokens;
+        providerUsageObserved.outputTokens += outputTokens;
+        providerUsageObserved.providerCalls += 1;
+        providerUsageObserved.costCny += (
+          inputTokens * inputCnyPerMillion + outputTokens * outputCnyPerMillion
+        ) / 1_000_000;
+      }
       const bytes = Buffer.from(`${JSON.stringify({
         schemaVersion: 'classification-provider-response-audit.1',
         recordedAt: new Date().toISOString(),
@@ -386,7 +404,11 @@ async function execute(requestPath, responsePath) {
       return value;
     }
     : undefined;
-  const recordProviderResponse = providerResponseRecorder(job);
+  const recordProviderResponse = providerResponseRecorder(
+    job,
+    inputCnyPerMillion,
+    outputCnyPerMillion,
+  );
   const factory = new stageA.StageALabExecutorFactory({
     profile,
     provider,
@@ -454,6 +476,7 @@ try {
     await writeFile(responsePath, JSON.stringify({
       schemaVersion: BRIDGE_RESPONSE_VERSION,
       ...failure,
+      usage: providerUsageObserved,
     }), { mode: 0o600, flag: 'wx' });
   } catch {
     // Parent reports the stable bridge error when no response can be written.

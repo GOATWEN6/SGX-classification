@@ -738,6 +738,7 @@ export class SubprocessStageABridge {
         providerCalled: response?.providerCalled === true,
         diagnosticCode: safeBridgeDiagnostic(response, stderr, exit),
         diagnostic: safeStageDiagnostic(response?.stageDiagnostic),
+        ...(response?.usage ? { usage: usageFromBridge(response.usage) } : {}),
       });
     }
     ensure(response.schemaVersion === BRIDGE_RESPONSE_VERSION, 'PROVIDER_INVALID_OUTPUT', 'organizing');
