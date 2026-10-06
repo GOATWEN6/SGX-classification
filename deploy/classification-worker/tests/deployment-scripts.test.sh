@@ -27,12 +27,15 @@ for script in "$PACKAGE_ROOT"/bin/*.sh "$PACKAGE_ROOT"/tests/*.sh; do
   bash -n "$script"
 done
 
-python3 - "$PACKAGE_ROOT/tools/acquire-modelscope-snapshot.py" <<'PY'
+python3 - \
+  "$PACKAGE_ROOT/tools/acquire-modelscope-snapshot.py" \
+  "$PACKAGE_ROOT/tools/warm-feature-service.py" <<'PY'
 import pathlib
 import sys
 
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-compile(source, sys.argv[1], "exec")
+for filename in sys.argv[1:]:
+    source = pathlib.Path(filename).read_text(encoding="utf-8")
+    compile(source, filename, "exec")
 PY
 
 python3 - "$PACKAGE_ROOT" <<'PY'

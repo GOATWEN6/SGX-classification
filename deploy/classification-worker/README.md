@@ -24,7 +24,7 @@ user -> product frontend -> product backend -> DB/object store/lease
 Before a `stage_a_real` job can be leased, the product control plane must load
 `CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH`. The referenced JSON is a
 deployment-specific, non-secret authorization receipt. It freezes the provider
-and model, the cumulative `200` request / `¥25` / zero-retry cap, person-matching
+and model, the cumulative `200` request / `¥50` / zero-retry cap, person-matching
 permission, expiry, and the reconciled usage from all earlier real campaigns.
 The checked-in `real-call-authorization.example.json` is deliberately expired.
 
@@ -76,12 +76,14 @@ These observations do not authorize a download or installation. SigLIP2 remains 
 - `bin/init-layout.sh`: idempotently creates the fixed deployment layout.
 - `bin/activate-release.sh`: atomically switches `current`, preserving the prior verified release in `previous`.
 - `bin/rollback-release.sh`: compare-and-swap style rollback with an explicit target and expected current release.
+- `bin/start-feature-service.sh`: starts the active frozen Feature Service, validates the exact release, handles stale PID files and treats `/healthz` as the liveness source.
 - `bin/layout-lib.sh`: fail-closed path, link and `VERIFIED` checks used by the scripts.
 - `nonsecret.env.example`: reviewed non-secret settings; GPU 0, embedding concurrency 1 and persistent download caches with offline runtime are the defaults.
 - `model-candidates.json`: Source Gate candidates. Candidate state is not a production selection.
 - `artifact-acquisition-plan.ocr-v1.1.json`: immutable RapidOCR `v3.9.2` PP-OCRv5 acquisition sources, persistent staging destinations, expected hashes and the release-tag license-document gap; its `planned_not_acquired` state is not evidence that files exist.
 - `artifact-acquisition-plan.face-v1.json`: commit-pinned OpenCV Zoo YuNet/SFace sources, Git LFS identities, exact directory licenses and persistent staging destinations; it also records the SFace commercial-activation review boundary.
 - `tools/acquire-modelscope-snapshot.py`: operator-only downloader for a fixed 40-character ModelScope revision. It writes directly to persistent staging, performs zero automatic retries, preserves failed partials, rejects repository Python when requested, and writes a receipt only after every declared hash and byte count passes.
+- `tools/warm-feature-service.py`: loads every enabled local capability through loopback requests using operator-supplied frozen fixtures, then requires `/readyz`; it performs no download or paid VLM call.
 - `provenance-manifest.schema.json`: separate provenance for runtime packages and model artifacts.
 - `provenance-manifest.example.json`: deliberately non-deployable example with pending hashes/reviews.
 - `release-manifest.example.json`: immutable release identity and references to provenance.

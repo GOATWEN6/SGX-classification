@@ -4,8 +4,8 @@
 > Spec version：`sgx-classification-cloud-hybrid.1.0.0`  
 > 日期：2026-10-02  
 > 适用范围：最多 10 名内部用户的真实产品联调；输入包括图片、用户原文、原始音频和 final ASR
-> 当前语义基线：`qwen3.7-flash-2026-07-15` / Prompt `sgx-five-facets.13`  
-> 当前服务器状态：SSH、三根隔离目录、源码 staging 和无模型契约测试已完成；正式模型、激活 release 和常驻 Worker 尚未完成
+> 当前语义基线：`qwen3.7-flash-2026-07-15` / Prompt `sgx-five-facets.16`
+> 当前服务器状态：SSH、三根隔离目录、冻结模型、激活 release、Feature Service 和 Worker 已完成 T1 运行验证；Notebook 空闲回收仍阻止其成为正式常驻服务
 
 ## 1. 本 Spec 冻结什么
 

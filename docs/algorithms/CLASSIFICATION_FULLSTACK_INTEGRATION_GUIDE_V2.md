@@ -3,7 +3,7 @@
 > 日期：2026-10-02
 > 面向：产品前端、业务后端、对象存储、数据库与云端 Worker 集成工程师
 > 适用：T0/T1 内部测试到 T2 产品接入
-> 当前语义基线：`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.13`、`stage-a-validation.2`
+> 当前语义基线：`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.16`、`stage-a-validation.3`
 > 控制面协议：`classification-worker-control-plane.v1`
 > 输入契约：`classification-ingestion.2` / `specVersion=2.0.0`
 
@@ -39,6 +39,75 @@ flowchart LR
 ```
 
 首版采用 **worker-pull**：VirtAI Worker 主动向业务后端领取任务。后端不需要连接 Notebook 入站端口，真实用户也不需要 SSH。
+
+### 1.1 外网开放什么接口
+
+全栈工程师应把本手册第 4 节的**产品 API**部署在现有产品后端，通过正式 HTTPS 域名供前端访问。浏览器上传原图、文字或音频后，只查询产品 Job 和智能相册结果。VirtAI Worker 使用独立的服务凭据，主动通过出站 HTTPS 调用第 5 节的 Worker 控制面。
+
+```text
+浏览器 --HTTPS/登录态--> 产品后端 --对象引用/事务--> DB 与对象存储
+                              ^
+                              |
+                  出站 HTTPS lease/heartbeat/result
+                              |
+                        VirtAI Worker
+                              |
+                      localhost:8765
+                    OCR/Embedding/Face/ASR
+```
+
+需要公网可达的是产品后端域名。`8765` Feature Service、GPU、模型目录和向量不开放公网；全栈工程师也不需要持有服务器 SSH 才能在产品中调用算法。产品后端可以部署在现有云环境，VirtAI 只要能够主动访问它即可。
+
+#### T1 临时外网联调入口
+
+在正式产品后端完成前，本仓提供一个**仅供全栈后端调用**的窄网关。它不是最终产品 API，也不能把 Bearer Token 放入浏览器代码。
+
+```bash
+# 仅首次：在本机 Keychain 生成独立测试 Token，不打印明文
+scripts/classification-keychain.zsh external-setup
+
+# 启动真实 T1 控制面和窄网关
+scripts/classification-keychain.zsh lab-real -p 3137
+scripts/classification-keychain.zsh external-gateway
+```
+
+窄网关只监听 `127.0.0.1:3140`，再由经过批准的 HTTPS tunnel 暂时转发。它只允许：
+
+- `GET/POST /api/classification-lab/t1`；
+- `GET/POST /api/classification-lab/t1/asr`；
+- `POST /api/classification-lab/t1/retry`。
+
+它拒绝浏览器 `Origin`、未授权请求、并发超过 4 的请求和大于 96MiB 的请求体；不开放页面、原始资产下载、Worker 控制面、Feature Service、GPU、SSH、模型目录或内部日志。每张图片的产品上限是 10MiB，每轮最多 8 张、总输入上限 80MiB。OCR、Embedding 和授权后人物特征读取经哈希验证的原图；VLM 使用最长边 1600px、目标不超过 900KiB 的去元数据 JPEG 派生副本。原图仍是唯一 Evidence，派生副本必须记录原图哈希、派生哈希和转换版本。
+
+全栈后端用以下方式调用，Token 通过独立安全渠道分发：
+
+```http
+Authorization: Bearer <T1_STAGING_TOKEN>
+Content-Type: multipart/form-data
+```
+
+正式接入完成后撤销该 Token 并关闭 tunnel；产品浏览器改为调用全栈工程师实现的业务 API，VirtAI Worker 继续使用第 5 节控制面主动拉取任务。
+
+### 1.2 当前 SSH 隧道为什么不稳定
+
+当前 T1 页面暂时使用反向 SSH，把 VirtAI 的本机端口连接到开发机控制面。它同时依赖开发机、网络、SSH 会话、Next 开发服务和 VirtAI Notebook 进程。电脑休眠、网络切换、Codex 终端结束或远端代理回收连接都会中断；异常断开还可能留下占用端口的旧 `sshd`。2026-10-05 又确认 Feature Service 会受 `ORION_TASK_IDLE_TIME=3600` 影响退出，因此 PID 存在也不能证明服务可用。
+
+|用途|方案|结论|
+|---|---|---|
+|当前 T1 临时测试|SSH keepalive + 明确的旧监听清理 + `/readyz` 恢复脚本|可以继续实验，不能交给真实用户|
+|临时共享演示|Cloudflare Tunnel、Tailscale 或受控 FRP，并在前面增加 HTTPS 鉴权|可作 staging 备选，仍需健康检查和访问控制|
+|最多 10 名内部用户|公网 HTTPS 产品后端 + VirtAI Worker 主动出站拉取|本项目首选；不依赖 GPU 入站端口|
+|后续稳定服务|把同一冻结 release 部署到有进程监督、固定生命周期的推理实例|消除 Notebook 一小时空闲回收问题|
+
+`autossh`、`launchd` 或 `systemd` 可以自动重连 SSH，但只能缓解测试桥接；它们不能代替产品鉴权、对象存储、任务事务、撤权和结果 fencing。
+
+### 1.3 什么是联调，双方怎样配合
+
+联调是把真实前端、产品后端、对象存储、数据库、VirtAI Worker、Feature Service 和真实 VLM 接成一条可观察链路，用同一组固定案例验证输入、状态、结果和失败恢复。它不是把 SSH 账号交给全栈工程师，也不只是双方各自跑单元测试。
+
+算法侧交付 Schema、Worker、Feature Service、版本配置、错误码、示例请求/结果和验收清单。全栈工程师实现产品 API、数据库事务、对象存储签名 URL、Worker 服务鉴权、智能相册投影和页面状态。Owner 提供经授权的测试素材并裁决产品结果是否可用。
+
+第一轮联合验收固定执行：上传 1 张图和文字、上传 3–6 张图、浏览器录音转 final ASR、第二轮新增内容检索历史、取消任务、撤回 Evidence、制造一次服务中断后恢复。每例都要核对页面状态、Job/Attempt、模型 usage、相册结果和临时文件清理。全部通过后，全栈工程师无需 SSH 即可让内部用户从产品页面使用算法。
 
 ## 2. 责任边界
 
@@ -955,4 +1024,4 @@ INTERNAL_ERROR
 |部署与回滚|`deploy/classification-worker/README.md`|
 |当前云端架构与 Gate|`docs/superpowers/specs/2026-10-02-classification-cloud-hybrid-service-spec.md`|
 
-历史实验报告保留其运行时使用的 `.12` Prompt 是正确的 provenance；只有当前实现、当前交接和当前执行计划应使用 `.13`。不要改写历史报告来制造“从未失败”的印象。
+历史实验报告保留其运行时使用的 `.12`、`.13` Prompt 是正确的 provenance；只有当前实现、当前交接和当前执行计划应使用 `.16`。不要改写历史报告来制造“从未失败”的印象。
