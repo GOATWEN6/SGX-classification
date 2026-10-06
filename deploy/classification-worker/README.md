@@ -77,6 +77,7 @@ These observations do not authorize a download or installation. SigLIP2 remains 
 - `bin/activate-release.sh`: atomically switches `current`, preserving the prior verified release in `previous`.
 - `bin/rollback-release.sh`: compare-and-swap style rollback with an explicit target and expected current release.
 - `bin/start-feature-service.sh`: starts the active frozen Feature Service, validates the exact release, handles stale PID files and treats `/healthz` as the liveness source.
+- `bin/start-worker.sh`: starts exactly one Worker process for the active frozen release; the global PID fence prevents two releases from polling and settling the same Job.
 - `bin/layout-lib.sh`: fail-closed path, link and `VERIFIED` checks used by the scripts.
 - `nonsecret.env.example`: reviewed non-secret settings; GPU 0, embedding concurrency 1 and persistent download caches with offline runtime are the defaults.
 - `model-candidates.json`: Source Gate candidates. Candidate state is not a production selection.
@@ -110,6 +111,7 @@ managed component.
     cache/                 # every downloaded package/model cache
     config/nonsecret.env
     downloads/             # source archives and acquisition receipts
+    logs/                  # persistent Worker and Feature Service diagnostics
     manifests/
     models/
     wheelhouse/

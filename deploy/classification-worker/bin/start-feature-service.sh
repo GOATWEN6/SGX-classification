@@ -7,7 +7,7 @@ ROOT="${SGX_DEPLOY_ROOT:-/gemini/code/sgx-classification}"
 RUNTIME="${SGX_RUNTIME_ROOT:-/quota/sgx-classification}"
 PYTHON="${SGX_FEATURE_PYTHON:-$RUNTIME/venvs/feature-service-all-py310-20261003-r2/bin/python}"
 EXPECTED_RELEASE="${SGX_EXPECTED_RELEASE:?SGX_EXPECTED_RELEASE is required}"
-PID_FILE="$RUNTIME/runs/feature-service-$EXPECTED_RELEASE.pid"
+PID_FILE="$RUNTIME/runs/feature-service.pid"
 LOG="$ROOT/shared/logs/feature-service-$EXPECTED_RELEASE.log"
 
 [[ "$(readlink -f "$ROOT/current")" == "$ROOT/releases/$EXPECTED_RELEASE" ]] || {
