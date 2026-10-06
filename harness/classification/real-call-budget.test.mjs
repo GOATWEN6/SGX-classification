@@ -68,6 +68,18 @@ test('real-call authorization accepts the approved fifty-call extension but keep
   })).success, false);
 });
 
+test('real-call authorization accepts the approved fifty-yuan cumulative cap and rejects a higher cap', () => {
+  assert.equal(RealCallAuthorizationSchema.safeParse(authorization({
+    authorizationId: 'sgx_internal_t1_cost50_20261005',
+    caps: { maxRequests: 200, maxCostCny: 50, maxRetries: 0 },
+    openingUsage: { requests: 164, costCny: 22.931574, sourceRefs: ['prior-ledger'] },
+    authorizationEvidenceRef: 'user-approved-200-requests-50-cny-20261005',
+  })).success, true);
+  assert.equal(RealCallAuthorizationSchema.safeParse(authorization({
+    caps: { maxRequests: 200, maxCostCny: 50.01, maxRetries: 0 },
+  })).success, false);
+});
+
 test('shared real-call ledger starts from prior runs and releases unused reservation', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-real-call-budget.'));
   t.after(() => rm(root, { recursive: true, force: true }));

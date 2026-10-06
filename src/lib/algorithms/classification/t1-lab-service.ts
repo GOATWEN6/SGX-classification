@@ -18,7 +18,11 @@ import {
   readLabProductAsset,
   submitLabExecutionJob,
 } from './lab-execution';
-import { buildLabSubmission, type LabSubmission } from './lab-contract';
+import {
+  buildLabSubmission,
+  type BuiltLabSubmission,
+  type LabSubmission,
+} from './lab-contract';
 import {
   computePlaceKindPolicyDigest,
   STAGE_A_LAB_COMPOSITION_VERSION,
@@ -46,6 +50,11 @@ export interface ClassificationT1SubmitResult {
   session: ClassificationT1Session;
   round: number;
   job: LabProductJobView | LabRedactedJobShell;
+}
+
+export interface ClassificationT1RetryInput {
+  sessionId: string;
+  jobId: string;
 }
 
 export interface ClassificationT1LabConfig {
@@ -112,7 +121,12 @@ function profile(config: ClassificationT1LabConfig, taxonomyVersion: string): La
 }
 
 function budget(imageCount: number): LabBudgetPolicy {
-  const maxCandidatesPerContent = 5;
+  // T1 uses one rank-only nearest-neighbour lane per image. Embedding rank is
+  // candidate retrieval, never a probability or an automatic merge decision.
+  // The resulting sparse graph can still form multi-image components through
+  // transitive, VLM-reviewed edges without degrading a six-image round into
+  // all 15 possible pair calls.
+  const maxCandidatesPerContent = 1;
   const relationUpperBound = Math.min(
     imageCount * Math.max(0, imageCount - 1) / 2,
     imageCount * maxCandidatesPerContent,
@@ -258,6 +272,66 @@ export class ClassificationT1LabService {
       version: CLASSIFICATION_T1_LAB_VERSION,
       session: reserved.session,
       round: reserved.round,
+      job,
+    };
+  }
+
+  async retry(input: ClassificationT1RetryInput): Promise<ClassificationT1SubmitResult> {
+    const session = await this.sessions.get(input.sessionId);
+    if(!session) throw new Error('T1_SESSION_NOT_FOUND');
+    await this.sessions.requireActive({
+      sessionId: session.sessionId,
+      scope: session.scope,
+      actorId: session.actorId,
+    });
+    const previous = await this.store.get(input.jobId);
+    if(!previous) throw new Error('T1_JOB_NOT_FOUND');
+    if(previous.authorization.authorizationRevision !== session.authorizationRevision
+      || previous.authorization.actorId !== session.actorId
+      || previous.envelope.scope.householdId !== session.scope.householdId
+      || previous.envelope.scope.subjectId !== session.scope.subjectId) {
+      throw new Error('T1_SESSION_SCOPE_MISMATCH');
+    }
+    if(previous.status !== 'failed_retryable' || previous.authorization.state !== 'active') {
+      throw new Error('T1_RETRY_NOT_ALLOWED');
+    }
+    const guard = await this.guardStore.get(previous.jobId);
+    const assets = await Promise.all(previous.assetRefs.map(async ref => {
+      const stored = await this.store.readAsset(previous.jobId, ref.evidenceId);
+      return {
+        evidenceId: ref.evidenceId,
+        filename: ref.filename,
+        mimeType: ref.mimeType,
+        bytes: stored.bytes,
+      };
+    }));
+    const built: BuiltLabSubmission = {
+      jobId: previous.jobId,
+      idempotencyKey: previous.idempotencyKey,
+      envelope: previous.envelope,
+      payloads: { textByEvidenceId: previous.originalTextByEvidenceId },
+      assets,
+    };
+    const record = await submitLabExecutionJob({
+      built,
+      profile: previous.executionProfile,
+      guard,
+      semanticContext: previous.semanticContext,
+      budgetPolicy: previous.budgetPolicy,
+      attemptRevision: previous.attemptRevision + 1,
+      deadlineAt: new Date(this.nowMs() + 20 * 60_000).toISOString(),
+    }, this.store, {
+      nowMs: this.nowMs,
+      setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+      clearTimeout: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    });
+    await this.guardStore.put(record.jobId, guard);
+    const job = await this.get(session.sessionId, record.jobId);
+    if(!job) throw new Error('T1_JOB_NOT_FOUND');
+    return {
+      version: CLASSIFICATION_T1_LAB_VERSION,
+      session,
+      round: session.roundCount,
       job,
     };
   }

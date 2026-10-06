@@ -98,6 +98,55 @@ test('T1 lab submits worker-pull jobs with stable session authorization and cons
   const multiRecord = await service.store.get(multi.job.jobId);
   assert.equal(multiRecord.budgetPolicy.maxRequests, 3);
   assert.equal(multiRecord.budgetPolicy.maxCostCny, 0.75);
+  assert.equal(multiRecord.budgetPolicy.maxCandidatesPerContent, 1);
+
+  const sixImages = await service.submit({
+    submission: submission(5, {
+      images: Array.from({ length: 6 }, (_, index) => ({
+        filename: `six-${index + 1}.png`,
+        mimeType: 'image/png',
+        bytes: png(50 + index),
+      })),
+      userTextTargetIndexes: null,
+    }),
+    personMatchingAuthorized: true,
+  });
+  const sixImageRecord = await service.store.get(sixImages.job.jobId);
+  assert.equal(sixImageRecord.budgetPolicy.maxCandidatesPerContent, 1);
+  assert.equal(sixImageRecord.budgetPolicy.maxRequests, 12);
+  assert.equal(sixImageRecord.budgetPolicy.maxCostCny, 3);
+
+  const failedAt = '2026-10-03T08:10:00.000Z';
+  const failed = await service.store.compareAndSetTrusted(
+    multiRecord.jobId,
+    multiRecord.revision,
+    current => ({
+      ...current,
+      status: 'failed_retryable',
+      updatedAt: failedAt,
+      finishedAt: failedAt,
+      error: { code: 'INTERNAL_ERROR', retryable: true },
+      transitions: [...current.transitions, {
+        from: 'pending',
+        to: 'failed_retryable',
+        reason: 'LAB_PROVIDER_UNAVAILABLE',
+        at: failedAt,
+        revision: current.revision + 1,
+      }],
+    }),
+  );
+  assert.equal(failed.ok, true);
+  const retried = await service.retry({
+    sessionId: multi.session.sessionId,
+    jobId: multiRecord.jobId,
+  });
+  const retryRecord = await service.store.get(retried.job.jobId);
+  assert.notEqual(retried.job.jobId, multiRecord.jobId);
+  assert.equal(retryRecord.attemptRevision, 2);
+  assert.equal(retryRecord.contentDigest, multiRecord.contentDigest);
+  assert.equal(retryRecord.status, 'pending');
+  assert.deepEqual(retryRecord.assetRefs, multiRecord.assetRefs);
+  assert.equal(retried.round, multi.session.roundCount);
 
   await assert.rejects(service.submit({
     sessionId: first.session.sessionId,
