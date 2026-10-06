@@ -87,6 +87,8 @@ class Settings:
     max_source_bytes: int = 25 * 1024 * 1024
     max_text_bytes: int = 1024 * 1024
     max_image_pixels: int = 80_000_000
+    max_model_image_bytes: int = 900 * 1024
+    max_model_image_edge: int = 1600
     max_audio_bytes: int = 50 * 1024 * 1024
     max_audio_duration_ms: int = 10 * 60 * 1000
     min_audio_sample_rate_hz: int = 8_000
@@ -191,6 +193,8 @@ class Settings:
             "max_source_bytes",
             "max_text_bytes",
             "max_image_pixels",
+            "max_model_image_bytes",
+            "max_model_image_edge",
             "max_audio_bytes",
             "max_audio_duration_ms",
             "min_audio_sample_rate_hz",
@@ -339,6 +343,10 @@ class Settings:
             max_source_bytes=_env_int("SGX_MAX_SOURCE_BYTES", 25 * 1024 * 1024),
             max_text_bytes=_env_int("SGX_MAX_TEXT_BYTES", 1024 * 1024),
             max_image_pixels=_env_int("SGX_MAX_IMAGE_PIXELS", 80_000_000),
+            max_model_image_bytes=_env_int(
+                "SGX_MAX_MODEL_IMAGE_BYTES", 900 * 1024
+            ),
+            max_model_image_edge=_env_int("SGX_MAX_MODEL_IMAGE_EDGE", 1600),
             max_audio_bytes=_env_int(
                 "SGX_MAX_AUDIO_BYTES", 50 * 1024 * 1024
             ),

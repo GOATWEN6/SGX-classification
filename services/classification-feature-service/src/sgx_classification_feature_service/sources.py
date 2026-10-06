@@ -38,6 +38,18 @@ class DecodedImage:
     height: int
 
 
+MODEL_IMAGE_TRANSFORM_VERSION = "sgx-vlm-jpeg.1"
+
+
+@dataclass(frozen=True)
+class PreparedModelImage:
+    data: bytes
+    sha256: str
+    width: int
+    height: int
+    transform_version: str = MODEL_IMAGE_TRANSFORM_VERSION
+
+
 def read_local_source(
     *,
     source_path: str,
@@ -142,6 +154,57 @@ def decode_image(source: ValidatedSource, max_image_pixels: int) -> DecodedImage
         width=decoded.width,
         height=decoded.height,
     )
+
+
+def prepare_model_image(
+    decoded: DecodedImage,
+    *,
+    max_output_bytes: int,
+    max_edge: int,
+) -> PreparedModelImage:
+    """Create a deterministic, metadata-free JPEG for VLM transport.
+
+    The original source remains authoritative. This derivative is only a
+    bounded model input and must retain provenance back to the original hash.
+    """
+    if max_output_bytes <= 0 or max_edge <= 0:
+        raise SourceValidationError("MODEL_IMAGE_CONFIG_INVALID")
+    image = decoded.image.copy()
+    try:
+        longest = max(image.size)
+        if longest > max_edge:
+            scale = max_edge / longest
+            image.thumbnail(
+                (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
+                Image.Resampling.LANCZOS,
+            )
+        for _ in range(8):
+            for quality in (88, 80, 72, 64, 56, 48, 40):
+                output = io.BytesIO()
+                image.save(
+                    output,
+                    format="JPEG",
+                    quality=quality,
+                    optimize=True,
+                    progressive=False,
+                    subsampling=2,
+                )
+                data = output.getvalue()
+                if 0 < len(data) <= max_output_bytes:
+                    return PreparedModelImage(
+                        data=data,
+                        sha256=hashlib.sha256(data).hexdigest(),
+                        width=image.width,
+                        height=image.height,
+                    )
+            if max(image.size) <= 320:
+                break
+            next_width = max(320, round(image.width * 0.8))
+            next_height = max(320, round(image.height * 0.8))
+            image.thumbnail((next_width, next_height), Image.Resampling.LANCZOS)
+        raise SourceValidationError("MODEL_IMAGE_OUTPUT_TOO_LARGE")
+    finally:
+        image.close()
 
 
 def decode_utf8_text(source: ValidatedSource, max_text_bytes: int) -> str:

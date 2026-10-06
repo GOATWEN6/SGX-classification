@@ -24,6 +24,18 @@ class LocalSourceRequest(ApiModel):
     source_byte_length: int = Field(ge=0)
 
 
+class ModelImageResponse(ApiModel):
+    source_sha256: str
+    source_byte_length: int
+    derived_sha256: str
+    derived_byte_length: int = Field(gt=0)
+    mime_type: Literal["image/jpeg"]
+    image_width: int = Field(gt=0)
+    image_height: int = Field(gt=0)
+    transform_version: str
+    data_base64: str = Field(min_length=1)
+
+
 class BoundsResponse(ApiModel):
     x: int = Field(ge=0)
     y: int = Field(ge=0)

@@ -655,7 +655,7 @@ export class SubprocessStageABridge {
     this.killGraceMs = killGraceMs;
   }
 
-  async run({ identity, lease, execution, derivedFeatures = EMPTY_DERIVED_FEATURES, files, signal }) {
+  async run({ identity, lease, execution, derivedFeatures = EMPTY_DERIVED_FEATURES, files, modelInputs = [], signal }) {
     const runRoot = assertFileSet(files);
     const nonce = randomUUID();
     const requestPath = path.join(runRoot, `stage-a-request-${nonce}.json`);
@@ -676,6 +676,7 @@ export class SubprocessStageABridge {
         sourcePath: file.sourcePath,
         ...(file.evidence.artifact?.mimeType ? { mimeType: file.evidence.artifact.mimeType } : {}),
       })),
+      modelInputFiles: modelInputs.map((input) => ({ ...input })),
     };
     await writeFile(requestPath, JSON.stringify(request), { mode: 0o600, flag: 'wx' });
 
@@ -843,7 +844,15 @@ export class StageAPipelineProcessor {
     }
     await checkpoint('retrieval', 45);
     await checkpoint('vlm_extract', 55);
-    const classified = await this.bridge.run({ identity, lease, execution, derivedFeatures, files, signal });
+    const classified = await this.bridge.run({
+      identity,
+      lease,
+      execution,
+      derivedFeatures,
+      files,
+      modelInputs: featureBundle.modelInputs ?? [],
+      signal,
+    });
     await checkpoint('organizing', 80);
     const status = featureBundle.status === 'needs_review' || classified.status === 'needs_review'
       ? 'needs_review'

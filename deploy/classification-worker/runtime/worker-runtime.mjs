@@ -370,6 +370,7 @@ export class LocalFeatureBundleProcessor {
     const evidenceResults = [];
     const componentErrors = [];
     let successes = 0;
+    const modelInputs = [];
     const invoke = async (capability, file, call) => {
       try {
         const value = await call();
@@ -395,6 +396,48 @@ export class LocalFeatureBundleProcessor {
       };
       const features = {};
       if (file.evidence.modality === 'image') {
+        features.modelInput = await invoke('model_image', file, async () => {
+          const prepared = await this.featureService.modelImage(source, { signal });
+          const bytes = Buffer.from(prepared?.dataBase64 ?? '', 'base64');
+          const derivedHash = sha256(bytes);
+          const valid = prepared?.sourceSha256 === source.sourceSha256
+            && prepared?.sourceByteLength === source.sourceByteLength
+            && prepared?.mimeType === 'image/jpeg'
+            && prepared?.derivedSha256 === derivedHash.slice('sha256:'.length)
+            && prepared?.derivedByteLength === bytes.length
+            && bytes.length > 0
+            && bytes.length <= 10 * 1024 * 1024
+            && Number.isInteger(prepared?.imageWidth) && prepared.imageWidth > 0
+            && Number.isInteger(prepared?.imageHeight) && prepared.imageHeight > 0
+            && typeof prepared?.transformVersion === 'string' && prepared.transformVersion.length > 0;
+          if (!valid) {
+            const error = new Error('INVALID_MODEL_IMAGE_OUTPUT');
+            error.code = 'INVALID_MODEL_IMAGE_OUTPUT';
+            throw error;
+          }
+          const sourcePath = `${file.sourcePath}.model-input.jpg`;
+          await writeFile(sourcePath, bytes, { mode: 0o600, flag: 'wx' });
+          modelInputs.push({
+            evidenceId: file.evidence.evidenceId,
+            derivedFromSourceHash: file.evidence.sourceHash,
+            modelInputHash: derivedHash,
+            byteLength: bytes.length,
+            mimeType: 'image/jpeg',
+            imageWidth: prepared.imageWidth,
+            imageHeight: prepared.imageHeight,
+            transformVersion: prepared.transformVersion,
+            sourcePath,
+          });
+          return {
+            derivedFromSourceHash: file.evidence.sourceHash,
+            modelInputHash: derivedHash,
+            byteLength: bytes.length,
+            mimeType: 'image/jpeg',
+            imageWidth: prepared.imageWidth,
+            imageHeight: prepared.imageHeight,
+            transformVersion: prepared.transformVersion,
+          };
+        });
         features.ocr = await invoke('ocr', file, () => this.featureService.ocr(source, { signal }));
         features.imageEmbedding = await invoke('image_embedding', file, () => this.featureService.imageEmbedding(source, { signal }));
         if (this.personMatchingEnabled && authorizedPersonEvidence.has(file.evidence.evidenceId)) {
@@ -438,6 +481,7 @@ export class LocalFeatureBundleProcessor {
         costCny: 0,
         providerCalls: 0,
       },
+      modelInputs,
     };
   }
 }

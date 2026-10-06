@@ -145,6 +145,7 @@ function mapStageFailure(stage: StageResult): never {
   if(['BUDGET_EXHAUSTED', 'BUDGET_OVERRUN', 'RESERVATION_OVERRUN', 'OUTPUT_TRUNCATED',
     'RESPONSE_LIMIT', 'RATE_LIMITED', 'PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED',
     'MODEL_NOT_CONFIGURED', 'AUTHORIZATION_CHECK_REQUIRED'].includes(code)) fail(code);
+  if(['IMAGE_INPUT_LIMIT', 'IMAGE_BATCH_LIMIT', 'INVALID_IMAGE', 'SOURCE_HASH_MISMATCH'].includes(code)) fail(code);
   if(STAGE_OUTPUT_VALIDATION_CODES.has(code)) {
     fail('INVALID_OUTPUT', { phase: 'schema', issues: [{ path: '$', code }] });
   }
@@ -176,6 +177,7 @@ function mapThrownError(error: unknown): never {
     fail('INVALID_OUTPUT', { phase: 'schema', issues: [{ path: '$', code }] });
   }
   if(code === 'LAB_RUN_IDENTITY_MISMATCH') fail(code);
+  if(['IMAGE_INPUT_LIMIT', 'IMAGE_BATCH_LIMIT', 'INVALID_IMAGE', 'SOURCE_HASH_MISMATCH'].includes(code)) fail(code);
   if(code === 'LAB_RUN_TIMEOUT' || code === 'LAB_PROVIDER_UNAVAILABLE') fail(code);
   fail('LAB_PROVIDER_UNAVAILABLE');
 }
@@ -247,7 +249,12 @@ class StageALabExecutor implements LabExecutionExecutor {
         const provider = new ApiVisionProvider({
           provider: this.options.provider,
           model: this.options.model,
-          resolver: plan.stageA.resolveImage,
+          resolver: async (photo, signal) => {
+            const prepared = await context.readModelInput?.(photo.photoId);
+            if(!prepared) return plan.stageA!.resolveImage(photo, signal);
+            if(signal.aborted) throw new StageError('CANCELLED');
+            return prepared;
+          },
           mode: expectedEvidenceStatus,
           ...(this.options.transport ? { transport: this.options.transport } : {}),
           ...(this.options.credential ? { credential: this.options.credential } : {}),

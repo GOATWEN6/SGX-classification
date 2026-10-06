@@ -4,6 +4,7 @@ import math
 import os
 import platform
 import sys
+import base64
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
@@ -29,6 +30,7 @@ from .api_models import (
     FaceEmbeddingsResponse,
     HealthResponse,
     LocalSourceRequest,
+    ModelImageResponse,
     ModelIdentity,
     OcrRegionResponse,
     OcrResponse,
@@ -38,7 +40,7 @@ from .api_models import (
 )
 from .config import Settings
 from .real_adapters import factories_for_settings
-from .sources import SourceValidationError, decode_image, decode_utf8_text, read_local_source
+from .sources import SourceValidationError, decode_image, decode_utf8_text, prepare_model_image, read_local_source
 from .sources import decode_pcm_wav
 
 
@@ -57,6 +59,7 @@ def _source_status(code: str) -> int:
         "TEXT_SOURCE_TOO_LARGE",
         "AUDIO_SOURCE_TOO_LARGE",
         "AUDIO_DURATION_EXCEEDED",
+        "MODEL_IMAGE_OUTPUT_TOO_LARGE",
     }:
         return 413
     if code in {
@@ -557,6 +560,36 @@ def create_app(
             model_version=adapter.model_version,
             model_revision=adapter.model_revision,
             regions=output_regions,
+        )
+
+    @app.post(
+        "/internal/v1/features/model-image",
+        response_model=ModelImageResponse,
+    )
+    def model_image(request: LocalSourceRequest) -> ModelImageResponse:
+        source = _read_source(request, settings)
+        try:
+            decoded = decode_image(source, settings.max_image_pixels)
+            prepared = prepare_model_image(
+                decoded,
+                max_output_bytes=settings.max_model_image_bytes,
+                max_edge=settings.max_model_image_edge,
+            )
+        except SourceValidationError as exc:
+            raise _http_error(_source_status(exc.code), exc.code) from exc
+        finally:
+            if "decoded" in locals():
+                decoded.image.close()
+        return ModelImageResponse(
+            source_sha256=source.sha256,
+            source_byte_length=source.byte_length,
+            derived_sha256=prepared.sha256,
+            derived_byte_length=len(prepared.data),
+            mime_type="image/jpeg",
+            image_width=prepared.width,
+            image_height=prepared.height,
+            transform_version=prepared.transform_version,
+            data_base64=base64.b64encode(prepared.data).decode("ascii"),
         )
 
     @app.post(

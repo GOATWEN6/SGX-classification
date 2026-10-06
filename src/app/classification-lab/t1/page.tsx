@@ -441,7 +441,7 @@ export default function ClassificationT1Page() {
       <div>
         <p className={styles.eyebrow}>SGX · T1 真实混合链</p>
         <h1>多轮图文语音分类与归纳</h1>
-        <p>本页连接产品控制面、VirtAI Worker、OCR、Embedding、授权后人物候选、SenseVoice ASR 与 Qwen/GLM Flash。每轮最多 8 张照片，结果会持久化并在后续轮次进行同家庭稀疏检索。</p>
+        <p>本页连接产品控制面、VirtAI Worker、OCR、Embedding、授权后人物候选、SenseVoice ASR 与 Qwen/GLM Flash。每轮最多 8 张照片、每张最多 10MB，结果会持久化并在后续轮次进行同家庭稀疏检索。</p>
         <a className={styles.albumAction} href="/classification-lab/t1/album">打开智能相册</a>
       </div>
       <div className={styles.modeCard}>
@@ -465,7 +465,7 @@ export default function ClassificationT1Page() {
             setFiles(next); setUserTargets([]); setAsrTargets([]);
           }} />
           <strong>{files.length ? `已选择 ${files.length} 张照片` : '选择本轮照片'}</strong>
-          <span>JPEG、PNG、WebP；服务端会复核格式、尺寸和哈希</span>
+          <span>JPEG、PNG、WebP；单张最多 10MB，服务端会复核格式、尺寸和哈希</span>
         </label>
         {files.length > 0 && <div className={styles.fileGrid}>{files.map((file, index) => <article className={styles.fileCard} key={`${file.name}-${file.lastModified}`}>
           <img src={previews[index]} alt={file.name} />

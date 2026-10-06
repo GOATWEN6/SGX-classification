@@ -46,6 +46,10 @@ const SAFE_DIAGNOSTICS = new Map([
   ['MODEL_NOT_CONFIGURED', 'BRIDGE_MODEL_NOT_CONFIGURED'],
   ['AUTHORIZATION_CHECK_REQUIRED', 'BRIDGE_AUTHORIZATION_CHECK_REQUIRED'],
   ['PROVIDER_AUDIT_FAILED', 'BRIDGE_PROVIDER_AUDIT_FAILED'],
+  ['IMAGE_INPUT_LIMIT', 'BRIDGE_MODEL_INPUT_LIMIT'],
+  ['IMAGE_BATCH_LIMIT', 'BRIDGE_IMAGE_BATCH_LIMIT'],
+  ['INVALID_IMAGE', 'BRIDGE_INVALID_IMAGE'],
+  ['SOURCE_HASH_MISMATCH', 'BRIDGE_MODEL_INPUT_HASH_MISMATCH'],
 ]);
 
 const STAGE_DIAGNOSTIC_PHASES = new Set(['provider_envelope', 'content_json', 'schema']);
@@ -228,6 +232,9 @@ function mappedFailure(error, providerCalled) {
     'RESERVATION_OVERRUN', 'PROVIDER_AUDIT_FAILED'].includes(raw)) {
     return { errorCode: 'INTERNAL_ERROR', stage: 'vlm_extract', providerCalled, diagnosticCode: diagnosticCode(error) };
   }
+  if (['IMAGE_INPUT_LIMIT', 'IMAGE_BATCH_LIMIT', 'INVALID_IMAGE', 'SOURCE_HASH_MISMATCH'].includes(raw)) {
+    return { errorCode: 'INTERNAL_ERROR', stage: 'retrieval', providerCalled, diagnosticCode: diagnosticCode(error) };
+  }
   return {
     errorCode: 'INTERNAL_ERROR',
     stage: providerCalled ? 'vlm_extract' : 'retrieval',
@@ -267,6 +274,41 @@ async function verifyEvidenceFiles(request, job, requestRoot) {
       ensure(job.originalTextByEvidenceId[actual.evidenceId] === bytes.toString('utf8'), 'EVIDENCE_CHANGED');
     }
     files.set(actual.evidenceId, bytes);
+  }
+  return files;
+}
+
+async function verifyModelInputFiles(request, job, requestRoot) {
+  const provided = request.modelInputFiles ?? [];
+  ensure(Array.isArray(provided), 'LAB_RUN_IDENTITY_MISMATCH');
+  const originalByEvidenceId = new Map(job.envelope.evidence.map((item) => [item.evidenceId, item]));
+  const canonicalRoot = await realpath(requestRoot);
+  const files = new Map();
+  for (const actual of provided) {
+    ensure(!files.has(actual.evidenceId), 'EVIDENCE_CHANGED');
+    const original = originalByEvidenceId.get(actual.evidenceId);
+    ensure(original?.lifecycleState === 'active' && original.modality === 'image', 'EVIDENCE_CHANGED');
+    ensure(actual.derivedFromSourceHash === original.sourceHash, 'SOURCE_HASH_MISMATCH');
+    ensure(SHA256_PATTERN.test(actual.modelInputHash), 'SOURCE_HASH_MISMATCH');
+    ensure(actual.mimeType === 'image/jpeg', 'INVALID_IMAGE');
+    ensure(typeof actual.transformVersion === 'string' && actual.transformVersion.length > 0, 'INVALID_IMAGE');
+    ensure(Number.isInteger(actual.byteLength) && actual.byteLength > 0 && actual.byteLength <= 10 * 1024 * 1024, 'IMAGE_INPUT_LIMIT');
+    ensure(path.isAbsolute(actual.sourcePath), 'EVIDENCE_CHANGED');
+    const canonical = await realpath(actual.sourcePath);
+    ensure(canonical.startsWith(`${canonicalRoot}${path.sep}`), 'EVIDENCE_CHANGED');
+    const fileStat = await stat(canonical);
+    ensure(fileStat.isFile() && fileStat.size === actual.byteLength, 'EVIDENCE_CHANGED');
+    const bytes = await readFile(canonical);
+    const actualHash = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+    ensure(actualHash === actual.modelInputHash, 'SOURCE_HASH_MISMATCH');
+    ensure(bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255, 'INVALID_IMAGE');
+    files.set(actual.evidenceId, {
+      bytes,
+      mimeType: actual.mimeType,
+      derivedFromSourceHash: actual.derivedFromSourceHash,
+      modelInputHash: actual.modelInputHash,
+      transformVersion: actual.transformVersion,
+    });
   }
   return files;
 }
@@ -317,6 +359,7 @@ async function execute(requestPath, responsePath) {
   }
 
   const files = await verifyEvidenceFiles(request, job, path.dirname(requestPath));
+  const modelInputs = await verifyModelInputFiles(request, job, path.dirname(requestPath));
   const provider = process.env.SGX_VLM_PROVIDER ?? 'qwen';
   ensure(provider === 'qwen' || provider === 'glm', 'LAB_RUN_IDENTITY_MISMATCH');
   const model = process.env.SGX_VLM_MODEL ?? profile.modelVersion;
@@ -372,6 +415,11 @@ async function execute(requestPath, responsePath) {
     readAsset: async (evidenceId) => {
       ensure(files.has(evidenceId), 'EVIDENCE_CHANGED');
       return new Uint8Array(files.get(evidenceId));
+    },
+    readModelInput: async (evidenceId) => {
+      const prepared = modelInputs.get(evidenceId);
+      if (!prepared) return undefined;
+      return { ...prepared, bytes: new Uint8Array(prepared.bytes) };
     },
     derivedFeatures: request.derivedFeatures,
   };

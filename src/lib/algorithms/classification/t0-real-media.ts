@@ -33,7 +33,7 @@ export const T0SourceSchema = z.object({
   evidenceId: id,
   path: relativeFile,
   sourceHash: sha,
-  byteLength: z.number().int().positive().max(20 * 1024 * 1024),
+  byteLength: z.number().int().positive().max(10 * 1024 * 1024),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'text/plain']),
   consentRef: id,
   origin: z.literal('real_user_provided')

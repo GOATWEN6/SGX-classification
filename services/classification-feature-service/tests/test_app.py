@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import wave
+import base64
 from dataclasses import replace
 from pathlib import Path
 
@@ -296,6 +297,33 @@ def test_health_version_and_lazy_ready_transition(tmp_path: Path) -> None:
     after = client.get("/readyz")
     assert after.status_code == 200
     assert after.json()["status"] == "ready"
+
+
+def test_prepares_bounded_vlm_image_with_original_provenance(tmp_path: Path) -> None:
+    job_root = tmp_path / "jobs"
+    job_root.mkdir()
+    source_path = job_root / "large.png"
+    Image.new("RGB", (2400, 1800), color=(30, 60, 90)).save(source_path, format="PNG")
+    data = source_path.read_bytes()
+    payload = {
+        "sourcePath": str(source_path),
+        "sourceSha256": hashlib.sha256(data).hexdigest(),
+        "sourceByteLength": len(data),
+    }
+
+    response = _client(job_root).post("/internal/v1/features/model-image", json=payload)
+
+    assert response.status_code == 200
+    result = response.json()
+    derived = base64.b64decode(result["dataBase64"], validate=True)
+    assert result["sourceSha256"] == payload["sourceSha256"]
+    assert result["derivedSha256"] == hashlib.sha256(derived).hexdigest()
+    assert result["derivedByteLength"] == len(derived)
+    assert result["mimeType"] == "image/jpeg"
+    assert result["transformVersion"] == "sgx-vlm-jpeg.1"
+    assert max(result["imageWidth"], result["imageHeight"]) <= 1600
+    assert 0 < len(derived) <= 900 * 1024
+    assert derived[:3] == b"\xff\xd8\xff"
 
 
 def test_rejects_path_outside_job_root(tmp_path: Path) -> None:

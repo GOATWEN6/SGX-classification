@@ -14,8 +14,8 @@ import { inspectImagePayload, type SupportedImageMime } from './media-inspection
 
 export const CLASSIFICATION_LAB_VERSION = 'classification-lab.1';
 export const LAB_MAX_IMAGES = 20;
-export const LAB_MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-export const LAB_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+export const LAB_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const LAB_MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 export const LAB_MAX_TEXT_BYTES = 64 * 1024;
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);

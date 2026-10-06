@@ -380,6 +380,20 @@ class FakeFeatures {
           : [],
       };
     }
+    if (capability === 'model_image') {
+      const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+      return {
+        sourceSha256: source.sourceSha256,
+        sourceByteLength: source.sourceByteLength,
+        derivedSha256: createHash('sha256').update(bytes).digest('hex'),
+        derivedByteLength: bytes.length,
+        mimeType: 'image/jpeg',
+        imageWidth: 100,
+        imageHeight: 100,
+        transformVersion: 'sgx-vlm-jpeg.1',
+        dataBase64: bytes.toString('base64'),
+      };
+    }
     if (capability === 'image_embedding' || capability === 'text_embedding') {
       return {
         sourceSha256: source.sourceSha256,
@@ -408,6 +422,7 @@ class FakeFeatures {
   }
 
   ocr(source) { return this.#value('ocr', source); }
+  modelImage(source) { return this.#value('model_image', source); }
   imageEmbedding(source) { return this.#value('image_embedding', source); }
   textEmbedding(source) { return this.#value('text_embedding', source); }
   faceEmbeddings(source) { return this.#value('face_embeddings', source); }
@@ -475,7 +490,7 @@ test('worker leases, heartbeats, verifies sources, calls features, uploads, comp
   assert.equal(fx.controlPlane.requests.lease.length, 1);
   assert.equal(fx.controlPlane.requests.heartbeat.length, 4);
   assert.deepEqual(fx.features.calls.map((call) => call.capability), [
-    'ocr', 'image_embedding', 'text_embedding',
+    'model_image', 'ocr', 'image_embedding', 'text_embedding',
   ]);
   assert.equal(fx.artifacts.downloads.length, 1);
   assert.equal(fx.artifacts.uploads.length, 1);
@@ -660,7 +675,7 @@ test('background heartbeat aborts a long-running feature call on authorization c
 });
 
 test('all feature failures produce one terminal failure and no result upload', async (t) => {
-  const fx = await fixture({ featureFailures: ['ocr', 'image_embedding', 'text_embedding'] });
+  const fx = await fixture({ featureFailures: ['model_image', 'ocr', 'image_embedding', 'text_embedding'] });
   t.after(() => import('node:fs/promises').then(({ rm }) => rm(fx.root, { recursive: true, force: true })));
 
   const summary = await fx.runtime.runOnce();
@@ -1045,7 +1060,7 @@ test('pipeline validates per-image person consent before calling face features',
 
   assert.equal(contextResolved, true);
   assert.deepEqual(featureService.calls.map((call) => call.capability), [
-    'ocr', 'image_embedding', 'face_embeddings', 'text_embedding',
+    'model_image', 'ocr', 'image_embedding', 'face_embeddings', 'text_embedding',
   ]);
 });
 
@@ -1103,7 +1118,7 @@ test('pipeline skips face features without per-image person authorization', asyn
   });
 
   assert.deepEqual(featureService.calls.map((call) => call.capability), [
-    'ocr', 'image_embedding', 'text_embedding',
+    'model_image', 'ocr', 'image_embedding', 'text_embedding',
   ]);
 });
 

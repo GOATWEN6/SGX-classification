@@ -124,6 +124,13 @@ export interface TrustedLabExecutionContext {
   clock: LabClock;
   getGuard: () => Promise<TrustedLabGuardSnapshot>;
   readAsset: (evidenceId: string) => Promise<Uint8Array>;
+  readModelInput?: (evidenceId: string) => Promise<{
+    bytes: Uint8Array;
+    mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+    derivedFromSourceHash: `sha256:${string}`;
+    modelInputHash: `sha256:${string}`;
+    transformVersion: string;
+  } | undefined>;
   derivedFeatures?: TrustedLabDerivedFeatures;
 }
 

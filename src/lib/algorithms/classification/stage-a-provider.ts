@@ -5,7 +5,13 @@ export interface ModelUsage {inputTokens:number;outputTokens:number;}
 export interface ModelReply {value:unknown;usage:ModelUsage;responseId:string;model:string;}
 export interface VisionProvider {version:string;mode:'mock_transport'|'real_api';inputCnyPerMillion:number;outputCnyPerMillion:number;
   invoke(call:ModelCall,signal:AbortSignal):Promise<ModelReply>;}
-export interface AuthorizedImage {bytes:Uint8Array;mimeType:Photo['mimeType'];}
+export interface AuthorizedImage {
+  bytes: Uint8Array;
+  mimeType: Photo['mimeType'];
+  derivedFromSourceHash?: string;
+  modelInputHash?: string;
+  transformVersion?: string;
+}
 export type ImageResolver=(photo:Photo,signal:AbortSignal)=>Promise<AuthorizedImage>;
 export type Transport=(url:string,init:RequestInit)=>Promise<Response>;
 export const PROVIDER_ENDPOINTS={qwen:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',glm:'https://open.bigmodel.cn/api/paas/v4/chat/completions'} as const;
@@ -96,11 +102,15 @@ export class ApiVisionProvider implements VisionProvider {
     const content:unknown[]=[{type:'text',text:JSON.stringify({stage:call.stage,untrustedContext:call.context})}];
     for(const photo of call.photos){
       const image=await this.options.resolver(photo,signal);
-      if(!image.bytes.length||image.bytes.length>1048576||image.mimeType!==photo.mimeType)throw new StageError('IMAGE_INPUT_LIMIT');
-      if(`sha256:${createHash('sha256').update(image.bytes).digest('hex')}`!==photo.sourceHash)throw new StageError('SOURCE_HASH_MISMATCH');
+      if(!image.bytes.length||image.bytes.length>10*1024*1024)throw new StageError('IMAGE_INPUT_LIMIT');
+      const actualHash=`sha256:${createHash('sha256').update(image.bytes).digest('hex')}`;
+      const derived=image.derivedFromSourceHash!==undefined||image.modelInputHash!==undefined||image.transformVersion!==undefined;
+      if(derived){
+        if(image.derivedFromSourceHash!==photo.sourceHash||image.modelInputHash!==actualHash||!image.transformVersion)throw new StageError('SOURCE_HASH_MISMATCH');
+      }else if(image.mimeType!==photo.mimeType||actualHash!==photo.sourceHash)throw new StageError('SOURCE_HASH_MISMATCH');
       const b=image.bytes;
-      const signature=photo.mimeType==='image/png'?b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71:
-        photo.mimeType==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:
+      const signature=image.mimeType==='image/png'?b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71:
+        image.mimeType==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:
         Buffer.from(b.slice(0,4)).toString()==='RIFF'&&Buffer.from(b.slice(8,12)).toString()==='WEBP';
       if(!signature)throw new StageError('INVALID_IMAGE');
       content.push({type:'text',text:JSON.stringify({photoId:photo.photoId,untrustedCaption:photo.caption,untrustedOcrText:photo.ocrText,untrustedExif:photo.exif})});

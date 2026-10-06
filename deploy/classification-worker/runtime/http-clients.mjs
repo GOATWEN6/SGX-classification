@@ -229,6 +229,10 @@ export class LocalFeatureServiceClient {
     return this.#call('/internal/v1/features/image-embedding', source, options);
   }
 
+  modelImage(source, options) {
+    return this.#call('/internal/v1/features/model-image', source, options);
+  }
+
   textEmbedding(source, options) {
     return this.#call('/internal/v1/features/text-embedding', source, options);
   }
