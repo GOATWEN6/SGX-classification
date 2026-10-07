@@ -95,3 +95,31 @@ test('cross-round mapper rejects a candidate whose current source is not in this
     createdAt,
   }), /INVALID_HISTORICAL_CANDIDATE_SOURCE/);
 });
+
+test('cross-round model references preserve deployed repository IDs and frozen revisions', () => {
+  const semantic = {
+    ...candidate('image_text_embedding', 'deployed_semantic'),
+    modelId: 'damo/multi-modal_clip-vit-base-patch16_zh',
+    modelRevision: 'e6d9ca1cf467fb979d8511ed8349d29bdfd8ea1b',
+  };
+  const person = {
+    ...candidate('face_embedding', 'deployed_person'),
+    modelId: 'opencv-zoo/face_recognition_sface_2021dec',
+    modelRevision: '47534e27c9851bb1128ccc0102f1145e27f23f98',
+  };
+  const result = buildCrossRoundAssociations({
+    scope, authorizationRevision: 'authorization_cross_round_1', contents,
+    candidates: [semantic, person], createdAt,
+  });
+  assert.deepEqual(result.map(value => value.model).sort((a, b) => a.id.localeCompare(b.id)), [
+    { id: semantic.modelId, revision: semantic.modelRevision },
+    { id: person.modelId, revision: person.modelRevision },
+  ]);
+  assert.ok(result.every(value => value.status === 'candidate_only'));
+  for (const modelId of ['', 'model with space', 'x'.repeat(257)]) {
+    assert.throws(() => buildCrossRoundAssociations({
+      scope, authorizationRevision: 'authorization_cross_round_1', contents,
+      candidates: [{ ...semantic, modelId }], createdAt,
+    }));
+  }
+});

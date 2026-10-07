@@ -13,6 +13,7 @@ import { digest } from './stage-a-contract';
 export const CROSS_ROUND_ASSOCIATION_VERSION = 'classification-cross-round-association.1' as const;
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+const modelRef = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/);
 const hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const dateTime = z.string().datetime({ offset: true });
 const scope = z.object({ householdId: id, subjectId: id }).strict();
@@ -37,7 +38,7 @@ export const CrossRoundAssociationCandidateSchema = z.object({
   decisionBasis: z.literal('retrieval_only'),
   method: z.enum(['image_text_embedding_topk', 'authorized_face_embedding_topk']),
   rank: z.number().int().positive().max(32),
-  model: z.object({ id, revision: id }).strict(),
+  model: z.object({ id: modelRef, revision: modelRef }).strict(),
   reasons: z.array(id).min(1).max(8),
   currentEvidenceRefs: z.array(id).min(1).max(32),
   historicalEvidenceRefs: z.array(id).min(1).max(32),
