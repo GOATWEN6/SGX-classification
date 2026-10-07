@@ -8,6 +8,8 @@
 
 ## 1. 先读哪些文件
 
+第一次接手先读 [全栈工程师接手说明](CLASSIFICATION_FULLSTACK_TAKEOVER_GUIDE_2026-10-07.md)，了解 T2/T3 分工、接口补充、开关与最小联调，再按下列顺序查阅。
+
 1. [`CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md`](CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md)：完整算法目标、输入、流程、模型、规则、输出和产品边界。
 2. [`CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md`](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)：产品 API、Worker 控制面、签名 URL、错误码和联调步骤。
 3. [`CLASSIFICATION_RUNTIME_CONFIGURATION.md`](CLASSIFICATION_RUNTIME_CONFIGURATION.md)：当前模型、revision、容量与配置；[`model-candidates.json`](../../deploy/classification-worker/model-candidates.json)：开源来源、许可和运行证据。

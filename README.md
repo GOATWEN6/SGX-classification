@@ -6,6 +6,8 @@
 
 ## 自动分类与归纳模块（全栈先读）
 
+第一次接手请先读 [全栈工程师接手说明：阅读顺序、任务、阶段与验收](docs/algorithms/CLASSIFICATION_FULLSTACK_TAKEOVER_GUIDE_2026-10-07.md)。
+
 当前 T0/T1 内部候选已接入真实 Qwen、多图/文字、OCR、image/text embedding、授权后匿名人物候选、StoryUnit 组织和 Worker 结果持久化。全栈接入从以下文档开始：
 
 - [全栈交付 README](docs/algorithms/CLASSIFICATION_FULLSTACK_DELIVERY_README_V1.md)
