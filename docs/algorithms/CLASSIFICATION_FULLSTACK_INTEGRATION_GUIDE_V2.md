@@ -1,9 +1,9 @@
 # SGX 自动分类与归纳：全栈接入手册 v2
 
-> 日期：2026-10-02
+> 初版：2026-10-02；当前状态更新：2026-10-07
 > 面向：产品前端、业务后端、对象存储、数据库与云端 Worker 集成工程师
 > 适用：T0/T1 内部测试到 T2 产品接入
-> 当前源码语义基线：`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.16`、`stage-a-validation.4`；远端激活与真实运行状态见当日执行记录
+> 当前云端代码 release：`82cab23cd81a2f0b06a3c00606025153a2816468`；`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.16`、`stage-a-validation.4`
 > 控制面协议：`classification-worker-control-plane.v1`
 > 输入契约：`classification-ingestion.2` / `specVersion=2.0.0`
 
@@ -12,7 +12,7 @@
 本文同时区分三种状态：
 
 - **已经冻结的契约**：仓库存在 JSON Schema 和回归测试；
-- **已经存在的算法实现**：可以由 Worker 调用，但仍需冻结模型制品和远端验收；
+- **已有真实内部运行证据的算法实现**：当前云端模型已加载，图文、ASR、人物候选、组织和持久化已有 T1 证据；跨轮仅为关联候选，质量、性能和产品 Gate 另行验收；
 - **全栈需要实现的产品能力**：业务 API、数据库事务、对象存储、租约队列和正式鉴权。
 
 不能因为某个 Schema、Fake 服务或实验页面可运行，就宣称生产链路已经完成。
@@ -76,6 +76,8 @@ scripts/classification-keychain.zsh external-gateway
 - `GET/POST /api/classification-lab/t1`；
 - `GET/POST /api/classification-lab/t1/asr`；
 - `POST /api/classification-lab/t1/retry`。
+
+当前窄网关代码已实现，但没有已证明稳定的公网 URL；Cloudflare quick tunnel 曾返回 530。正式产品接入采用业务后端 HTTPS 与 Worker 主动出站，不把临时 tunnel 当作稳定用户入口。
 
 它拒绝浏览器 `Origin`、未授权请求、并发超过 4 的请求和大于 96MiB 的请求体；不开放页面、原始资产下载、Worker 控制面、Feature Service、GPU、SSH、模型目录或内部日志。每张图片的产品上限是 10MiB，每轮最多 8 张、总输入上限 80MiB。OCR、Embedding 和授权后人物特征读取经哈希验证的原图；VLM 使用最长边 1600px、目标不超过 900KiB 的去元数据 JPEG 派生副本。原图仍是唯一 Evidence，派生副本必须记录原图哈希、派生哈希和转换版本。
 
@@ -181,7 +183,7 @@ Worker 重启、迁移或整个 VirtAI 环境丢失，都不能导致产品权�
 |`POST /api/v1/classification/reviews`|按 `AssertionReviewRequest` 确认、编辑、拒绝或撤回 Assertion|
 |`POST /api/v1/classification/story-actions`|确认故事、拒绝关系、拆分、合并或移出内容；使用独立 append-only 动作契约|
 
-首版 30–50 名以内内部用户可以用有退避的短轮询读取 Job；这不会改变后端异步任务语义。OCR、embedding、ASR 和 VLM endpoint 不属于产品 API。
+当前目标为最多 10 名内部用户，可用有退避的短轮询读取 Job；这不会改变后端异步任务语义。OCR、embedding、ASR 和 VLM endpoint 不属于产品 API。
 
 ### 4.1 文件上传
 
@@ -217,7 +219,7 @@ Worker 重启、迁移或整个 VirtAI 环境丢失，都不能导致产品权�
     "Content-Type": "image/jpeg"
   },
   "expiresAt": "2026-10-02T12:10:00.000Z",
-  "maxByteLength": 20971520
+  "maxByteLength": 10485760
 }
 ```
 
@@ -452,8 +454,8 @@ Idempotency-Key: <由后端或可信客户端生成的稳定键>
     "endToEndLatencyMs": 12000
   },
   "versions": {
-    "promptVersion": "sgx-five-facets.13",
-    "guardVersion": "stage-a-validation.2"
+    "promptVersion": "sgx-five-facets.16",
+    "guardVersion": "classification-lab-guard.1"
   },
   "jobRevision": 4,
   "updatedAt": "2026-10-02T12:00:13.000Z"
@@ -523,13 +525,13 @@ Assertion 的确认、编辑、拒绝和撤回必须符合 `contracts/assertion-
   "versions": {
     "gitCommit": "0123456789abcdef0123456789abcdef01234567",
     "contractVersion": "classification-ingestion.2",
-    "providerVersion": "qwen.qwen3-7-flash",
-    "promptVersion": "sgx-five-facets.13",
-    "guardVersion": "stage-a-validation.2",
-    "adapterVersion": "classification-feature-adapters.1",
-    "taxonomyVersion": "sgx-taxonomy.1",
-    "ocrVersion": "rapidocr-ppocrv5.1",
-    "embeddingVersion": "siglip2-base-224.1"
+    "providerVersion": "qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.4",
+    "promptVersion": "sgx-five-facets.16",
+    "guardVersion": "classification-lab-guard.1",
+    "adapterVersion": "classification-lab-stage-a-composition.2",
+    "taxonomyVersion": "classification-lab-taxonomy.1",
+    "ocrVersion": "rapidocr-3.9.2-ppocrv5-mobile",
+    "embeddingVersion": "e6d9ca1cf467fb979d8511ed8349d29bdfd8ea1b"
   },
   "capabilities": {
     "modalities": ["image", "user_text", "final_asr"],
@@ -703,13 +705,13 @@ Worker 先将结果 JSON 上传到 `resultUpload.uploadUrl`，再发送 complete
   "versions": {
     "gitCommit": "0123456789abcdef0123456789abcdef01234567",
     "contractVersion": "classification-ingestion.2",
-    "providerVersion": "qwen.qwen3-7-flash",
-    "promptVersion": "sgx-five-facets.13",
-    "guardVersion": "stage-a-validation.2",
-    "adapterVersion": "classification-feature-adapters.1",
-    "taxonomyVersion": "sgx-taxonomy.1",
-    "ocrVersion": "rapidocr-ppocrv5.1",
-    "embeddingVersion": "siglip2-base-224.1"
+    "providerVersion": "qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.4",
+    "promptVersion": "sgx-five-facets.16",
+    "guardVersion": "classification-lab-guard.1",
+    "adapterVersion": "classification-lab-stage-a-composition.2",
+    "taxonomyVersion": "classification-lab-taxonomy.1",
+    "ocrVersion": "rapidocr-3.9.2-ppocrv5-mobile",
+    "embeddingVersion": "e6d9ca1cf467fb979d8511ed8349d29bdfd8ea1b"
   },
   "resultArtifact": {
     "artifactId": "artifact_result_001",
@@ -920,8 +922,8 @@ INTERNAL_ERROR
 5. `execution-context` 已有正式 JSON Schema；产品后端仍需用同一事务快照生成 Job、Guard、place policy 和 budget，且必须逐字段绑定当前 lease identity。
 6. 产品外部 Job view 尚未有本仓权威 OpenAPI；全栈必须在产品仓冻结。Worker complete/fail/cancel-ack 的确认语义已有 Schema，但仍需在 OpenAPI 中指定路径、认证和状态码。
 7. `CompleteRequest` 本体只提交结果 artifact 的引用；Evidence `sourceRefs` 位于 artifact 内。控制面必须在接收事务中下载并校验这些引用，不能只校验 artifact 外壳。
-8. 参考 Worker 已将 OCR 和 embedding Feature Bundle 转为哈希绑定的 OCR evidence 与 Top-K retrieval hints，再由 Stage A bridge 和 StoryUnit 组织器消费；统一 Worker 回归覆盖该路径。真实 embedding artifact 尚未冻结，所以不能据此声称真实召回效果已通过。
-9. Feature Service 有真实 adapter 边界，不代表全部模型 artifact、license、hash、远端 `/readyz` 和性能 Gate 已通过。当前只有 OCR 有远端工程基线；embedding、人物和 ASR 仍 gated。
+8. 参考 Worker 已将 OCR 和 embedding Feature Bundle 转为哈希绑定的 OCR evidence 与 Top-K retrieval hints，由 Stage A bridge 和 StoryUnit 组织器消费。当前云端 Chinese-CLIP 固定 revision 已加载，同授权两轮真实图文及历史候选已验证；这证明功能链可运行，不等于固定图库召回质量已通过。
+9. OCR、image/text embedding、人物和 ASR 均有真实 adapter、内部模型制品和远端 loaded/ready 证据。真实家庭/老人数据质量、p95/并发、常驻生命周期和产品权限事务仍待 T2；SFace 商业/训练数据来源审查不能以内部 ready 替代。
 10. `npm run test:classification` 已包含 Node Worker 与编译后的 Stage A 子进程回归；`npm run test:classification:delivery` 再统一执行 typecheck、部署脚本、Python Feature Service、扩展密钥扫描和 diff 检查。真实模型、对象存储和产品数据库仍属于联合验收。
 
 ## 11. 最小联合验收清单
@@ -1001,15 +1003,12 @@ INTERNAL_ERROR
 
 ## 12. 接入顺序
 
-1. 先实现 Evidence 上传、对象复验和产品 Job API，算法保持 Fake/确定性；
-2. 实现数据库事务、outbox、lease、heartbeat、cancel 和 late-result CAS；
-3. 用 worker Schema 完成无模型联调；
-4. 接入真实 Feature Service，验证 `/readyz` 和版本完全匹配；
-5. 复用参考 Worker 的 OCR、embedding、Top-K 和 Stage A bridge，替换为冻结的真实模型 artifact；
-6. 接 VLM，并保持 0 自动重试和完整 usage；
-7. 跑固定 T0/T1 矩阵、失败恢复和性能 Gate；
-8. 接智能相册 UI、待整理和用户复核；
-9. 最后接独立 MemoryCandidate Gate，不让分类候选直接写长期 Memory。
+1. 全栈实现 Evidence 上传、对象复验和产品 Job API，保留 `classification-ingestion.2` 语义；算法基线为 `82cab23`。
+2. 实现数据库事务、outbox、lease、heartbeat、cancel 和 late-result CAS，用 Worker Schema 完成一次无模型协议联调。
+3. 接入当前真实 Feature Service 与 VLM，核对 `/readyz`、版本和 capability；保留 0 自动重试和完整 usage，不重新下载模型或重做已有成功矩阵。
+4. 执行五类最小 T2 联调：图文上传、麦克风 ASR、同 session 追加检索、取消/撤回、服务恢复。只补产品权限、存储、状态和展示证据，按新缺陷增加定点验证。
+5. 接智能相册 UI、待整理和用户复核；独立 MemoryCandidate Gate 保持确认边界。
+6. 跨轮自动故事归并另补 Top-K 候选的同事件验证与可撤回合并；当前跨轮 candidate 不自动形成分组边，也不能当作身份/关系事实。
 
 ## 13. 权威文件
 

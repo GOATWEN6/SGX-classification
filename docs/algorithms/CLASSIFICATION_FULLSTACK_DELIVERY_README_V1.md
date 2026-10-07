@@ -1,18 +1,18 @@
 # SGX 自动分类与归纳：全栈交付仓库 README
 
 > 类型：`internal_release_candidate`
-> 交付分支：`codex/classification-contract-v1`
-> 当前验证提交：`4a904f413c017e0fc576d8bdb3ef8d1edcfe9486`
+> GitHub 交付分支：`codex/classification-t1-external-20261006`
+> 当前云端代码 release：`82cab23cd81a2f0b06a3c00606025153a2816468`
 > 仓库：`https://github.com/GOATWEN6/SGX-classification`
 > 目标：让全栈工程师在新版产品仓库中实现真实上传、异步 Job、云端 Worker 和智能相册结果接入。
 
 ## 1. 先读哪些文件
 
-1. [`ALGORITHM_ARCHITECTURE_AND_FUNCTIONS.md`](ALGORITHM_ARCHITECTURE_AND_FUNCTIONS.md)：完整算法目标、输入、流程、模型、规则、输出和产品边界。
-2. [`FULLSTACK_INTEGRATION_GUIDE.md`](FULLSTACK_INTEGRATION_GUIDE.md)：产品 API、Worker 控制面、签名 URL、错误码和验收步骤。
-3. [`MODEL_PROVENANCE_AND_RELEASE_GATES.md`](MODEL_PROVENANCE_AND_RELEASE_GATES.md)：模型选型、开源来源、许可、hash 和当前 Gate。
-4. `contracts/README.md`：所有 JSON Schema 的关系。
-5. `deploy/classification-worker/README.md`：VirtAI 隔离目录、激活和回滚。
+1. [`CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md`](CLASSIFICATION_ALGORITHM_COMPLETE_GUIDE.md)：完整算法目标、输入、流程、模型、规则、输出和产品边界。
+2. [`CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md`](CLASSIFICATION_FULLSTACK_INTEGRATION_GUIDE_V2.md)：产品 API、Worker 控制面、签名 URL、错误码和联调步骤。
+3. [`CLASSIFICATION_RUNTIME_CONFIGURATION.md`](CLASSIFICATION_RUNTIME_CONFIGURATION.md)：当前模型、revision、容量与配置；[`model-candidates.json`](../../deploy/classification-worker/model-candidates.json)：开源来源、许可和运行证据。
+4. [`contracts/README.md`](../../contracts/README.md)：JSON Schema；[`deploy/classification-worker/README.md`](../../deploy/classification-worker/README.md)：VirtAI 隔离目录、激活和回滚。
+5. [`CLASSIFICATION_T1_TARGETED_RETEST_2026-10-07.md`](CLASSIFICATION_T1_TARGETED_RETEST_2026-10-07.md)：本轮真实复测、保留失败和交付边界。
 
 ## 2. 现在能交付什么
 
@@ -23,7 +23,7 @@
 - 实验页和 BFF 参考实现：`/classification-lab/t1` 支持多轮图片、文字和浏览器麦克风录音，停止录音后生成 16 kHz/16-bit/mono WAV 并进入真实 SenseVoice ASR；`/classification-lab/t1/album` 从同一持久化会话展示故事、图片、用户原文、最终 ASR、AI 标题、摘要和标签。这些页面用于 T1 功能验证，不替代产品后端和正式产品 UI。
 - 自动化门禁：Node/TypeScript、Worker、部署回滚、Python、密钥扫描和 diff 检查。
 
-## 3. 不能从本包直接得出的结论
+## 3. 当前交付限制
 
 - 不能把测试通过解释为真实家庭照片准确率。
 - 不能把 OCR 合成图结果解释为真实手机照片 OCR 准确率。
@@ -31,6 +31,7 @@
 - 不能让浏览器直接调用 VirtAI、OCR、embedding 或模型供应商。
 - 不能把 AI 候选直接写入长期 Memory。
 - 不能仅凭这个分支上生产；产品数据库、对象存储、鉴权、OpenAPI、队列/lease 和监控由产品后端实现。
+- 跨轮历史检索返回 `candidate_only / possibly_related` 候选；当前没有跨轮 VLM 同事件验证或自动合并故事。匿名人物候选也不是已确认姓名或亲属关系。
 
 ## 4. 目录说明
 
@@ -49,12 +50,7 @@ figures/                            架构图 PNG、Mermaid 源码和预览
 scripts/                            类型生成、统一测试和 Fake/Stage A 入口
 ```
 
-历史 ZIP 交付流程生成的根目录文件可能包含：
-
-- `ALGORITHM_ARCHITECTURE_AND_FUNCTIONS.md`
-- `VALIDATION_REPORT.md`
-- `PACKAGE_METADATA.json`
-- `MANIFEST.sha256`
+历史 ZIP 的根文档和 `MANIFEST.sha256` 只适用于对应旧制品。当前以本仓文档、Git 提交和云端 release manifest 为准，不再要求 ZIP。
 
 ## 5. 本地验证
 
@@ -64,6 +60,8 @@ scripts/                            类型生成、统一测试和 Fake/Stage A 
 npm ci
 npm run test:classification:delivery
 ```
+
+以上为新环境的完整基线门禁。已有环境的定向修改只运行受影响回归；文档修改只检查链接、密钥与 diff，不重复全部测试或成功的付费场景。
 
 统一门禁依次执行：
 
@@ -164,7 +162,16 @@ Worker 内部协议至少实现：
 - 当前分支必须保持 `internal-release-candidate` 标识，直到真实数据、产品链和发布 Gate 全部完成。
 - 云端下载持久化策略为 `classification-download-persistence.1`：模型、wheel、源码包、许可证和下载缓存必须位于 `/gemini/code/sgx-classification`；`/quota` 仅承载离线可重建的 venv 与生成缓存。
 
-## 11. 2026-10-04 最新可运行证据
+## 11. 2026-10-07 最新可运行证据
+
+- 云端 `current=82cab23cd81a2f0b06a3c00606025153a2816468`，`previous=09b5f04b0c19a1a528b079da19c20072f201cdb1`。369 项发布文件哈希通过，manifest digest 为 `07b950130fe9f9882d8e138b4c74ff8b22b2feb6691338a54b9a0157eee3b1be`。
+- 同 session/scope/authorization 两轮真实图文任务成功并持久化复读。第一轮 `lab_run_b9e14fcfc791db874d9b2958`：1 request / ¥0.0093828；修复后第二轮 `lab_run_ca1dba54a2738b981080dd98`：1 request / ¥0.0093012。第二轮产生 4 条指向同一历史图片的图文/匿名人脸候选。
+- 本轮修复轻微人物框漂移、OCR 机械归一、失败 usage 结算、单图独立失败、召回 K 与组织关系上限混用，以及跨轮 namespaced model reference。最近修复的本地/远端聚焦回归 27/27 通过；旧失败任务保留。
+- 新版六图没有重新付费重跑。六图原失败任务为 10 requests / ¥0.089603，组织适配器限量误拒；不能据此宣称新版六图已真实通过。
+- 最终累计 193/200 requests、¥23.243669/¥50。详见本轮复测报告与 [执行计划](../superpowers/plans/2026-10-07-classification-targeted-handoff-execution-plan.md)。
+- 当前代码可作为全栈接入基线。稳定公网产品 HTTPS、产品数据库/对象存储、常驻服务与最小 T2 联调仍需落实。
+
+## 12. 2026-10-04 历史可运行证据
 
 - 远端 Worker 发布：`4a904f413c017e0fc576d8bdb3ef8d1edcfe9486`，372 项文件完整性通过，上一发布保留为 `previous`。
 - 真实多图 Job `lab_run_e8fd529c4610565d899e94c5`：2 图 + 批次文字，人物匹配开启，3 次 Qwen 调用，最终 `succeeded`，结果已上传并持久化。

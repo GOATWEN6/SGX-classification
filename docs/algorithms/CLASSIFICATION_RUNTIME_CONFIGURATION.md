@@ -14,7 +14,7 @@
 |ASR|SenseVoiceSmall + FunASR|模型 `7bf452403abd7353a300cd760f7adae7701c92c1` / FunASR `1.4.16`|`cuda:0`|用户从产品麦克风录音，后端创建 ASR 任务|
 |困难语义与故事摘要|Qwen `qwen3.7-flash-2026-07-15`|Prompt `sgx-five-facets.16` / validation `stage-a-validation.4`（2026-10-07 定向修复）|阿里云 API|否，由服务端 Worker 调用，密钥不进入浏览器|
 
-validation `.4` 增加轻微人物框边界漂移的裁剪、单项输出错误的独立处理与错误记录，并将正常 Top-K 限量保留在 candidateTraces 中；不把限量本身变成人工任务。OCR 引用接受 NFKC 与空白差异，仍须是可追溯原文的子串，语义改写不能通过。具有有效 usage、响应 ID 和相同模型版本的解析失败按实际用量结算；缺少这些证据时保留保守预留。`.3` 真实运行与失败记录仍保留；新版本是否已经远端激活和复测见当日执行记录。
+validation `.4` 增加轻微人物框边界漂移的裁剪、单项输出错误的独立处理与错误记录，并将正常 Top-K 限量保留在 candidateTraces 中；不把限量本身变成人工任务。OCR 引用接受 NFKC 与空白差异，仍须是可追溯原文的子串，语义改写不能通过。具有有效 usage、响应 ID 和相同模型版本的解析失败按实际用量结算；缺少这些证据时保留保守预留。`.3` 真实运行与失败记录仍保留；当前云端激活与真实复测见第 6 节。
 
 这些选择的来源、license、模型路径和远端 smoke 证据在：
 
@@ -69,6 +69,17 @@ OCR、Embedding、人脸特征读取哈希验证后的原图。VLM 使用派生�
 
 ## 5. 全栈工程师使用方式
 
-短期 T1：全栈后端使用 HTTPS staging URL 和 Bearer Token 调窄网关，验证提交、轮询、ASR 和显式重试。Token 不进入浏览器。
+短期 T1：窄网关实现已存在，全栈后端可在另行核验的 HTTPS staging URL 上用 Bearer Token 验证提交、轮询、ASR 和显式重试。当前没有已证明稳定的公网 staging 地址；Cloudflare quick tunnel 曾 530，不能作为内部用户入口。Token 不进入浏览器。
 
 正式 T2：产品前端调用业务后端；业务后端保存原始素材与 Evidence/Job，VirtAI Worker 通过出站 HTTPS 主动 lease 任务并回传结果。全栈工程师不需要把 SSH 暴露给用户，也不直接开放 OCR、Embedding 或 GPU 端口。
+
+## 6. 2026-10-07 当前激活版本
+
+- `current`：`82cab23cd81a2f0b06a3c00606025153a2816468`；`previous`：`09b5f04b0c19a1a528b079da19c20072f201cdb1`。369 项发布文件哈希通过，manifest digest：`07b950130fe9f9882d8e138b4c74ff8b22b2feb6691338a54b9a0157eee3b1be`。
+- 模型与代码 manifest 各有独立摘要；不能把模型候选制品摘要填成代码 release 摘要。示例环境变量必须由发布组装脚本替换成目标 release 的实际身份，不能直接启用仓库示例。
+- 召回保持 `K=1`；组织关系总上限独立为 `min(128, max(1, 3 * (activeContentCount - 1)))`，不再误用 K 拒绝有效多图关系。跨轮 model reference 与历史检索使用相同的 model ID/revision 校验。
+- 云端 `/version`、`/readyz` 已核验 OCR、image/text embedding、face、ASR 均 loaded，Face/ASR enabled=true；同 session 两轮真实图文成功，结果可持久化复读。跨轮只返回搜索/相册建议候选，没有自动合并故事。
+- 原六图与跨轮失败均保留；新版六图未重新付费重跑。最终控制面账本 193/200 requests、¥23.243669/¥50，余 7 次、¥26.756331。
+- Notebook idle 回收与正式 HTTPS 产品后端仍待 T2 解决。当前 ready 只证明此刻服务可用，不等于常驻可靠性或真实用户 p95。
+
+详细证据见 [本轮真实复测报告](CLASSIFICATION_T1_TARGETED_RETEST_2026-10-07.md)；全栈下一步按 [当前执行计划](../superpowers/plans/2026-10-07-classification-targeted-handoff-execution-plan.md) 的 T2 分工接入。
