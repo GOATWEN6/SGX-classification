@@ -60,6 +60,6 @@
 
 ## 下一阶段
 
-1. 更新当前交付文档、配置索引和真实复测报告；只做链接、密钥和 diff 核验，再 fast-forward 上传到 `codex/classification-t1-external-20261006`，不覆盖其他分支。
-2. 全栈同步实现正式产品 HTTPS API、对象存储引用、业务事务和 Worker lease/heartbeat/result；平台落实固定生命周期实例与 supervisor。用户和全栈调用产品 API，无需向用户分发 SSH。
+1. 算法交付收尾已完成：当前交付文档、配置索引和真实复测报告已通过链接、密钥和 diff 核验，并按原 SHA fast-forward 上传到 `codex/classification-t1-external-20261006`；未覆盖其他分支。
+2. 下一步由全栈实现正式产品 HTTPS API、对象存储引用、业务事务和 Worker lease/heartbeat/result；平台落实固定生命周期实例与 supervisor。用户和全栈调用产品 API，无需向用户分发 SSH。
 3. 以图文上传、麦克风 ASR、同 session 追加检索、取消/撤回、服务恢复五类最小 T2 联调验证产品边界；不重新跑完整历史矩阵。跨轮自动归并需另补候选同事件验证与可撤回合并，不能用召回相似度直接形成事实。

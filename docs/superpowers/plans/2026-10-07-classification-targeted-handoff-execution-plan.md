@@ -35,7 +35,7 @@
 |P2|恢复 Feature Service、T1 控制面与 Worker 连接|明确版本、healthz/readyz、单实例与数据根；不触发旧 pending 任务|`82cab23` 已激活，OCR、image/text embedding、face、ASR 均 loaded；369 文件哈希核验通过|
 |P3|定向真实复测|只测受影响多图及缺少证据的 ASR/历史路径；记录请求数、费用、错误与输出覆盖|同 session 两轮真实图文成功并持久化复读；ASR 复用既有证据。新版六图未付费重跑；跨轮只返回关联候选|
 |P4|全栈接口闭环|HTTPS staging 客户端可鉴权、提交、查询、取结果；正式产品后端职责明确|本机与远端控制面可达；临时 quick tunnel 不稳定，正式 HTTPS 后端与常驻运行环境仍是 T2 依赖|
-|P5|更新交付与上传|架构/配置/报告/限制/恢复方式一致；无凭据与素材；提交推送 classification 交付分支|三个修复提交已完成至 `82cab23`；更新文档后做轻量核验并 fast-forward 上传，不修改 main|
+|P5|更新交付与上传|架构/配置/报告/限制/恢复方式一致；无凭据与素材；提交推送 classification 交付分支|已完成：文档与示例配置通过链接/密钥/diff 核验，四个提交已按原 SHA fast-forward 上传到 `codex/classification-t1-external-20261006`，未修改 main|
 
 已有测试版本不同不自动失效：按改动影响判断是否需要补测。真实组件成功、接口成功、语义可用、真实用户效果分开记录。全栈可以同步开展 T2，算法侧本轮不接管其产品数据库与对象存储实现。
 
