@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 export const STAGE_A_VERSION = 'classification-stage-a.1';
 export const PROMPT_VERSION = 'sgx-five-facets.16';
-export const STAGE_A_VALIDATION_VERSION = 'stage-a-validation.3';
+export const STAGE_A_VALIDATION_VERSION = 'stage-a-validation.4';
 export const EVENT_LABELS = ['求学','毕业','工作','婚礼','生日','节庆','旅行','搬家','退休','家庭聚会','聚会','兴趣活动','普通日常','纪念事件','其他'] as const;
 export const SCENE_LABELS = ['室内','室内家庭','桌面','校园','工作场所','户外','社区活动','交通','庆典','自然景观','仓储','花园','翻拍','物件','其他'] as const;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -68,7 +68,8 @@ export type Budget=z.infer<typeof BudgetSchema>;
 export type Support=z.infer<typeof support>;
 export interface StageDiagnosticIssue {path:string;code:string;keys?:string[];expected?:string;}
 export interface StageDiagnostic {phase:'provider_envelope'|'content_json'|'schema';issues:StageDiagnosticIssue[];}
-export class StageError extends Error {constructor(public code:string,public diagnostic?:StageDiagnostic){super(code);}}
+export interface StageUsageReceipt {inputTokens:number;outputTokens:number;responseId:string;model:string;}
+export class StageError extends Error {constructor(public code:string,public diagnostic?:StageDiagnostic,public reportedUsage?:StageUsageReceipt){super(code);}}
 export const stable = (v:unknown):string => Array.isArray(v)?`[${v.map(stable).join(',')}]`:v&&typeof v==='object'
   ?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${stable((v as Record<string,unknown>)[k])}`).join(',')}}`:JSON.stringify(v);
 export const digest=(v:unknown)=>`sha256:${createHash('sha256').update(stable(v)).digest('hex')}`;
@@ -200,7 +201,7 @@ export function sanitizeObservationCandidate(raw:unknown,photo:Photo):{candidate
 export function validateSupports(items:Support[], photos:Photo[]) {
   for(const s of items){const p=photos.find(p=>p.photoId===s.photoId);if(!p)throw new StageError('FOREIGN_SOURCE');
     if(s.source==='caption'&&!p.caption.includes(s.quote))throw new StageError('UNSUPPORTED_QUOTE');
-    if(s.source==='ocr'&&(!p.ocrText||!p.ocrText.includes(s.quote)))throw new StageError('UNSUPPORTED_QUOTE');
+    if(s.source==='ocr'&&(!p.ocrText||!containsEvidenceQuote(p.ocrText,s.quote)))throw new StageError('UNSUPPORTED_QUOTE');
     if(s.source==='exif'&&(!p.exif||!stable(p.exif).includes(s.quote)))throw new StageError('UNSUPPORTED_EXIF');
     if(s.source==='user_text'||s.source==='final_asr'){
       if(!s.evidenceId)throw new StageError('TEXT_SUPPORT_REQUIRES_EVIDENCE');

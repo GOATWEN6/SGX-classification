@@ -12,7 +12,9 @@
 |人脸检测|OpenCV Zoo YuNet|`47534e27c9851bb1128ccc0102f1145e27f23f98`|Feature Service|否；只生成匿名人物候选|
 |人脸特征|OpenCV Zoo SFace|同上，128 维|Feature Service|否；姓名和亲属关系仍需产品确认|
 |ASR|SenseVoiceSmall + FunASR|模型 `7bf452403abd7353a300cd760f7adae7701c92c1` / FunASR `1.4.16`|`cuda:0`|用户从产品麦克风录音，后端创建 ASR 任务|
-|困难语义与故事摘要|Qwen `qwen3.7-flash-2026-07-15`|Prompt `sgx-five-facets.16` / validation `stage-a-validation.3`|阿里云 API|否，由服务端 Worker 调用，密钥不进入浏览器|
+|困难语义与故事摘要|Qwen `qwen3.7-flash-2026-07-15`|Prompt `sgx-five-facets.16` / validation `stage-a-validation.4`（2026-10-07 定向修复）|阿里云 API|否，由服务端 Worker 调用，密钥不进入浏览器|
+
+validation `.4` 增加轻微人物框边界漂移的裁剪、单项输出错误的独立处理与错误记录，并将正常 Top-K 限量保留在 candidateTraces 中；不把限量本身变成人工任务。OCR 引用接受 NFKC 与空白差异，仍须是可追溯原文的子串，语义改写不能通过。具有有效 usage、响应 ID 和相同模型版本的解析失败按实际用量结算；缺少这些证据时保留保守预留。`.3` 真实运行与失败记录仍保留；新版本是否已经远端激活和复测见当日执行记录。
 
 这些选择的来源、license、模型路径和远端 smoke 证据在：
 

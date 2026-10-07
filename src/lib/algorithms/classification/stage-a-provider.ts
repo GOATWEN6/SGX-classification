@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Budget, EVENT_LABELS, Photo, PROMPT_VERSION, SCENE_LABELS, STAGE_A_VALIDATION_VERSION, StageDiagnostic, StageError, stable, ExtractSchema, RelateSchema } from './stage-a-contract';
+import { BoxSchema, Budget, EVENT_LABELS, Photo, PROMPT_VERSION, SCENE_LABELS, STAGE_A_VALIDATION_VERSION, StageDiagnostic, StageError, stable, ExtractSchema, RelateSchema } from './stage-a-contract';
 export interface ModelCall {stage:'extract'|'relate';photos:Photo[];context:unknown;checkAuthorization?:()=>void;}
 export interface ModelUsage {inputTokens:number;outputTokens:number;}
 export interface ModelReply {value:unknown;usage:ModelUsage;responseId:string;model:string;}
@@ -23,12 +23,32 @@ function schemaDiagnostic(error:{issues:{path:(string|number)[];code:string;keys
   }))};
 }
 
-/**
- * Repairs one bounded provider formatting drift without adding semantic facts.
- * The prompt requires partial YYYY-MM values to be represented as year precision,
- * but some providers still emit the descriptive enum "year-month" or "month".
- * Raw responses are recorded before this normalization, so the repair remains auditable.
- */
+/** Intersect only minor normalized-coordinate drift with the image boundaries. */
+function normalizePersonRegion(person: unknown): unknown {
+  if(!person || typeof person !== 'object') return person;
+  const candidate = person as Record<string, unknown>;
+  const box = candidate.box;
+  if(!box || typeof box !== 'object' || BoxSchema.safeParse(box).success) return person;
+  const region = box as Record<string, unknown>;
+  if(Object.keys(region).length !== 4
+    || !['x', 'y', 'width', 'height'].every(key => typeof region[key] === 'number' && Number.isFinite(region[key]))) return person;
+  const { x, y, width, height } = region as { x: number; y: number; width: number; height: number };
+  // Correct only one percentage point of normalized-coordinate boundary drift.
+  // Intersect with the image instead of shifting the region or accepting pixel boxes.
+  const roundingTolerance = 0.01 + Number.EPSILON;
+  if(width <= 0 || height <= 0 || width > 1 || height > 1
+    || x < -roundingTolerance || y < -roundingTolerance
+    || x + width > 1 + roundingTolerance || y + height > 1 + roundingTolerance) return person;
+  const clippedX = Math.max(0, x), clippedY = Math.max(0, y);
+  const clipped = {
+    x: clippedX,
+    y: clippedY,
+    width: Math.min(1, x + width) - clippedX,
+    height: Math.min(1, y + height) - clippedY
+  };
+  return BoxSchema.safeParse(clipped).success ? { ...candidate, box: clipped } : person;
+}
+
 function normalizeExtractReply(value: unknown): unknown {
   if(!value || typeof value !== 'object' || !Array.isArray((value as {observations?:unknown}).observations)) return value;
   return {
@@ -37,6 +57,9 @@ function normalizeExtractReply(value: unknown): unknown {
       if(!observation || typeof observation !== 'object' || !Array.isArray((observation as {times?:unknown}).times)) return observation;
       return {
         ...(observation as Record<string, unknown>),
+        ...(Array.isArray((observation as { people?: unknown }).people) ? {
+          people: ((observation as { people: unknown[] }).people).map(normalizePersonRegion)
+        } : {}),
         times: ((observation as {times:unknown[]}).times).map(time => {
           if(!time || typeof time !== 'object') return time;
           const candidate = time as Record<string, unknown>;
@@ -139,15 +162,20 @@ export class ApiVisionProvider implements VisionProvider {
     while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>1_000_000){await reader.cancel();throw new StageError('RESPONSE_LIMIT');}chunks.push(part.value);}
     let raw:any;try{raw=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new StageError('INVALID_OUTPUT');}
     this.options.record?.({responseId:typeof raw.id==='string'?raw.id:'missing',model:typeof raw.model==='string'?raw.model:'missing',raw});
-    if(raw.choices?.[0]?.finish_reason==='length')throw new StageError('OUTPUT_TRUNCATED');
-    if(raw.choices?.[0]?.finish_reason!=='stop'||typeof raw.choices?.[0]?.message?.content!=='string')throw new StageError('INVALID_OUTPUT',{phase:'provider_envelope',issues:[{path:'choices.0.message.content',code:'missing_or_invalid'}]});
     const usage={inputTokens:raw.usage?.prompt_tokens,outputTokens:raw.usage?.completion_tokens};
-    if(!Object.values(usage).every(n=>Number.isInteger(n)&&n>=0)||typeof raw.id!=='string'||typeof raw.model!=='string')throw new StageError('MISSING_USAGE_OR_PROVENANCE');
+    const hasUsage=Object.values(usage).every(n=>Number.isSafeInteger(n)&&n>=0)
+      &&typeof raw.id==='string'&&raw.id.length>0&&typeof raw.model==='string'&&raw.model.length>0;
+    // A valid billed response remains billable even if its content cannot be used.
+    // Unknown model pricing or missing provenance keeps the conservative reservation.
+    const receipt=hasUsage&&raw.model===this.options.model?{...usage,responseId:raw.id,model:raw.model}:undefined;
+    if(raw.choices?.[0]?.finish_reason==='length')throw new StageError('OUTPUT_TRUNCATED',undefined,receipt);
+    if(raw.choices?.[0]?.finish_reason!=='stop'||typeof raw.choices?.[0]?.message?.content!=='string')throw new StageError('INVALID_OUTPUT',{phase:'provider_envelope',issues:[{path:'choices.0.message.content',code:'missing_or_invalid'}]},receipt);
+    if(!hasUsage)throw new StageError('MISSING_USAGE_OR_PROVENANCE');
     if(raw.model!==this.options.model)throw new StageError('MODEL_VERSION_MISMATCH');
-    let value:unknown;try{value=JSON.parse(raw.choices[0].message.content);}catch{throw new StageError('INVALID_OUTPUT',{phase:'content_json',issues:[{path:'$',code:'invalid_json'}]});}
+    let value:unknown;try{value=JSON.parse(raw.choices[0].message.content);}catch{throw new StageError('INVALID_OUTPUT',{phase:'content_json',issues:[{path:'$',code:'invalid_json'}]},receipt);}
     if(call.stage==='extract') value=normalizeExtractReply(value);
     const parsed=(call.stage==='extract'?ExtractSchema:RelateSchema).safeParse(value);
-    if(!parsed.success)throw new StageError('INVALID_OUTPUT',schemaDiagnostic(parsed.error));
+    if(!parsed.success)throw new StageError('INVALID_OUTPUT',schemaDiagnostic(parsed.error),receipt);
     value=parsed.data;
     return {value,usage,responseId:raw.id,model:raw.model};
   }
@@ -171,24 +199,37 @@ export class TaskBudget {
     const record:CallRecord={stage:call.stage,photoIds:call.photos.map(p=>p.photoId),imageCount:call.photos.length,status:'processing',latencyMs:0,inputTokens:input,outputTokens:output,costCny:reserve,accounting:'conservative_reservation',
       reservation:{inputTokens:input,outputTokens:output,costCny:reserve}};
     this.records.push(record);this.inputTokens+=input;this.outputTokens+=output;this.costCny+=reserve;
+    const settle=(usage:ModelUsage,responseId:string,model:string)=>{
+      if(record.accounting==='reported_usage')return;
+      const actual=(usage.inputTokens*provider.inputCnyPerMillion+usage.outputTokens*provider.outputCnyPerMillion)/1e6;
+      this.inputTokens+=usage.inputTokens-input;this.outputTokens+=usage.outputTokens-output;this.costCny+=actual-reserve;
+      Object.assign(record,{...usage,responseId,returnedModel:model,costCny:actual,accounting:'reported_usage'});
+      const exceeded:('inputTokens'|'outputTokens')[]=[];
+      if(usage.inputTokens>input)exceeded.push('inputTokens');
+      if(usage.outputTokens>output)exceeded.push('outputTokens');
+      if(exceeded.length)record.reservationExceeded=exceeded;
+      if(this.inputTokens>this.limits.maxInputTokens||this.outputTokens>this.limits.maxOutputTokens||this.costCny>this.limits.maxCostCny)this.stoppedCode='BUDGET_OVERRUN';
+      else if(exceeded.length)this.stoppedCode='RESERVATION_OVERRUN';
+    };
     const start=Date.now();let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       const stop=new Promise<never>((_,reject)=>{controller.signal.addEventListener('abort',()=>reject(new StageError(signal?.aborted?'CANCELLED':'TIMEOUT')),{once:true});timer=setTimeout(()=>controller.abort(),Math.min(left,this.limits.maxCallDurationMs??60000));});
       const reply=await Promise.race([provider.invoke({...call,context:{...(call.context as object),maxOutputTokens:output}},controller.signal),stop]);
+      settle(reply.usage,reply.responseId,reply.model);
       if(controller.signal.aborted||Date.now()>=Date.parse(this.limits.deadlineAt))throw new StageError('TIMEOUT');
-      const actual=(reply.usage.inputTokens*provider.inputCnyPerMillion+reply.usage.outputTokens*provider.outputCnyPerMillion)/1e6;
-      this.inputTokens+=reply.usage.inputTokens-input;this.outputTokens+=reply.usage.outputTokens-output;this.costCny+=actual-reserve;
-      Object.assign(record,{...reply.usage,responseId:reply.responseId,returnedModel:reply.model,costCny:actual,accounting:'reported_usage'});
-      const exceeded:('inputTokens'|'outputTokens')[]=[];
-      if(reply.usage.inputTokens>input)exceeded.push('inputTokens');
-      if(reply.usage.outputTokens>output)exceeded.push('outputTokens');
-      if(exceeded.length)record.reservationExceeded=exceeded;
       // Keep actual billing evidence, but never let a failed reservation estimate authorize another call.
-      if(this.inputTokens>this.limits.maxInputTokens||this.outputTokens>this.limits.maxOutputTokens||this.costCny>this.limits.maxCostCny)this.stoppedCode='BUDGET_OVERRUN';
-      else if(exceeded.length)this.stoppedCode='RESERVATION_OVERRUN';
       if(this.stoppedCode)throw new StageError(this.stoppedCode);
       record.status='succeeded';return reply.value;
-    }catch(error){record.status=error instanceof StageError?error.code:'PROVIDER_UNAVAILABLE';if(error instanceof StageError)throw error;throw new StageError(record.status);}
+    }catch(error){
+      if(error instanceof StageError&&error.reportedUsage){
+        const receipt=error.reportedUsage;
+        if([receipt.inputTokens,receipt.outputTokens].every(n=>Number.isSafeInteger(n)&&n>=0)
+          &&typeof receipt.responseId==='string'&&receipt.responseId.length>0
+          &&typeof receipt.model==='string'&&receipt.model.length>0)settle(receipt,receipt.responseId,receipt.model);
+      }
+      record.status=error instanceof StageError?error.code:'PROVIDER_UNAVAILABLE';
+      if(error instanceof StageError)throw error;throw new StageError(record.status);
+    }
     finally{if(timer)clearTimeout(timer);signal?.removeEventListener('abort',cancel);record.latencyMs=Date.now()-start;}
   }
 }

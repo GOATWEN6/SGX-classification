@@ -73,7 +73,7 @@ function profile() {
 function realProfile() {
   return {
     providerMode: 'stage_a_real',
-    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.3',
+    providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.4',
     modelVersion: 'qwen3.7-flash-2026-07-15',
     promptVersion: 'sgx-five-facets.16',
     guardVersion: 'classification-lab-guard.1',

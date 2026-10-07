@@ -111,10 +111,11 @@ test('new model version invalidates observations; low-risk unknown relations rem
   first.req.trigger='view';assert.equal((await run(first)).workflowStatus,'succeeded');
   const second=two({store,providerOverrides:{model:'qwen-next-test'}});const b=await run(second);assert.deepEqual(b.changedPhotoIds,['a','b']);
 });
-test('candidate limit discloses omitted photos including missing-data fallback',async()=>{
+test('candidate limit audits omitted photos without creating a user review task',async()=>{
   const photos=Array.from({length:6},(_,i)=>photo(`p${i}`,''));const s=setup(photos);s.req.budget.candidatesPerPhoto=2;const r=await run(s);
   assert.ok(r.candidateTraces.every(t=>t.eligible===5&&t.coverage==='truncated'&&t.omitted.length===3));
-  assert.ok(r.candidateTraces.every(t=>t.selected.length>0));assert.ok(r.candidateTraces.every(t=>t.reason==='bounded_categorical_retrieval_with_discovery_fallback'));assert.ok(r.reviewItems.some(i=>i.startsWith('CANDIDATE_TRUNCATED')));
+  assert.ok(r.candidateTraces.every(t=>t.selected.length>0));assert.ok(r.candidateTraces.every(t=>t.reason==='bounded_categorical_retrieval_with_discovery_fallback'));
+  assert.ok(!r.reviewItems.some(i=>i.startsWith('CANDIDATE_TRUNCATED')));assert.equal(r.workflowStatus,'succeeded');
 });
 test('embedding Top-K only reorders bounded candidates and never turns similarity into a same decision',async()=>{
   const photos=Array.from({length:4},(_,i)=>photo(`p${i}`,''));const s=setup(photos);s.req.budget.candidatesPerPhoto=1;
@@ -181,6 +182,15 @@ test('explicit OCR text grounds time only when the literal quote exists in deriv
   const p={...photo('p_ocr',''),ocrText:'2023 退休纪念'};const o=observation(p);o.times=[{value:'2023',precision:'year',role:'event',supports:[{photoId:p.photoId,source:'ocr',quote:'2023 退休纪念'}]}];o.unknownFacets=[];
   const normalized=contract.validateObservation(o,p);assert.equal(normalized.times[0].supports[0].source,'ocr');assert.ok(!normalized.unknownFacets.includes('time'));
   o.times[0].supports[0].quote='服装看起来像 2023 年前后';assert.throws(()=>contract.validateObservation(o,p),/UNSUPPORTED_QUOTE/);
+});
+test('OCR quotes accept Unicode and spacing drift while still rejecting paraphrases and missing evidence',()=>{
+  const p={...photo('p_ocr_spacing',''),ocrText:'２０２３\n退休 纪念'};
+  const support={photoId:p.photoId,source:'ocr',quote:'2023退休纪念'};
+  assert.doesNotThrow(()=>contract.validateSupports([support],[p]));
+  for(const quote of ['2023退休典礼','照片角落写了2023','   ']){
+    assert.throws(()=>contract.validateSupports([{...support,quote}],[p]),/UNSUPPORTED_QUOTE/);
+  }
+  assert.throws(()=>contract.validateSupports([support],[photo(p.photoId)]),/UNSUPPORTED_QUOTE/);
 });
 test('candidate sanitizer quarantines one ungrounded model support without discarding valid facets',()=>{
   const p={...photo('p_bad_support',''),ocrText:'20010\n07'};const o=observation(p,{event:'旅行',scene:'交通'});
@@ -314,14 +324,53 @@ test('omitting an authorized photo cannot silently delete its algorithm state',a
   const s=two();const old=await run(s);s.req.photos=s.req.photos.slice(0,1);const next=await run(s);
   assert.equal(next.errors[0].code,'INCOMPLETE_AUTHORIZED_CATALOG');assert.equal(s.store.get(contract.digest(scope)).revision,old.snapshot.revision);
 });
-test('real-mode orchestration stops after first error; no repeated requests or saved partial snapshot',async()=>{
+test('real-mode independent output errors do not retry an image or hide later attempts',async()=>{
   const s=two({alterOutput:()=>({bad:true})});s.provider.mode='real_api';
   // Replace invoke, not the HTTP transport: this unit test never enters a real network method.
   const diagnostic={phase:'schema',issues:[{path:'observations.0.places.0',code:'unrecognized_keys',keys:['canonical?']}]};
   let calls=0;s.provider.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',diagnostic);};
-  const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
-  assert.match(r.providerVersion,/sgx-five-facets\.16\/stage-a-validation\.3$/);
+  const r=await run(s);assert.equal(calls,2);assert.equal(r.workflowStatus,'failed');assert.equal(r.snapshot,undefined);assert.equal(r.usage.records[0].accounting,'conservative_reservation');
+  assert.match(r.providerVersion,/sgx-five-facets\.16\/stage-a-validation\.4$/);
   assert.deepEqual(r.errors.find(error=>error.stage==='extract').diagnostic,diagnostic);
+});
+test('a local output failure preserves later image results and a visible error code',async()=>{
+  const s=setup(['a','b','c'].map(id=>photo(id,'')));s.provider.mode='real_api';
+  const calls=[];
+  s.provider.invoke=async call=>{
+    const id=call.photos[0].photoId;calls.push({stage:call.stage,id});
+    if(call.stage==='extract'&&id==='b')throw new contract.StageError('INVALID_OUTPUT');
+    return {value:call.stage==='extract'?{observations:[observation(call.photos[0])]}:{relations:[{
+      kind:'event',left:{photoId:call.photos[0].photoId},right:{photoId:call.photos[1].photoId},decision:'unknown',
+      supports:call.photos.map(p=>({photoId:p.photoId,source:'visual',quote:'可见场景'})),rationale:'无法判断'
+    }]},usage:{inputTokens:10,outputTokens:10},responseId:'fixture',model:'fixture'};
+  };
+  const r=await run(s);
+  assert.deepEqual(calls.filter(c=>c.stage==='extract').map(c=>c.id),['a','b','c']);
+  assert.deepEqual(Object.keys(r.snapshot.observations).sort(),['a','c']);
+  assert.equal(r.workflowStatus,'needs_review');
+  assert.ok(r.reviewItems.includes('STAGE_ERROR:extract:b:INVALID_OUTPUT'));
+  assert.ok(r.snapshot.pendingPhotoIds.includes('b'));
+});
+test('a provider-wide failure still stops further real calls',async()=>{
+  const s=two();s.provider.mode='real_api';let calls=0;
+  s.provider.invoke=async()=>{calls++;throw new contract.StageError('RATE_LIMITED');};
+  const r=await run(s);assert.equal(calls,1);assert.equal(r.workflowStatus,'failed');
+});
+test('minor normalized region drift is clipped without adding a person or changing supported facets',async()=>{
+  const s=two({alterOutput:(value,stage)=>{
+    if(stage==='extract')value.observations[0].people[0].box={x:-0.01,y:0.82,width:0.06,height:0.12};
+    return value;
+  }});
+  const r=await run(s);assert.equal(r.errors.length,0);
+  assert.deepEqual(r.snapshot.observations.a.value.people[0].box,{x:0,y:0.82,width:0.049999999999999996,height:0.12});
+});
+test('large region errors and pixel coordinates remain rejected',async()=>{
+  for(const box of [{x:-0.2,y:0.1,width:0.3,height:0.2},{x:10,y:20,width:30,height:40}]){
+    const s=setup([photo('a','')],{a:observation(photo('a',''),{face:true})},{alterOutput:value=>{
+      value.observations[0].people[0].box=box;return value;
+    }});
+    const r=await run(s);assert.equal(r.workflowStatus,'failed');assert.equal(r.errors[0].code,'INVALID_OUTPUT');
+  }
 });
 test('relation rationale that explicitly says same event cannot silently return different',async()=>{
   const s=two({eventDecision:()=> 'different',alterOutput:(value,stage)=>{
@@ -421,7 +470,7 @@ test('real-mode sanitizer keeps valid facets and exposes dropped model assertion
   assert.deepEqual(r.snapshot.observations[p.photoId].value.events.map(item=>item.type),['兴趣活动']);
   assert.ok(r.reviewItems.includes(`UNSUPPORTED_VISUAL_TIME_DROPPED:${p.photoId}`));
 });
-test('real-mode relation failure preserves validated extracts and stops later calls',async()=>{
+test('real-mode relation failure preserves validated extracts and reports the affected pair',async()=>{
   const s=two();s.provider.mode='real_api';let calls=0;
   s.provider.invoke=async call=>{
     calls++;

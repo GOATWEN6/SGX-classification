@@ -78,6 +78,7 @@ export class ClassificationEngine {
       let stopFurtherCalls=false;
       const candidateReviewItems:string[]=[];
       const fatalCodes=new Set(['STALE_RUN','AUTHORIZATION_CHANGED','SOURCE_OR_AUTHORIZATION_CHANGED','CANCELLED','TIMEOUT','MODEL_VERSION_MISMATCH','BUDGET_OVERRUN','RESERVATION_OVERRUN','CALL_NOT_AUTHORIZED']);
+      const serviceStopCodes=new Set(['MODEL_NOT_CONFIGURED','BUDGET_EXHAUSTED','RATE_LIMITED','PROVIDER_UNAVAILABLE','PROVIDER_REJECTED','MISSING_USAGE_OR_PROVENANCE']);
       for(const photoId of changed){const photo=current.get(photoId)!;
         try{
           const raw=ExtractSchema.parse(await call('extract',[photo],{requestedPhotoIds:[photoId]}));
@@ -88,7 +89,7 @@ export class ClassificationEngine {
         }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';
           result.errors.push({stage:'extract',photoIds:[photoId],code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
           if(fatalCodes.has(code))throw error instanceof StageError?error:new StageError(code);
-          if(this.provider?.mode==='real_api'){stopFurtherCalls=true;break;}
+          if(this.provider?.mode==='real_api'&&serviceStopCodes.has(code)){stopFurtherCalls=true;break;}
         }
       }
       const validReferences=resolveReferences(active,observations,r.references);
@@ -134,7 +135,7 @@ export class ClassificationEngine {
           edges.push(...validated);
         }catch(error){const code=error instanceof StageError?error.code:'INVALID_OUTPUT';result.errors.push({stage:'relate',photoIds:pair,code,...(error instanceof StageError&&error.diagnostic?{diagnostic:error.diagnostic}:{})});
           if(fatalCodes.has(code))throw error instanceof StageError?error:new StageError(code);
-          if(this.provider?.mode==='real_api'){stopFurtherCalls=true;break;}}
+          if(this.provider?.mode==='real_api'&&serviceStopCodes.has(code)){stopFurtherCalls=true;break;}}
       }
       if(this.provider?.mode==='real_api'&&!Object.keys(observations).length&&result.errors.length){
         const first=result.errors[0];throw new StageError(first.code,first.diagnostic);
@@ -145,7 +146,7 @@ export class ClassificationEngine {
       // a user task. Keeping two items separate is the safe reversible default.
       result.reviewItems=[...candidateReviewItems,...reconciled.issues,
         ...Object.values(observations).flatMap(o=>o.value.conflicts.map(f=>`CONFLICT:${o.value.photoId}:${f}`)),
-        ...selected.traces.filter(t=>t.coverage==='truncated').map(t=>`CANDIDATE_TRUNCATED:${t.photoId}`)];
+        ...result.errors.flatMap(error=>error.photoIds.map(id=>`STAGE_ERROR:${error.stage}:${id}:${error.code}`))];
       const snapshot:AlgorithmSnapshot={scope:r.scope,revision:(previous?.revision??0)+1,version,authorizationRevision:r.authorizationRevision,contextHash,
         observations,edges,groups:reconciled.groups,referencesHash:digest(r.references),correctionsHash:digest(r.corrections),reviewItems:result.reviewItems,candidateTraces:result.candidateTraces,pendingPhotoIds:[...new Set([...active.filter(photo=>!observations[photo.photoId]).map(photo=>photo.photoId),...result.errors.flatMap(e=>e.photoIds)])],workflowStatus:result.errors.length||result.reviewItems.length?'needs_review':'succeeded'};
       // Incomplete runs can be re-entered to retry gaps; successful observations still cache by input hash.

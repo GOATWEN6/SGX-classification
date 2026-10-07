@@ -118,7 +118,7 @@ const metadata = {
   versions: {
     stageA: 'classification-stage-a.1',
     prompt: 'sgx-five-facets.16',
-    validation: 'stage-a-validation.3',
+    validation: 'stage-a-validation.4',
     hybridContract: 'classification-hybrid.2',
     organizer: 'content-organization.4',
     workerProtocol: 'classification-worker-control-plane.v1',

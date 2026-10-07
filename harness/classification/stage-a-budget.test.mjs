@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TaskBudget,photo,setup,contract} from './fixtures/stage-a.mjs';
+import {TaskBudget,ApiVisionProvider,png,photo,setup,contract} from './fixtures/stage-a.mjs';
 
 const cases=[{name:'input',usage:{inputTokens:50000,outputTokens:100},dimension:'inputTokens'},
   {name:'output',usage:{inputTokens:100,outputTokens:2049},dimension:'outputTokens'}];
@@ -41,6 +41,42 @@ test('failure without usage keeps conservative reservation accounting',async()=>
   await assert.rejects(b.run(p,call),/MISSING_USAGE_OR_PROVENANCE/);
   const r=b.records[0];assert.equal(r.accounting,'conservative_reservation');assert.equal(b.inputTokens,24580);assert.equal(b.outputTokens,2048);
   assert.equal(r.costCny,(24580*1.2+2048*12)/1e6);assert.equal(b.costCny,r.costCny);
+});
+for(const [name,content,finishReason,code] of [
+  ['schema','{"observations":[]}','stop','INVALID_OUTPUT'],
+  ['json','{','stop','INVALID_OUTPUT'],
+  ['length','{','length','OUTPUT_TRUNCATED'],
+]){
+  test(`provider ${name} failure settles reported billing without hiding its failure`,async()=>{
+    const b=new TaskBudget(limits());
+    const p=new ApiVisionProvider({provider:'qwen',model:'test',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+      transport:async()=>new Response(JSON.stringify({id:'billed_failure',model:'test',usage:{prompt_tokens:100,completion_tokens:50},
+        choices:[{finish_reason:finishReason,message:{content}}]})),inputCnyPerMillion:1.2,outputCnyPerMillion:12});
+    await assert.rejects(b.run(p,call),error=>error.code===code);
+    assert.equal(b.records[0].status,code);assert.equal(b.records[0].accounting,'reported_usage');
+    assert.equal(b.inputTokens,100);assert.equal(b.outputTokens,50);
+    assert.ok(Math.abs(b.costCny-0.00072)<1e-12);assert.equal(b.records[0].responseId,'billed_failure');
+  });
+}
+test('invalid output with reported reservation overrun stops every subsequent call',async()=>{
+  const b=new TaskBudget(limits()),p=provider({inputTokens:1,outputTokens:1});let calls=0;
+  p.invoke=async()=>{calls++;throw new contract.StageError('INVALID_OUTPUT',undefined,{inputTokens:100,outputTokens:2049,responseId:'overrun',model:'test'});};
+  await assert.rejects(b.run(p,call),/INVALID_OUTPUT/);
+  assert.equal(b.outputTokens,2049);assert.equal(b.records[0].accounting,'reported_usage');
+  await assert.rejects(b.run(p,call),/RESERVATION_OVERRUN/);assert.equal(calls,1);
+});
+test('missing provenance and a mismatched returned model retain conservative billing',async()=>{
+  for(const raw of [
+    {model:'test',usage:{prompt_tokens:100,completion_tokens:50}},
+    {id:'other_model',model:'unexpected',usage:{prompt_tokens:100,completion_tokens:50}},
+  ]){
+    const b=new TaskBudget(limits());
+    const p=new ApiVisionProvider({provider:'qwen',model:'test',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+      transport:async()=>new Response(JSON.stringify({...raw,choices:[{finish_reason:'stop',message:{content:'{"observations":[]}'}}]})),
+      inputCnyPerMillion:1.2,outputCnyPerMillion:12});
+    await assert.rejects(b.run(p,call),error=>['MISSING_USAGE_OR_PROVENANCE','MODEL_VERSION_MISMATCH'].includes(error.code));
+    assert.equal(b.records[0].accounting,'conservative_reservation');assert.equal(b.inputTokens,24580);
+  }
 });
 test('stage-specific output limits reserve extraction and relation calls independently',async()=>{
   const staged={...limits(),stageOutputTokens:{extract:4096,relate:1024}};

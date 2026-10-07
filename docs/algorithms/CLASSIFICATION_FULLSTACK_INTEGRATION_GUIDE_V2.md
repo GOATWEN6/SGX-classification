@@ -3,7 +3,7 @@
 > 日期：2026-10-02
 > 面向：产品前端、业务后端、对象存储、数据库与云端 Worker 集成工程师
 > 适用：T0/T1 内部测试到 T2 产品接入
-> 当前语义基线：`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.16`、`stage-a-validation.3`
+> 当前源码语义基线：`qwen3.7-flash-2026-07-15`、Prompt `sgx-five-facets.16`、`stage-a-validation.4`；远端激活与真实运行状态见当日执行记录
 > 控制面协议：`classification-worker-control-plane.v1`
 > 输入契约：`classification-ingestion.2` / `specVersion=2.0.0`
 
