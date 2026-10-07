@@ -106,7 +106,7 @@ function transportFor(model, calls, patchValue) {
     const body = JSON.parse(init.body);
     calls.push({ body, authorization: new Headers(init.headers).get('authorization') });
     const context = JSON.parse(body.messages[1].content[0].text);
-    const photoId = context.untrustedContext.requestedPhotoIds[0];
+    const photoId = context.untrustedContext.requestedPhotoIds?.[0];
     const value = patchValue?.({ body, context, photoId }) ?? {
       observations: [{
         photoId,
@@ -211,6 +211,45 @@ test('real Stage A mock transport runs through the durable v2 lifecycle', async 
   assert.equal(completed.metrics.outputTokens, 50);
   assert.equal(completed.metrics.costCny, 0);
   assert.ok(completed.result.output.observations.some(item => item.facet === 'scene'));
+});
+test('Top-K one permits a multi-image reviewed event graph', async t => {
+  const value = await fixture(t, 'stage_a_mock', { submission: {
+    images: Array.from({ length: 4 }, (_, index) => ({ filename: `photo_${index}.png`, mimeType: 'image/png', bytes: png })),
+    userText: undefined,
+    userTextTargetIndexes: null
+  } });
+  value.input.budgetPolicy = { ...value.input.budgetPolicy, maxRequests: 8, maxOutputTokens: 20000, maxCandidatesPerContent: 1 };
+  const calls = [];
+  const factory = new StageALabExecutorFactory({
+    profile: value.executionProfile, provider: 'qwen', model: value.model,
+    inputCnyPerMillion: 0, outputCnyPerMillion: 0,
+    placeKindPolicy: placePolicy(value.built.envelope.taxonomyVersion),
+    transport: transportFor(value.model, calls, ({ context, photoId }) => {
+      if(context.stage === 'relate') return { relations: context.untrustedContext.requestedPairs.map(pair => ({
+        kind: 'event', left: { photoId: pair[0] }, right: { photoId: pair[1] }, decision: 'same',
+        supports: pair.map(id => ({ photoId: id, source: 'visual', quote: '同一活动现场' })), rationale: '同一次活动'
+      })) };
+      return { observations: [{
+        photoId, people: [], mentions: [], times: [], places: [],
+        events: [{ type: '家庭聚会', instanceHint: '同一次家庭聚会', supports: [{ photoId, source: 'visual', quote: '家庭聚会现场' }] }],
+        scenes: [{ label: '户外', supports: [{ photoId, source: 'visual', quote: '户外环境' }] }],
+        unknownFacets: ['person', 'time', 'place'], conflicts: []
+      }] };
+    })
+  });
+  const pending = await submitLabExecutionJob(value.input, value.store, clock);
+  const completed = await runPendingLabExecutionJob(pending.jobId, {
+    store: value.store, factory, guardProvider: new GuardProvider(value.guard), clock,
+    runnerGeneration: 'runner_graph_topk_one'
+  });
+  assert.ok(['succeeded', 'needs_review'].includes(completed.status));
+  const relationCalls = calls.filter(call => JSON.parse(call.body.messages[1].content[0].text).stage === 'relate');
+  assert.ok(relationCalls.length > 0);
+  assert.ok(calls.length <= 8);
+  assert.equal(completed.metrics.modelRequests, calls.length);
+  assert.equal(completed.budgetPolicy.maxCandidatesPerContent, 1);
+  assert.equal(completed.result.output.organization.retrievalAudit.maxCandidatesPerContent, 9);
+  assert.ok(completed.result.output.organization.retrievalAudit.candidateCount >= 3);
 });
 
 test('historical Top-K reaches the canonical result without silently merging prior content', async t => {

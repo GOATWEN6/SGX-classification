@@ -168,10 +168,10 @@ export class ApiVisionProvider implements VisionProvider {
     // A valid billed response remains billable even if its content cannot be used.
     // Unknown model pricing or missing provenance keeps the conservative reservation.
     const receipt=hasUsage&&raw.model===this.options.model?{...usage,responseId:raw.id,model:raw.model}:undefined;
-    if(raw.choices?.[0]?.finish_reason==='length')throw new StageError('OUTPUT_TRUNCATED',undefined,receipt);
-    if(raw.choices?.[0]?.finish_reason!=='stop'||typeof raw.choices?.[0]?.message?.content!=='string')throw new StageError('INVALID_OUTPUT',{phase:'provider_envelope',issues:[{path:'choices.0.message.content',code:'missing_or_invalid'}]},receipt);
     if(!hasUsage)throw new StageError('MISSING_USAGE_OR_PROVENANCE');
     if(raw.model!==this.options.model)throw new StageError('MODEL_VERSION_MISMATCH');
+    if(raw.choices?.[0]?.finish_reason==='length')throw new StageError('OUTPUT_TRUNCATED',undefined,receipt);
+    if(raw.choices?.[0]?.finish_reason!=='stop'||typeof raw.choices?.[0]?.message?.content!=='string')throw new StageError('INVALID_OUTPUT',{phase:'provider_envelope',issues:[{path:'choices.0.message.content',code:'missing_or_invalid'}]},receipt);
     let value:unknown;try{value=JSON.parse(raw.choices[0].message.content);}catch{throw new StageError('INVALID_OUTPUT',{phase:'content_json',issues:[{path:'$',code:'invalid_json'}]},receipt);}
     if(call.stage==='extract') value=normalizeExtractReply(value);
     const parsed=(call.stage==='extract'?ExtractSchema:RelateSchema).safeParse(value);

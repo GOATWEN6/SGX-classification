@@ -320,6 +320,12 @@ class StageALabExecutor implements LabExecutionExecutor {
         includeZeroSignalFallback: false,
         createdAt: context.job.envelope.createdAt
       });
+      // Top-K bounds outgoing recall and paid comparison work. The organizer
+      // counts incoming and outgoing relations across event/person/story lanes.
+      // Keep its finite structural bound separate so a star or a multi-image
+      // connected component does not fail merely because recall K is one.
+      const activeContentCount = composed.contents.filter(content => content.lifecycle === 'active').length;
+      const organizationCandidateLimit = Math.min(128, Math.max(1, 3 * (activeContentCount - 1)));
       const organized = organizeSparseContent({
         schemaVersion: '2.0',
         contractVersion: 'classification-hybrid.2',
@@ -329,7 +335,7 @@ class StageALabExecutor implements LabExecutionExecutor {
         retrievalCandidates: mergeRetrievalCandidates(composed.retrievalCandidates,retrieval.candidates),
         explicitAssociations: composed.explicitAssociations,
         decisionPolicy: buildActiveEvidenceRulePolicy({
-          maxCandidatesPerContent: context.job.budgetPolicy.maxCandidatesPerContent,
+          maxCandidatesPerContent: organizationCandidateLimit,
           createdAt: context.job.envelope.createdAt
         }),
         createdAt: context.job.envelope.createdAt

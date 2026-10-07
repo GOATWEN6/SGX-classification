@@ -78,6 +78,21 @@ test('missing provenance and a mismatched returned model retain conservative bil
     assert.equal(b.records[0].accounting,'conservative_reservation');assert.equal(b.inputTokens,24580);
   }
 });
+test('wrong model or missing usage takes precedence over a recoverable malformed output',async()=>{
+  for(const [raw,code] of [
+    [{id:'unexpected',model:'other',usage:{prompt_tokens:100,completion_tokens:50}},'MODEL_VERSION_MISMATCH'],
+    [{id:'missing_usage',model:'test'},'MISSING_USAGE_OR_PROVENANCE'],
+  ]){
+    for(const finishReason of ['length','invalid']){
+      const b=new TaskBudget(limits());
+      const p=new ApiVisionProvider({provider:'qwen',model:'test',resolver:async()=>({bytes:png,mimeType:'image/png'}),
+        transport:async()=>new Response(JSON.stringify({...raw,choices:[{finish_reason:finishReason,message:{content:'{'}}]})),
+        inputCnyPerMillion:1.2,outputCnyPerMillion:12});
+      await assert.rejects(b.run(p,call),error=>error.code===code);
+      assert.equal(b.records[0].accounting,'conservative_reservation');
+    }
+  }
+});
 test('stage-specific output limits reserve extraction and relation calls independently',async()=>{
   const staged={...limits(),stageOutputTokens:{extract:4096,relate:1024}};
   const b=new TaskBudget(staged),p=provider({inputTokens:100,outputTokens:100});
