@@ -143,6 +143,12 @@ SGX_EXPECTED_RELEASE="$SGX_RELEASE_SHA" bash bin/start-feature-service.sh
 内部用户放行前仍需平台常驻推理实例/服务模式及进程监督。已存在的模型权重和所有
 下载仍在持久盘，恢复不用重新下载。
 
+现场工具部署已完成，7 项工具 SHA-256 通过；工具源码为
+`4475f545634fc05b077606aa6aa4c00a6e3a289d`。统一启动入口实测 health/version/ready
+检查通过并默认保持 Worker 停止。只读现场状态报告为
+`/gemini/code/sgx-classification/shared/manifests/service-recovery-status-20261008T140139Z.json`，
+准确记录模型就绪、控制面不可达及 Worker 未启动。无需新下载即可按本文命令排查和恢复。
+
 ## 5. 下一项及放行边界
 
 当前模型组件已恢复；完整产品调用等待全栈后端地址、契约与授权配置。

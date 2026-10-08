@@ -42,7 +42,16 @@ Worker 配置由算法侧负责；Owner 不需要自行实现后端。尚未收�
   冷启动未 ready、版本不匹配、lease 路由 404 不启动 Worker、配置不执行及 secret/log 脱敏。
 - Python 源码及 shell 语法检查通过。仅新增 shell/Python 操作工具与文档，未改 TypeScript，
   不重复整个 typecheck/模型矩阵。
-- 远端工具部署、版本/readiness 实测、差异/secret/文档核验及 GitHub 同步结果在本记录下方补充。
+- 远端工具已部署到 `shared/tools/service-operator-20261008-r1`，7 个脚本/工具的
+  SHA-256 逐项通过；工具源码提交 `4475f545634fc05b077606aa6aa4c00a6e3a289d`。
+  `start-stack.sh --release 82cab23…` 实测退出 0，healthz/version/readyz 通过，默认未启动 Worker。
+- 只读 `status-stack.sh` 现场实测返回模型进程 running、全部组件 loaded、当前/上一版本
+  VERIFIED、`control_plane_unreachable`、`worker_not_running`；非零退出码准确反映尚缺后端。
+  脱敏证据保存为
+  `/gemini/code/sgx-classification/shared/manifests/service-recovery-status-20261008T140139Z.json`。
+  操作员环境 secret=false 只是当前 SSH 环境没有注入，不表示历史 secret 不存在。
+- 聚焦部署 fixture、shell/Python 语法、受影响文档链接、secret scan 和 diff 检查通过。
+  GitHub 上传以普通 fast-forward 指向既有交付分支，不改 main，不覆盖他人提交。
 - 尚无稳定公网完整算法入口；全栈需 staging HTTPS、任务协议及服务鉴权，平台需常驻运行。
   不能把 SSH 30022 或 8765 当成产品调用接口。
 - 本轮无新付费请求；既有结算 193/200、¥23.243669/¥50 作为后续检索线索，付费前核对账本。
