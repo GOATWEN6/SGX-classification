@@ -6,6 +6,8 @@
 
 ## 自动分类与归纳模块（全栈先读）
 
+本次直接转交工程师请使用 [2026-10-08 接入交接说明：文件清单、端口、分工与首条任务](docs/algorithms/CLASSIFICATION_FULLSTACK_FORWARD_BRIEF_2026-10-08.md)。
+
 第一次接手请先读 [全栈工程师接手说明：阅读顺序、任务、阶段与验收](docs/algorithms/CLASSIFICATION_FULLSTACK_TAKEOVER_GUIDE_2026-10-07.md)。
 
 2026-10-08 服务排查请先读 [云端服务恢复、准确端口和全栈分工](docs/algorithms/CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。真实模型组件已恢复；旧开发隧道已断，空转 Worker 已停止，产品 HTTPS 后端仍待全栈部署接入。
