@@ -8,6 +8,8 @@
 
 第一次接手请先读 [全栈工程师接手说明：阅读顺序、任务、阶段与验收](docs/algorithms/CLASSIFICATION_FULLSTACK_TAKEOVER_GUIDE_2026-10-07.md)。
 
+2026-10-08 服务排查请先读 [云端服务恢复、准确端口和全栈分工](docs/algorithms/CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。真实模型组件已恢复；旧开发隧道已断，空转 Worker 已停止，产品 HTTPS 后端仍待全栈部署接入。
+
 当前 T0/T1 内部候选已接入真实 Qwen、多图/文字、OCR、image/text embedding、授权后匿名人物候选、StoryUnit 组织和 Worker 结果持久化。全栈接入从以下文档开始：
 
 - [全栈交付 README](docs/algorithms/CLASSIFICATION_FULLSTACK_DELIVERY_README_V1.md)
@@ -18,7 +20,7 @@
 - [2026-10-07 定向真实复测与交付边界](docs/algorithms/CLASSIFICATION_T1_TARGETED_RETEST_2026-10-07.md)
 - [当前执行计划与 T2 分工](docs/superpowers/plans/2026-10-07-classification-targeted-handoff-execution-plan.md)
 
-当前云端代码 release 为 `82cab23cd81a2f0b06a3c00606025153a2816468`，GitHub 交付分支为 `codex/classification-t1-external-20261006`。同会话两轮真实图文测试成功并持久化，跨轮仅返回关联候选。最新状态以 [同日执行记录](docs/execution/2026-10-07-execution-log.md) 为准。
+当前云端代码 release 为 `82cab23cd81a2f0b06a3c00606025153a2816468`，GitHub 交付分支为 `codex/classification-t1-external-20261006`。同会话两轮真实图文测试成功并持久化，跨轮仅返回关联候选。最新运行状态以 [2026-10-08 执行记录](docs/execution/2026-10-08-execution-log.md) 为准，算法真实复测沿用 [2026-10-07 记录](docs/execution/2026-10-07-execution-log.md)。
 
 当前结论是“真实模型功能链已跑通”，不是现实家庭数据准确率或生产发布结论。产品后端仍需完成 T2 的鉴权、业务数据库、对象存储、队列、监控和内部用户环境部署。
 

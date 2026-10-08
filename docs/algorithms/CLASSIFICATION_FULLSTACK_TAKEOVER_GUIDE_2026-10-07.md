@@ -115,6 +115,42 @@ POST /internal/v1/classification/asr/jobs/{jobId}/fail
 
 ## 6. 环境和配置交接
 
+### 6.0 服务启动与端口边界（2026-10-08 更新）
+
+2026-10-08 实测已恢复真实 Feature Service，`healthz=200`、`readyz=ready`，
+OCR、图文 embedding、face、ASR 均 loaded；开发控制面隧道已断，空转 Worker 已停止，
+旧日志与算法 release 保留。详见 [服务恢复与全栈接入说明](CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。
+
+源码入口是 `deploy/classification-worker/bin/start-stack.sh`；云端 release 包目录
+实际为 `current/worker`，不是 `current/deploy/classification-worker`。
+本次新工具独立部署在持久目录，使用：
+
+```bash
+cd /gemini/code/sgx-classification/shared/tools/service-operator-20261008-r1/worker
+SGX_RELEASE_SHA="$(basename "$(readlink -f /gemini/code/sgx-classification/current)")"
+bash bin/status-stack.sh
+SGX_EXPECTED_RELEASE="$SGX_RELEASE_SHA" bash bin/start-feature-service.sh
+```
+
+诊断失败返回非零；根据报告处理缺口，不因存在 PID 就宣称服务可用。
+冷启动 `readyz=503` 表示需用 [部署 README](../../deploy/classification-worker/README.md)
+的冻结素材命令预热；随后执行 `bash bin/start-stack.sh --release "$SGX_RELEASE_SHA"`
+核验版本和 readiness。Feature Service 只监听 `127.0.0.1:8765`，没有完整分类/归纳
+上传入口；Worker 没有监听端口，主动通过 HTTPS 调用产品控制面。
+
+**产品测试后端由全栈部署，云端模型与 Worker 配置由算法侧落实；Owner 不需要自行实现后端。**
+全栈提供真实的 `SGX_CONTROL_PLANE_BASE_URL`、实现本文 §5 路由，并通过 Secret
+渠道注入服务凭据后，才执行：
+
+```bash
+bash bin/start-stack.sh --release "$SGX_RELEASE_SHA" --worker
+```
+
+当前没有可以交给全栈直接访问的算法公网 URL。全栈需提供产品后端 staging HTTPS
+基地址和 OpenAPI/control-plane 路由；SSH、8765、GPU、内部 metrics 都不属于产品入口。
+新启动入口会拒绝占位地址、未就绪模型及不可达/缺失的 lease 路由。
+此入口不承担常驻 supervisor，平台仍需常驻实例、健康重启与告警，解决 Notebook idle 回收。
+
 |项目|当前配置或要求|
 |---|---|
 |运行位置|VirtAI：`/gemini/code/sgx-classification`；所有下载、模型、发布制品与日志写持久盘|

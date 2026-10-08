@@ -27,10 +27,12 @@ for script in "$PACKAGE_ROOT"/bin/*.sh "$PACKAGE_ROOT"/tests/*.sh; do
   bash -n "$script"
 done
 [[ -x "$PACKAGE_ROOT/bin/start-worker.sh" ]] || fail 'start-worker.sh must be executable'
+[[ -x "$PACKAGE_ROOT/bin/start-stack.sh" ]] || fail 'start-stack.sh must be executable'
 
 python3 - \
   "$PACKAGE_ROOT/tools/acquire-modelscope-snapshot.py" \
-  "$PACKAGE_ROOT/tools/warm-feature-service.py" <<'PY'
+  "$PACKAGE_ROOT/tools/warm-feature-service.py" \
+  "$PACKAGE_ROOT/tools/status-stack.py" <<'PY'
 import pathlib
 import sys
 
@@ -273,6 +275,126 @@ bash "$PACKAGE_ROOT/bin/activate-release.sh" --dry-run "$sha_a" >/dev/null
 bash "$PACKAGE_ROOT/bin/activate-release.sh" "$sha_a" >/dev/null
 assert_link current "releases/$sha_a"
 [[ ! -e "$SGX_CLASSIFICATION_TEST_ROOT/previous" ]] || fail 'first activation invented previous'
+
+# Exercise the operator sequencing without running models, a Worker, or network
+# calls. Real layout/VERIFIED checks still run against the fixture above.
+startup_package="$fixture_base/startup-package"
+mkdir -p "$startup_package/bin" "$startup_package/mock-path"
+cp "$PACKAGE_ROOT/bin/start-stack.sh" "$PACKAGE_ROOT/bin/layout-lib.sh" "$startup_package/bin/"
+export SGX_STARTUP_TEST_RECORD="$fixture_base/startup-record"
+export SGX_STARTUP_TEST_REAL_PYTHON="$(command -v python3)"
+cat >"$startup_package/bin/start-feature-service.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'feature\n' >>"$SGX_STARTUP_TEST_RECORD"
+SH
+cat >"$startup_package/bin/start-worker.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'worker\n' >>"$SGX_STARTUP_TEST_RECORD"
+SH
+cat >"$startup_package/mock-path/python3" <<'SH'
+#!/usr/bin/env bash
+if [[ "$#" == 1 && "$1" == '-' ]]; then
+  exec "$SGX_STARTUP_TEST_REAL_PYTHON" -c '
+import sys, os, json, urllib.request, urllib.error, io
+class Reply:
+    status = 200
+    def __init__(self, payload): self.payload = payload
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def read(self): return json.dumps(self.payload).encode()
+def open_url(url, timeout=0):
+    if url.endswith("/version"):
+        return Reply({"gitCommit": os.environ.get("SGX_STARTUP_TEST_VERSION", os.environ["SGX_STARTUP_EXPECTED_RELEASE"]), "releaseId": "fixture"})
+    if url.endswith("/readyz") and os.environ.get("SGX_STARTUP_TEST_COLD") == "1":
+        raise urllib.error.HTTPError(url, 503, "not ready", {}, io.BytesIO(b"{\"status\":\"not_ready\",\"components\":{}}"))
+    return Reply({"status": "ok"})
+urllib.request.urlopen = open_url
+class Opener:
+    def open(self, request, timeout=0):
+        if isinstance(request, str):
+            return open_url(request, timeout)
+        status = int(os.environ.get("SGX_STARTUP_TEST_CONTROL_STATUS", "405"))
+        raise urllib.error.HTTPError(request.full_url, status, "fixture", {}, io.BytesIO(b"{}"))
+urllib.request.build_opener = lambda *args: Opener()
+exec(sys.stdin.read())
+'
+fi
+exec "$SGX_STARTUP_TEST_REAL_PYTHON" "$@"
+SH
+chmod +x "$startup_package/bin/"*.sh "$startup_package/mock-path/python3"
+startup_path="$startup_package/mock-path:$PATH"
+startup_config="$SGX_CLASSIFICATION_TEST_ROOT/shared/config/nonsecret.env"
+cat >"$startup_config" <<EOF
+SGX_RUNTIME_ROOT=$SGX_CLASSIFICATION_RUNTIME_TEST_ROOT
+SGX_CONTROL_PLANE_BASE_URL=https://replace-with-product-backend.example
+EOF
+expect_failure env PATH="$startup_path" bash "$startup_package/bin/start-stack.sh"
+env PATH="$startup_path" bash "$startup_package/bin/start-stack.sh" --release "$sha_a" >/dev/null
+[[ "$(cat "$SGX_STARTUP_TEST_RECORD")" == feature ]] || fail 'feature-only startup launched Worker'
+expect_failure env PATH="$startup_path" SGX_CONTROL_PLANE_TOKEN='test-placeholder-token' \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a" --worker
+cat >"$startup_config" <<EOF
+SGX_RUNTIME_ROOT=$SGX_CLASSIFICATION_RUNTIME_TEST_ROOT
+SGX_CONTROL_PLANE_BASE_URL=https://product.example.test
+EOF
+expect_failure env -u SGX_CONTROL_PLANE_TOKEN PATH="$startup_path" \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a" --worker
+: >"$SGX_STARTUP_TEST_RECORD"
+env PATH="$startup_path" SGX_CONTROL_PLANE_TOKEN='test-placeholder-token' \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a" --worker >/dev/null
+[[ "$(cat "$SGX_STARTUP_TEST_RECORD")" == $'feature\nworker' ]] || fail 'stack startup must verify Feature Service before Worker'
+expect_failure env PATH="$startup_path" SGX_STARTUP_TEST_COLD=1 \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a"
+expect_failure env PATH="$startup_path" SGX_STARTUP_TEST_VERSION="$sha_b" \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a"
+: >"$SGX_STARTUP_TEST_RECORD"
+expect_failure env PATH="$startup_path" SGX_CONTROL_PLANE_TOKEN='test-placeholder-token' SGX_STARTUP_TEST_CONTROL_STATUS=404 \
+  bash "$startup_package/bin/start-stack.sh" --release "$sha_a" --worker
+[[ "$(cat "$SGX_STARTUP_TEST_RECORD")" == feature ]] || fail 'missing lease route must prevent Worker startup'
+
+# Diagnosis cannot execute config or leak raw logs/URLs; no HTTP or models here.
+python3 - "$PACKAGE_ROOT/tools/status-stack.py" "$fixture_base" <<'PY'
+import contextlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import sys
+
+spec = importlib.util.spec_from_file_location("sgx_status", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+base = Path(sys.argv[2]) / "status-fixture"
+root, runtime = base / "persistent", base / "runtime"
+(root / "shared/config").mkdir(parents=True)
+(root / "shared/logs").mkdir(parents=True)
+release = "a" * 40
+(root / "releases" / release).mkdir(parents=True)
+(root / "releases" / release / "VERIFIED").touch()
+(root / "current").symlink_to("releases/" + release)
+probe = base / "must-not-execute"
+(root / "shared/config/nonsecret.env").write_text(
+    "SGX_CONTROL_PLANE_BASE_URL=https://replace-with-product-backend.example\n"
+    f"IGNORED=$(touch {probe})\n"
+    "SGX_CONTROL_PLANE_TOKEN=private-value-must-not-appear\n"
+)
+(root / "shared/logs" / ("worker-" + release + ".log")).write_text(json.dumps({
+    "event": "lease_poll_failed", "errorCode": "INTERNAL_ERROR", "secret": "raw-log-secret"
+}) + "\n")
+module.feature_status = lambda *args: {"status": "unavailable"}
+sys.argv = [str(spec.origin), str(root), str(runtime)]
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    code = module.main()
+report = json.loads(output.getvalue())
+assert code == 1 and "feature_service_not_ready" in report["issues"]
+assert report["workerProcess"] == "not_started"
+assert report["controlPlane"]["status"] == "not_configured"
+assert report["publicAlgorithmEndpoint"] is None
+assert not probe.exists()
+assert "private-value" not in output.getvalue() and "raw-log-secret" not in output.getvalue()
+PY
+
 bash "$PACKAGE_ROOT/bin/activate-release.sh" "$sha_a" >/dev/null
 assert_link current "releases/$sha_a"
 

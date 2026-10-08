@@ -78,6 +78,8 @@ These observations do not authorize a download or installation. SigLIP2 remains 
 - `bin/rollback-release.sh`: compare-and-swap style rollback with an explicit target and expected current release.
 - `bin/start-feature-service.sh`: starts the active frozen Feature Service, validates the exact release, handles stale PID files and treats `/healthz` as the liveness source.
 - `bin/start-worker.sh`: starts exactly one Worker process for the active frozen release; the global PID fence prevents two releases from polling and settling the same Job.
+- `bin/start-stack.sh`: operator entrypoint that starts the Feature Service, verifies `/healthz` and `/readyz`, and starts the Worker only when `--worker` is explicit and a real product HTTPS control plane plus injected token are present. It is not a process supervisor.
+- `bin/status-stack.sh`: 只读检查当前/上一发布、进程身份、模型 readiness 和控制面连通性；不领取任务、不加载模型、不读取凭据文件，只输出稳定状态和脱敏日志。
 - `bin/layout-lib.sh`: fail-closed path, link and `VERIFIED` checks used by the scripts.
 - `nonsecret.env.example`: reviewed non-secret settings; GPU 0, embedding concurrency 1 and persistent download caches with offline runtime are the defaults.
 - `model-candidates.json`: Source Gate candidates. Candidate state is not a production selection.
@@ -158,11 +160,79 @@ then executes the supplied command. It does not enable downloads by itself and
 does not contain credentials. Example:
 
 ```bash
-/gemini/code/sgx-classification/current/deploy/classification-worker/bin/with-persistent-download-env.sh \
+/gemini/code/sgx-classification/current/worker/bin/with-persistent-download-env.sh \
   python -m pip download --dest /gemini/code/sgx-classification/shared/wheelhouse <reviewed-package>
 ```
 
-The scripts never install packages, access the network, read or write secrets, restart a service, modify system configuration, create a release, or create `VERIFIED`. A separate offline build/verification step must populate an immutable release and write a regular `VERIFIED` file only after its manifest, dependency locks, health checks and provenance pass.
+The layout, activation and rollback scripts never install packages, access the
+network, read or write secrets, modify system configuration, create a release,
+or create `VERIFIED`. `start-stack.sh` is the explicit operator exception: it
+starts the already-verified local processes after fail-closed checks, but it is
+not a supervisor and does not install or mutate release artifacts. A separate
+offline build/verification step must populate an immutable release and write a
+regular `VERIFIED` file only after its manifest, dependency locks, health checks
+and provenance pass.
+
+## 服务启动、预热与端口（2026-10-08 修正）
+
+仓库源码在 `deploy/classification-worker`；云端冻结发布里的同一包在
+`/gemini/code/sgx-classification/current/worker`。旧文档中的
+`current/deploy/classification-worker` 在当前发布中不存在。
+
+部署有两个进程：Feature Service 运行 OCR、embedding、匿名人脸特征和 ASR，
+监听 `127.0.0.1:8765`；Worker 执行分类/归纳并主动领取后端任务，没有监听端口。
+`8765` 接受经过哈希验证的同机文件路径，不能直接当成外网媒体上传/完整分类接口。
+
+算法 release `82cab23` 保持冻结。本次新增启动/诊断工具独立部署在持久目录
+`shared/tools/service-operator-20261008-r1/worker`，不写回旧 release。
+详见 [本次服务恢复与接入说明](../../docs/algorithms/CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。
+先进入该版本工具目录，再使用当前算法 SHA：
+
+```bash
+cd /gemini/code/sgx-classification/shared/tools/service-operator-20261008-r1/worker
+SGX_RELEASE_SHA="$(basename "$(readlink -f /gemini/code/sgx-classification/current)")"
+bash bin/status-stack.sh
+SGX_EXPECTED_RELEASE="$SGX_RELEASE_SHA" bash bin/start-feature-service.sh
+```
+
+诊断有缺口时会返回非零，这是检查结果；不应在 `set -e` 批处理里忽略退出码继续启动 Worker。
+`healthz=ok` 只表示进程在。冷启动采用 lazy load，`readyz=503` 时须预热。
+以下只运行已冻结的本地模型，无 Qwen 请求、无下载，输出不包含原始转写或向量：
+
+```bash
+SGX_FIXTURES=/gemini/code/sgx-classification/shared/downloads/test-fixtures
+python3 tools/warm-feature-service.py \
+  --image "$SGX_FIXTURES/sgx-component-smoke-fixtures-20261003-r1/SGX-V2-E012.jpg" \
+  --face-image "$SGX_FIXTURES/sgx-component-smoke-fixtures-20261003-r1/SGX-SYN-E010.jpg" \
+  --text "$SGX_FIXTURES/synthetic-v2-asr-smoke-20261003-r1/SGX-SYN-E002.final-asr.txt" \
+  --audio "$SGX_FIXTURES/synthetic-v2-asr-smoke-20261003-r1/SGX-SYN-E002.wav"
+bash bin/start-stack.sh --release "$SGX_RELEASE_SHA"
+```
+
+默认不会启动 Worker。产品测试后端由全栈部署；其 HTTPS 基地址写入
+`shared/config/nonsecret.env` 的 `SGX_CONTROL_PLANE_BASE_URL`。凭据由 Secret
+渠道注入操作员/进程环境，不写入配置模板、仓库、文档或命令输出。只有后端实际实现
+分类 lease、heartbeat、execution-context、complete、fail、cancel-ack、历史查询及
+ASR lease/heartbeat/complete/fail 后，再执行：
+
+```bash
+bash bin/start-stack.sh --release "$SGX_RELEASE_SHA" --worker
+```
+
+该入口先验证 Feature Service 版本和 readiness，再核查 HTTPS 地址、Token 是否
+存在和 lease/ASR 路由可达；不发送 secret、不领取任务。401/403/405 只证明路由可达，
+不证明鉴权或协议有效；完整接入仍须一个实际产品 Job 成功。占位地址、404/5xx、
+断开的开发隧道或未预热模型不能作为可用 Worker 启动条件。
+
+`status-stack.sh` 返回的常见状态：`feature_service_not_ready`（服务未启动或未预热）、
+`feature_service_version_mismatch`、`control_plane_unreachable`、
+`control_plane_route_unavailable`、`worker_not_running`。存在旧错误日志不代表当前任务失败。
+当前日志不记录空队列成功轮询，因此诊断命令不会把“进程在且没有新日志”假称
+`worker_idle_no_jobs`。操作员环境的 secret 是否存在不代表已运行进程是否持有它。
+
+当前没有稳定公网算法 URL。全栈最终对接自己的产品后端 HTTPS API，Worker 主动访问它。
+SSH 30022 是运维入口；8765 是模型组件内部端口；9091 是内部 metrics；这些都不是产品公网端口。
+本轮工具不是 supervisor，也不消除 Notebook idle 回收。平台仍需常驻实例/服务模式和健康重启。
 
 ## Layout, activation and rollback
 
