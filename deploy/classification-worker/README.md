@@ -1,5 +1,7 @@
 # SGX Classification Worker deployment package
 
+> 2026-10-09: external integration now uses the [standalone algorithm API](../classification-api/README.md), on port 8765 with feature components on 8766. This worker runtime is reused internally; full-stack engineers no longer implement its pull control plane. Historical release tools below remain for rollback/reference.
+
 This directory is the reviewed, non-secret input for the VirtAI T0/T1 worker deployment. It contains no credentials, model weights, user media, API responses or authoritative product state.
 
 Authoritative design: [`docs/superpowers/specs/2026-10-02-classification-cloud-hybrid-service-spec.md`](../../docs/superpowers/specs/2026-10-02-classification-cloud-hybrid-service-spec.md).

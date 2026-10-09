@@ -40,6 +40,12 @@ curl http://127.0.0.1:8765/healthz
 
 `version/readyz` 使用算法服务 Token；禁止复制 secret 到命令日志或工单。
 组件 `8766/readyz` 可在同机诊断。不要再运行旧 Worker start-stack。
+
+Qwen 凭据在 Mac 通过 `scripts/classification-keychain.zsh setup` 安全保存；
+随后运行 `scripts/classification-direct-keychain-deploy.py --destination <已核验SSH目标>
+--identity <专用SSH私钥路径> --port 30022` 加密传输至云端专用 `0600` secret 文件。
+该脚本不输出密钥、不发模型请求。API 子进程独立读取该文件，模型组件和预热程序不继承
+Qwen 凭据；配置完成后核验 API PID 再重启该子进程即可，不必重新加载模型。
 停止服务前检查 `direct-supervisor.pid` 对应命令确为本服务，再发 SIGTERM；等待服务优雅
 停止。启动脚本和管理程序均检查 active release、单实例锁和模型路径。
 进行回滚时先停止管理程序，再使用旧部署 `activate-release.sh <旧sha>`；旧 82cab23 仅

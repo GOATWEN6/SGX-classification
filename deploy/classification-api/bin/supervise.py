@@ -80,13 +80,10 @@ def main() -> int:
     authorization = Path(env['CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH'])
     if not authorization.is_file():
         env.pop('CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH')
-    key_file = ROOT / 'shared/secrets/qwen-api-key'
-    if key_file.is_file():
-        if key_file.stat().st_mode & 0o077:
-            raise SystemExit('SECRET_PERMISSIONS_INVALID')
-        env['SGX_D4_API_KEY'] = key_file.read_text().strip()
-    else:
-        env.pop('SGX_D4_API_KEY', None)
+    # API alone reads the protected secret file. Model processes and warm tools
+    # neither need nor inherit provider credentials.
+    env.pop('SGX_D4_API_KEY', None)
+    env['SGX_QWEN_KEY_FILE'] = str(ROOT / 'shared/secrets/qwen-api-key')
     python = env.get('SGX_FEATURE_PYTHON', str(RUNTIME / 'venvs/feature-service-all-py310-20261003-r2/bin/python'))
     node = str(ROOT / 'shared/runtimes/node-v22.22.1-linux-x64/bin/node')
     children: dict[str, subprocess.Popen] = {}

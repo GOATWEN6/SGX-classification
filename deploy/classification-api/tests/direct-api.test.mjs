@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -21,13 +21,13 @@ function png() {
   const bytes = Buffer.alloc(32); Buffer.from('89504e470d0a1a0a', 'hex').copy(bytes);
   bytes.writeUInt32BE(4, 16); bytes.writeUInt32BE(3, 20); return bytes;
 }
-async function fixture(t, { authorized = true } = {}) {
+async function fixture(t, { authorized = true, openingRequests = 193 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'sgx-direct-test-'));
   const auth = path.join(root, 'authorization.json');
   await writeFile(auth, JSON.stringify({ version: 'classification-real-call-authorization.1',
     authorizationId: 'direct_fixture_auth', providerVersion: 'qwen:qwen3.7-flash-2026-07-15:sgx-five-facets.16:stage-a-validation.4',
     modelVersion: 'qwen3.7-flash-2026-07-15', caps: { maxRequests: 200, maxCostCny: 50, maxRetries: 0 },
-    openingUsage: { requests: 193, costCny: 23.243669, sourceRefs: ['fixture-prior-ledger'] },
+    openingUsage: { requests: openingRequests, costCny: 23.243669, sourceRefs: ['fixture-prior-ledger'] },
     allowPersonMatching: true, expiresAt: new Date(Date.now() + 600_000).toISOString(), authorizationEvidenceRef: 'fixture-only' }));
   const options = { buildDir: process.env.CLASSIFICATION_BUILD_DIR, dataRoot: root, token,
     gitCommit: 'a'.repeat(40), authorizationPath: authorized ? auth : undefined, automaticProcessing: false,
@@ -120,4 +120,27 @@ test('upload metadata and body bounds reject invalid input before creating jobs'
   const malformed = await fetch(`${f.url}/v1/asr/jobs`, { method: 'POST',
     headers: { ...headers, 'idempotency-key': 'bad-json', 'content-type': 'application/json' }, body: '{}' });
   assert.equal(malformed.status, 415);
+});
+
+test('concurrent admissions hold remaining budget and incomplete receipts never create another attempt', async t => {
+  const f = await fixture(t, { openingRequests: 199 });
+  const metadata = { ...identity, contextKind: 'album_upload', userText: '家庭照片', submittedAt: new Date().toISOString() };
+  const responses = await Promise.all(['budget-a', 'budget-b'].map(key =>
+    post(f, '/v1/classification/jobs', key, metadata, { image: png() })));
+  assert.deepEqual(responses.map(r => r.status).sort(), [202, 409]);
+  assert.equal((await f.service.lab.store.list(100)).length, 1);
+  assert.equal((await f.service.budget.readStatus()).used.requests, 199);
+  const receipts = path.join(f.root, 'direct-api-idempotency');
+  for (const filename of await readdir(receipts)) {
+    const file = path.join(receipts, filename);
+    const receipt = JSON.parse(await readFile(file, 'utf8'));
+    if (!receipt.response) continue;
+    delete receipt.response;
+    await writeFile(file, JSON.stringify(receipt));
+  }
+  const acceptedKey = responses[0].status === 202 ? 'budget-a' : 'budget-b';
+  const unknown = await post(f, '/v1/classification/jobs', acceptedKey, metadata, { image: png() });
+  assert.equal(unknown.status, 409);
+  assert.equal(unknown.body.error.code, 'SUBMISSION_OUTCOME_UNKNOWN');
+  assert.equal((await f.service.lab.store.list(100)).length, 1);
 });

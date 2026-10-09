@@ -126,6 +126,10 @@ export async function createDirectService({
     serial = task.catch(() => {});
     return task;
   };
+  // Admission and reservation share the same lock. Otherwise an admitted
+  // pending job could disappear from the queue between budget reads while its
+  // reservation is not reflected in the earlier status snapshot.
+  internal.lease = (...args) => exclusive(() => control.lease(...args));
   let pumping = null;
   let closed = false;
   let dispatchError;

@@ -1,5 +1,7 @@
 # SGX 图文分类与归纳算法：完整架构、Prompt、规则与评分器
 
+> 运行接入更新至 2026-10-09：[独立算法 API 与当前处理流程](CLASSIFICATION_DIRECT_API_INTEGRATION_2026-10-09.md)，[最新模型配置](CLASSIFICATION_RUNTIME_CONFIGURATION.md)。本篇含早期版本设计，请以最新代码/配置判断 Prompt `.16`、validation `.4` 和 `8765` 完整 API；不要按早期 Worker 对外方案接入。
+
 > 当前统一阅读入口 · 文档版本：1.3.0 · 更新日期：2026-10-02<br>
 > 当前代码版本：`classification-stage-a.1` + `classification-hybrid.2` + `content-organization.3` · 当前真实 Stage A Prompt/Guard 版本：`sgx-five-facets.13` / `stage-a-validation.2`<br>
 > 产品目标、完整输入输出流程、五项审计和下一轮真实模型 Gate 见：[2026-10-01 产品目标与真实验证 Gate](CLASSIFICATION_PRODUCT_OBJECTIVE_AND_REAL_VALIDATION_GATE_2026-10-01.md)<br>

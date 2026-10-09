@@ -33,4 +33,35 @@ HTTPS 映射、产品存储和界面；取消对外 Worker pull 接入要求。
   一小时空闲退出，注入库不是已证实根因。新增独立进程管理/恢复与预热；不修改平台
   preload，长期实例常驻和超过一小时持续性仍需独立验证。
 
-部署与真实 ASR 验证执行中；结果在同文件续记。
+## 云端部署与真实组件证据
+
+- 新 immutable release=`bcecd6889a67c7a7eb4311cb24c2b247b1a7d56a` 已部署，previous 保留
+  `82cab23`。源包 SHA-256、预算包 SHA-256、compiled import 均通过。
+  原 TS 核心/模型 runtime 与 82cab23 无代码差异，复用构建和既有真实算法证据。
+- 云端迁移完整 validation4 ledger，193 次/¥23.243669，4 条 settled entries，
+  `shared/api-budget` 为新 API 权威账本；不重建余额、不延长到期时间。
+- `8765/healthz=200`、`version=200 classification-direct-api.1`；内部 `8766/readyz=200`，
+  OCR、image/text embedding、face、ASR 均 loaded。完整 API `readyz=503`，准确反映
+  Qwen secret 缺失；componentsReady/asrReady=true，classificationReady=false。
+- 通过 **8765 完整任务 API**提交既有冻结 WAV，SenseVoiceSmall 真实 ASR succeeded，
+  全流程约 2.675 秒；幂等重发返回同 jobId，401/跨家庭403正确。原始音频和结果在
+  持久 `shared/api-v1`。脱敏证据：`shared/manifests/direct-api-asr-live-20261009-r1.json`。
+- 受控 SIGTERM API 后管理程序拉起新 PID，ASR result SHA-256 完全一致；受控停止组件
+  后自动重启并重新预热，约125秒全部 ready。证据：
+  `shared/manifests/direct-api-recovery-20261009-r1.json`。这证明受控进程退出恢复，
+  不证明平台实例回收解决或一小时以上稳定性。
+- OpenAPI 使用云端已有 PyYAML 成功解析，10个路径；未安装依赖。
+- 本轮至此无新 Qwen 请求，无新模型下载。用户正在准备安全填写 Qwen Key。
+- 追加准入/租约预留共用互斥，4/4 聚焦 HTTP 用例通过，覆盖并发时仅剩1次额度的
+  两个提交只能接收一个，以及 receipt 中断时拒绝自动创建第二个任务。
+- 本机旧 validation4 账本先备份 `ledger.before-cloud-direct-20261009.json`，再将
+  local state 置 halted；迁移 receipt 独立保存。云端成为本轮唯一权威预算源，避免
+  本机与云端各自复用同一剩余额度；不影响旧结果和已结算费用。
+- API 子进程单独读取云端 Qwen secret，组件与预热不继承模型凭据。新增安全迁移脚本
+  只走 Keychain→SSH stdin→专用0600 secret，日志不包含凭据，配置后仅重启API即可。
+
+## 后续最小闭环
+
+安全注入 Key 后新增入口一条真实图文任务与必要跨轮复读，校验分类/归纳、授权后人物
+候选、结果和历史候选，不重跑旧矩阵。GitHub交付文档和代码；公网HTTPS映射及产品
+入库/页面由全栈完成。10人长期内部测试的真实调用预算与平台常驻不是本轮已验证事实。
