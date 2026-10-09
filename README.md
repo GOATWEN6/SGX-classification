@@ -26,7 +26,7 @@
 - [2026-10-07 定向真实复测与交付边界](docs/algorithms/CLASSIFICATION_T1_TARGETED_RETEST_2026-10-07.md)
 - [当前执行计划与 T2 分工](docs/superpowers/plans/2026-10-07-classification-targeted-handoff-execution-plan.md)
 
-当前云端代码 release 为 `82cab23cd81a2f0b06a3c00606025153a2816468`，GitHub 交付分支为 `codex/classification-t1-external-20261006`。同会话两轮真实图文测试成功并持久化，跨轮仅返回关联候选。最新运行状态以 [2026-10-08 执行记录](docs/execution/2026-10-08-execution-log.md) 为准，算法真实复测沿用 [2026-10-07 记录](docs/execution/2026-10-07-execution-log.md)。
+当前云端完整 API release 为 `87631dadb8cf9ece27eec96fe742033a4d3c8cef`，核心算法沿用 `82cab23`；GitHub 交付分支为 `codex/classification-t1-external-20261006`。同会话两轮真实图文证据继续沿用；新 API 真实 ASR、结果持久化与进程恢复已验证。最新运行状态以 [2026-10-09 执行记录](docs/execution/2026-10-09-execution-log.md) 为准：组件 ready，完整分类等待 Qwen secret，公网 HTTPS 由全栈映射；不能将进程 health=200 当作完整分类 ready。
 
 当前结论是“真实模型功能链已跑通”，不是现实家庭数据准确率或生产发布结论。产品后端仍需完成 T2 的鉴权、业务数据库、对象存储、队列、监控和内部用户环境部署。
 

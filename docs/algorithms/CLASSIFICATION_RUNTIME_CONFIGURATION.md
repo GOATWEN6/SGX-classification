@@ -71,11 +71,24 @@ OCR、Embedding、人脸特征读取哈希验证后的原图。VLM 使用派生�
 
 ## 5. 全栈工程师使用方式
 
-短期 T1：窄网关实现已存在，全栈后端可在另行核验的 HTTPS staging URL 上用 Bearer Token 验证提交、轮询、ASR 和显式重试。当前没有已证明稳定的公网 staging 地址；Cloudflare quick tunnel 曾 530，不能作为内部用户入口。Token 不进入浏览器。
+当前使用 [完整直接 API](CLASSIFICATION_DIRECT_API_INTEGRATION_2026-10-09.md)：
+产品前端 → 产品后端（登录/权限/存储）→ 算法 HTTPS → 云端8765 API → 内部8766组件和Qwen。
+全栈只实现提交、轮询、结果入库及产品页面，不实现外部Worker lease/heartbeat。
+服务Token仅产品后端持有，模型凭据仅算法API持有；两者不进入浏览器。
+公网HTTPS映射由全栈完成，当前只有同机调用实测，不能把SSH/quick tunnel当稳定入口。
 
-正式 T2：产品前端调用业务后端；业务后端保存原始素材与 Evidence/Job，VirtAI Worker 通过出站 HTTPS 主动 lease 任务并回传结果。全栈工程师不需要把 SSH 暴露给用户，也不直接开放 OCR、Embedding 或 GPU 端口。
+## 6. 2026-10-09 当前激活版本
 
-## 6. 2026-10-07 当前激活版本
+- current：`87631dadb8cf9ece27eec96fe742033a4d3c8cef`；previous：`bcecd6889a67c7a7eb4311cb24c2b247b1a7d56a`。两者均保留，核心算法继续沿用82cab23，模型/Prompt未更换。
+- 完整API `127.0.0.1:8765`，组件`127.0.0.1:8766`；独立管理程序`current/classification-api/bin/supervise.py`，不用Notebook Cell或开发机隧道。
+- 最新启动工具：`shared/tools/direct-api-operator-6d2c82b/start.sh`，识别僵尸PID；它独立于immutable release。日志保存持久`shared/logs`，不覆盖旧失败。
+- 现场health/version200，组件ready200，五组件loaded；完整ready503准确反映Qwen凭据未配置。新增入口真实ASR成功约2.675秒，重启/跨release复读SHA一致。
+- 权威预算已迁移到持久`shared/api-budget`，本机旧账本备份并halted，累计193/200次、¥23.243669/¥50；到期2026-10-10零点+08:00。没有新增Qwen请求。
+- 受控API/组件退出恢复已验证，组件冷预热约125秒。平台实例回收、超过1小时稳定性和10人性能尚未证明。
+
+证据见[当日执行记录](../execution/2026-10-09-execution-log.md)；新API/OpenAPI、完整处理流程和产品联调步骤见直接API说明。
+
+## 7. 2026-10-07 历史算法基线
 
 - `current`：`82cab23cd81a2f0b06a3c00606025153a2816468`；`previous`：`09b5f04b0c19a1a528b079da19c20072f201cdb1`。369 项发布文件哈希通过，manifest digest：`07b950130fe9f9882d8e138b4c74ff8b22b2feb6691338a54b9a0157eee3b1be`。
 - 模型与代码 manifest 各有独立摘要；不能把模型候选制品摘要填成代码 release 摘要。示例环境变量必须由发布组装脚本替换成目标 release 的实际身份，不能直接启用仓库示例。

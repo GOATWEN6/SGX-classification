@@ -67,6 +67,14 @@ HTTPS 映射、产品存储和界面；取消对外 Worker pull 接入要求。
 误判；核验 Z/gone 后归档 PID 并启动成功。源码 start.sh 追加进程状态判断，僵尸
 视为已退出；该启动工具独立更新，不修改运行中的冻结release或模型代码。
 
+2026-10-09 13:34:56 +08:00 最终现场检查：8765 health/version=200，8766 ready=200、
+五组件均loaded；8765 ready=503，componentsReady/asrReady=true，classificationReady=false。
+账本仍193/200、¥23.243669/¥50。本轮累计新增Qwen请求=0。
+独立启动工具部署到 `shared/tools/direct-api-operator-6d2c82b/start.sh`，SHA-256
+`e065f262cefc45edf617f4ad3530d60b4cee5044de098b21b4a991e5d0a38731`，幂等启动返回
+supervisor already_running=true。状态证据 `shared/manifests/direct-api-status-87631da-20261009-final.json`。
+GitHub交付分支普通快进由a3780e5到6d2c82b成功，不改main、不force；无凭据/素材上传。
+
 安全注入 Key 后新增入口一条真实图文任务与必要跨轮复读，校验分类/归纳、授权后人物
 候选、结果和历史候选，不重跑旧矩阵。GitHub交付文档和代码；公网HTTPS映射及产品
 入库/页面由全栈完成。10人长期内部测试的真实调用预算与平台常驻不是本轮已验证事实。

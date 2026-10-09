@@ -41,6 +41,11 @@ curl http://127.0.0.1:8765/healthz
 `version/readyz` 使用算法服务 Token；禁止复制 secret 到命令日志或工单。
 组件 `8766/readyz` 可在同机诊断。不要再运行旧 Worker start-stack。
 
+当前 87631da release 的启动工具已有独立修正版：
+`/gemini/code/sgx-classification/shared/tools/direct-api-operator-6d2c82b/start.sh`。
+请用该路径替代上面的启动脚本，参数仍为当前完整 release SHA；修正版识别已退出/僵尸
+PID，先归档再启动。工具源码 `6d2c82b`，SHA 已核验，未写回冻结 release。
+
 Qwen 凭据在 Mac 通过 `scripts/classification-keychain.zsh setup` 安全保存；
 随后运行 `scripts/classification-direct-keychain-deploy.py --destination <已核验SSH目标>
 --identity <专用SSH私钥路径> --port 30022` 加密传输至云端专用 `0600` secret 文件。
