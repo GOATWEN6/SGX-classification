@@ -1,0 +1,210 @@
+openapi: 3.1.0
+info:
+  title: SGX 自动分类与归纳 API
+  version: classification-direct-api.1
+  description: 产品后端调用；完整 result 结构沿用 lab-execution-contract.ts；HTTPS 地址由全栈配置。
+servers:
+  - url: /
+security:
+  - serviceBearer: []
+components:
+  securitySchemes:
+    serviceBearer:
+      type: http
+      scheme: bearer
+  parameters:
+    Household:
+      name: X-SGX-Household-ID
+      in: header
+      required: true
+      schema: {type: string}
+    Subject:
+      name: X-SGX-Subject-ID
+      in: header
+      required: true
+      schema: {type: string}
+    Actor:
+      name: X-SGX-Actor-ID
+      in: header
+      required: true
+      schema: {type: string}
+    Idempotency:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    Session:
+      name: sessionId
+      in: query
+      required: true
+      schema: {type: string}
+    Job:
+      name: jobId
+      in: path
+      required: true
+      schema: {type: string}
+  schemas:
+    TaskReceipt:
+      type: object
+      required: [apiVersion, sessionId, jobId, status, replayed]
+      properties:
+        apiVersion: {const: classification-direct-api.1}
+        sessionId: {type: string}
+        jobId: {type: string}
+        status: {type: string}
+        round: {type: integer}
+        replayed: {type: boolean}
+    Error:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: {const: false}
+        error:
+          type: object
+          required: [code]
+          properties:
+            code: {type: string}
+  responses:
+    Accepted:
+      description: 已持久创建任务；请查询状态。相同 Key/内容重发返回同一任务。
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TaskReceipt'}
+    State:
+      description: 状态或完成结果；result 采用已冻结的分类/ASR 核心契约。
+      content:
+        application/json:
+          schema: {type: object}
+    Error:
+      description: 查看 error.code；不得自动新建任务绕过失败、授权或预算。
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+  /readyz:
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '503': {description: 返回组件/ASR/分类 ready 和预算细分状态}
+  /version:
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+  /v1/classification/jobs:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+    post:
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [metadata]
+              additionalProperties: false
+              properties:
+                metadata:
+                  type: string
+                  description: JSON；scope、actorId、contextKind、submittedAt 必填；sessionId、userText、finalAsr、绑定下标、personMatchingAuthorized 可选。
+                images:
+                  type: array
+                  maxItems: 8
+                  items: {type: string, format: binary}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        default: {$ref: '#/components/responses/Error'}
+    get:
+      parameters:
+        - {$ref: '#/components/parameters/Session'}
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/classification/jobs/{jobId}:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+      - {$ref: '#/components/parameters/Session'}
+      - {$ref: '#/components/parameters/Job'}
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/classification/jobs/{jobId}/result:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+      - {$ref: '#/components/parameters/Session'}
+      - {$ref: '#/components/parameters/Job'}
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/classification/jobs/{jobId}/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+      - {$ref: '#/components/parameters/Session'}
+      - {$ref: '#/components/parameters/Job'}
+    post:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/asr/jobs:
+    post:
+      parameters:
+        - {$ref: '#/components/parameters/Household'}
+        - {$ref: '#/components/parameters/Subject'}
+        - {$ref: '#/components/parameters/Actor'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [metadata, audio]
+              additionalProperties: false
+              properties:
+                metadata:
+                  type: string
+                  description: JSON；scope 和 actorId 必填，sessionId 可选。
+                audio: {type: string, format: binary, description: 麦克风 PCM16 WAV，50MiB/10 分钟上限}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/asr/jobs/{jobId}:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+      - {$ref: '#/components/parameters/Session'}
+      - {$ref: '#/components/parameters/Job'}
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/asr/jobs/{jobId}/result:
+    parameters:
+      - {$ref: '#/components/parameters/Household'}
+      - {$ref: '#/components/parameters/Subject'}
+      - {$ref: '#/components/parameters/Actor'}
+      - {$ref: '#/components/parameters/Session'}
+      - {$ref: '#/components/parameters/Job'}
+    get:
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}

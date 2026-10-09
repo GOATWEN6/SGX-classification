@@ -6,11 +6,15 @@
 
 ## 自动分类与归纳模块（全栈先读）
 
-本次直接转交工程师请使用 [2026-10-08 接入交接说明：文件清单、端口、分工与首条任务](docs/algorithms/CLASSIFICATION_FULLSTACK_FORWARD_BRIEF_2026-10-08.md)。
+**2026-10-09 最新接入方式**：[全栈直接调用算法 API：路由、字段、流程图与接入步骤](docs/algorithms/CLASSIFICATION_DIRECT_API_INTEGRATION_2026-10-09.md)。完整算法入口 `127.0.0.1:8765`，内部组件 `8766`；全栈负责公网 HTTPS 映射与产品存储，外部不再实现 Worker pull 控制面。
+
+[独立 API 部署说明](deploy/classification-api/README.md)、[OpenAPI](deploy/classification-api/openapi.yaml)、[本轮执行计划](docs/algorithms/CLASSIFICATION_DIRECT_API_PLAN_2026-10-09.md) 和 [最新运行/验证记录](docs/execution/2026-10-09-execution-log.md)。旧文档中的 Worker 对外接入要求已被本次决策取代，模型与核心算法配置沿用。
+
+历史交接说明：[2026-10-08 文件清单与恢复证据](docs/algorithms/CLASSIFICATION_FULLSTACK_FORWARD_BRIEF_2026-10-08.md)。
 
 第一次接手请先读 [全栈工程师接手说明：阅读顺序、任务、阶段与验收](docs/algorithms/CLASSIFICATION_FULLSTACK_TAKEOVER_GUIDE_2026-10-07.md)。
 
-2026-10-08 服务排查请先读 [云端服务恢复、准确端口和全栈分工](docs/algorithms/CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。真实模型组件已恢复；旧开发隧道已断，空转 Worker 已停止，产品 HTTPS 后端仍待全栈部署接入。
+2026-10-08 历史服务排查见 [云端服务恢复记录](docs/algorithms/CLASSIFICATION_SERVICE_RECOVERY_2026-10-08.md)。后续进程退出和新的独立 API 运行状态以 2026-10-09 执行记录为准。
 
 当前 T0/T1 内部候选已接入真实 Qwen、多图/文字、OCR、image/text embedding、授权后匿名人物候选、StoryUnit 组织和 Worker 结果持久化。全栈接入从以下文档开始：
 

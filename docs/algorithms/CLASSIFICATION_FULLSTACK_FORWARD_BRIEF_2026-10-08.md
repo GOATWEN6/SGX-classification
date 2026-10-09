@@ -1,5 +1,7 @@
 # SGX 自动分类与归纳：转交全栈工程师的接入说明
 
+> **接入方案已于 2026-10-09 更新**：[直接算法 API 说明](CLASSIFICATION_DIRECT_API_INTEGRATION_2026-10-09.md)。下文 Worker pull 为历史方案，不再要求全栈实现；本文件保留恢复记录。
+
 > 日期：2026-10-08。此文件是本次交接入口，详细字段以所链接的当前契约与实现为准。
 > 交付状态：可用于产品接入的算法基线；完整公网产品任务闭环尚待接入。
 > 仓库：[GOATWEN6/SGX-classification](https://github.com/GOATWEN6/SGX-classification/tree/codex/classification-t1-external-20261006)
