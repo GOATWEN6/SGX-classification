@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -77,6 +78,10 @@ def main() -> int:
         'SGX_PROVIDER_AUDIT_DIR': str(ROOT / 'shared/api-v1/provider-responses'),
         'PYTHONPATH': str(release / 'feature-service/src'),
     })
+    manifest = release / 'direct-release-manifest.json'
+    if not manifest.is_file():
+        raise SystemExit('DIRECT_RELEASE_MANIFEST_MISSING')
+    env['SGX_RELEASE_MANIFEST_DIGEST'] = 'sha256:' + hashlib.sha256(manifest.read_bytes()).hexdigest()
     authorization = Path(env['CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH'])
     if not authorization.is_file():
         env.pop('CLASSIFICATION_REAL_CALL_AUTHORIZATION_PATH')
